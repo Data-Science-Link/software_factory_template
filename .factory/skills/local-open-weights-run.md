@@ -19,3 +19,4 @@ Use when cloud agents can't run (e.g. Cursor usage is used up) and the human wor
 2. Tell the agent: `do issue #N` (or paste the handoff prompt).
 3. The agent syncs to latest default branch, branches, follows `factory-loop.md`, and opens a PR that references the issue. AI disclosure in the PR names the harness (`local Cursor + <provider>`) and model ID.
 4. Review, CI and human gates are unchanged.
+5. **Budget:** target under $0.10 per issue (complex may scale up), hard cap $1 (`MODEL_ROUTING.md` → Per-issue budget). After the run, check spend on the provider's usage page (e.g. DeepInfra's) and note it on the issue. If spend nears $1, stop and comment on the issue instead of continuing.

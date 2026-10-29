@@ -308,3 +308,10 @@ Append-only. Newest at the bottom.
 - **Why:** Real cases explain why a rule exists better than invented ones, but a reader of a copied repo needs to know they came from elsewhere.
 - **Alternatives:** Strip all project-specific names and numbers (loses the teaching value); leave them unlabeled (reads as if they were this repo's issues).
 - **Revisit:** If an example can't be labeled without exposing something private, generalize that one instead.
+
+## 2026-10-28 — Per-issue spend budget for Local open-weights runs
+- **Decision:** For Local open-weights runs (the owner's own provider key, e.g. DeepInfra), every issue has a hard spend cap of $1. Issues are scoped to aim for under $0.10 each; complex (L) issues may go above $0.10 but never above $1. An issue that looks likely to need more than $1 is split into smaller issues. The handoff block carries a Budget line; after a run the spend is read from the provider's usage page and noted on the issue, and the run stops with a comment on the issue if spend nears $1. Cloud-agent Cursor usage is governed by the plan and is not covered by this rule.
+- **Decided by:** Owner (Michael, 2026-10-28: "We should have a $1 cap on any issue and we should scope the complexity to shoot for less than a dime on all issues and high complexity can scale up"). Came through the Software Factory Builder.
+- **Why:** Keeps the cost of one issue small and predictable, and makes oversized issues get split.
+- **Alternatives:** A monthly cap only; no cap.
+- **Revisit:** Once issue #2's cache test reports real per-issue costs.
