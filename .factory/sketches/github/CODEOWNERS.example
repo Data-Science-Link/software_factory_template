@@ -1,0 +1,11 @@
+# Copy to .github/CODEOWNERS and replace @YOUR_GITHUB with the maintainer handle.
+# Enable “Require review from Code Owners” on the default branch.
+
+*                              @YOUR_GITHUB
+/.github/                      @YOUR_GITHUB
+/LICENSE                       @YOUR_GITHUB
+/NOTICE                        @YOUR_GITHUB
+/.factory/                     @YOUR_GITHUB
+**/SECURITY.md                 @YOUR_GITHUB
+# /path/to/auth/               @YOUR_GITHUB
+# /path/to/safety/             @YOUR_GITHUB
