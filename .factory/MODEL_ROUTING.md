@@ -61,5 +61,6 @@ Checked 2026-10-27 on https://deepinfra.com/models (model pages) and https://api
 **Caching and context.** DeepInfra prefix caching is automatic (https://docs.deepinfra.com/chat/prompt-caching), so keep the shared prefix stable: put the handoff prompt first and keep it stable, with no timestamps; don't switch models, rules or tools mid-run; keep issues small; start a new chat at about 60-70% of the context window; verify caching with `usage.prompt_tokens_details.cached_tokens` in the API response and the DeepInfra usage page.
 
 - **Strongest tier for high stakes.** Specs, user-facing or high-stakes writing and high-risk work use the **L** row once it has passed the local test; until then they run on the default model and keep the full review and human gates.
+- **Per-issue budget** (owner, 2026-10-28): each issue aims for under $0.10 of provider spend; complex (L) issues may go higher but never above a hard cap of $1 per issue. Split any issue likely to need more. When spend gets close to $1, the local agent or human stops and comments on the issue with the spend so far.
 - Pin the model ID exactly as listed; no long-context or priority tiers unless a human asks.
 - The API key lives only in the human's local Cursor settings or environment — **never** in the repo, an issue, or a PR.

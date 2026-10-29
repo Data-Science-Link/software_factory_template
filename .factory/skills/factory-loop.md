@@ -24,10 +24,12 @@ Also follow `liability-gates.md` on every change.
   Read first: <paths on the current default branch, e.g. FACTORY.md, DOCS.md, relevant docs or style guides>
   Done checks: <acceptance checks>
   Complexity: S | M | L (simple | standard | complex); Risk: trivial | normal | high
+  Budget: target < $0.10 (S/M); complex may scale up; hard cap $1 per issue (Local open-weights spend)
   Model: Cursor `<model>` · Local open-weights `<provider model ID; default Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo>` (MODEL_ROUTING.md)
   Cloud agents: ignore the Local open-weights line and use the model you were launched with.
   Local agents (Cursor desktop or another harness on the human's machine using an open-weights provider such as DeepInfra): use the Local open-weights model named above and follow skills/local-open-weights-run.md.
   ```
+  Triage scopes each issue to hit the budget target and splits any issue likely to cost more than $1 into smaller issues.
 
 ## Build
 
