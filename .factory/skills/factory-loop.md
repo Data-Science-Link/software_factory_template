@@ -69,7 +69,7 @@ When a human gives product-gate (or similar) approval in **chat**, on the issue,
 1. **Edit the PR description before you merge** — do not merge on chat approval alone.
    - A human approver's "approve #N" (naming the PR) in the factory room or a 1:1 chat is a direct instruction to merge that PR on their behalf. Merge it yourself once the PR body, up-to-date, and green-head rules are met; don't ask them to re-confirm in another chat. It covers only the PRs they name, never follow-ups or a bot's relay. If a catch-up changes the PR's behavior, re-ask.
 2. Check **Factory loop step 7 (Product gate)** as done.
-3. Set **AI disclosure → Human reviewed before merge: yes** and name who (e.g. Michael / @User).
+3. Set **AI disclosure → Human reviewed before merge: yes** and name who (e.g. the repo owner; in the source repos this template came from, "Michael / @User").
 4. Update any other matching fields (spec gate, safety “did not auto-merge”, Notes) so the PR body matches reality.
 5. Then merge per risk class.
 

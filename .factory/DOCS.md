@@ -14,7 +14,7 @@ Pointers only — do not duplicate long docs here. Update paths when you drop th
 | How to run tests / CI | *(fill in)* | agents need this for verify |
 | Deploy / release | *(fill in)* | |
 | Domain / product glossary | *(fill in)* | |
-| Liability research (optional) | *(external)* | see Software Factory Builder notes; not legal advice |
+| Liability research (optional) | *(external)* | start from `.factory/skills/liability-gates.md` and link your own research here; not legal advice |
 
 Agents: read this map, then open the linked files. Prefer linking over pasting.
 

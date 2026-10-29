@@ -2,6 +2,8 @@
 
 Append-only. Newest at the bottom.
 
+> **About the examples below:** these entries are this template's own history. The repo names, issue and PR numbers, and people's names in them come from specific source repos where the method was run (for example [Data-Science-Link/perspectiverse](https://github.com/Data-Science-Link/perspectiverse)), included for illustration. A number like "perspectiverse #88" refers to that repo, not this one. "Michael" is the template owner.
+
 ## Template
 
 ```
@@ -114,14 +116,14 @@ Append-only. Newest at the bottom.
 ### 2026-10-08 — A named approval in the factory room is a merge instruction
 
 - **Decision:** When the human approver posts an approval naming a PR (e.g. "approve #88") in the project's factory room or a 1:1 chat with the worker, that message is a direct instruction for the worker to merge that PR on their behalf. The worker records the approval in the PR body, makes sure the branch is 0 behind the default branch with required checks green on the head commit, and merges, without asking for a second confirmation in another chat. Scope is the named PR only; it does not cover follow-ups, other PRs, or approvals relayed by another bot. If a catch-up changes the PR's behavior, the gate is re-asked.
-- **Why:** On Perspectiverse #88 the worker asked the approver to repeat an approval from the factory room in a 1:1 chat before it would merge. That duplicate step added friction and no safety: the PR body is the audit trail either way.
+- **Why:** On Perspectiverse ([perspectiverse #88](https://github.com/Data-Science-Link/perspectiverse/pull/88)) the worker asked the approver to repeat an approval from the factory room in a 1:1 chat before it would merge. That duplicate step added friction and no safety: the PR body is the audit trail either way.
 - **Alternatives:** Require 1:1 confirmation for every merge (rejected: duplicate step); allow any room member or bot to approve (rejected: only the human approver holds the product gate).
 - **Revisit:** If a room ever includes humans who are not approvers, name the approvers explicitly.
 
 ### 2026-10-08 — PRs state what changes in production on merge
 
 - **Decision:** The PR template gains a "What changes in production on merge" section, required for normal and high-risk PRs: what users, live data, or scheduled jobs see differently as soon as the PR merges, which parts stay off, and what would turn them on.
-- **Why:** On Perspectiverse #92 the summary said nothing in the daily run would change until a test passed, but a filter and cache with no switch went live on merge and dropped real data. The human gate only means something if the approver knows what goes live.
+- **Why:** On Perspectiverse ([perspectiverse #92](https://github.com/Data-Science-Link/perspectiverse/pull/92)) the summary said nothing in the daily run would change until a test passed, but a filter and cache with no switch went live on merge and dropped real data. The human gate only means something if the approver knows what goes live.
 - **Alternatives:** Rely on the summary (rejected: it was wrong once already); require feature flags for everything (rejected: too heavy for small changes).
 - **Revisit:** If the section is routinely boilerplate, fold it into Verify.
 
@@ -262,7 +264,7 @@ Append-only. Newest at the bottom.
 
 ## 2026-10-16 — "Refs", not "Closes", for standing issues
 - **Decision:** PRs use closing keywords only for the issue they finish. Ledgers, trackers, and parent issues get "Refs #N". Agent review checks for this.
-- **Why:** A PR's "Closes" auto-closed a pinned asks ledger on merge (Perspectiverse #106).
+- **Why:** A PR's "Closes" auto-closed a pinned asks ledger on merge ([perspectiverse #106](https://github.com/Data-Science-Link/perspectiverse/issues/106)).
 - **Alternatives:** Re-open by hand after each mistake; lock the issue.
 - **Revisit:** If GitHub adds per-issue protection from auto-close.
 
@@ -299,3 +301,10 @@ Append-only. Newest at the bottom.
 - **Decided by:** Owner (Michael, 2026-10-27 11:36 PM CT: 'Yes, make Qwen3-Coder the default and mark the others as needing a test'.)
 - **Why:** Qwen3-Coder is a non-thinking coder model, so it avoids the Cursor custom-key tool-call bug; the others may work with thinking off but are unproven.
 - **Revisit:** When Cursor fixes reasoning_content handling for custom keys, or after a model passes the local test.
+
+## 2026-10-28 — Labeled examples from real repos are allowed
+- **Decision:** Examples from real repos are allowed in the template when they teach something and are labeled with their source repo, for illustration. The existing Perspectiverse examples in this log stay, with a note at the top and repo-qualified issue/PR numbers; the factory-loop and DOCS examples are marked the same way.
+- **Decided by:** Owner (Michael, 2026-10-28: "It is ok to have specific examples so long as they are instructing and it is known to be from another specific repo for illustrative purposes."). Came through the Software Factory Builder.
+- **Why:** Real cases explain why a rule exists better than invented ones, but a reader of a copied repo needs to know they came from elsewhere.
+- **Alternatives:** Strip all project-specific names and numbers (loses the teaching value); leave them unlabeled (reads as if they were this repo's issues).
+- **Revisit:** If an example can't be labeled without exposing something private, generalize that one instead.

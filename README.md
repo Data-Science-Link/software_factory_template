@@ -31,6 +31,7 @@ Workers (the cloud agents the manager launches) build, test, and review on a bra
 4. Keep `.factory/DECISIONS.md` append-only: add new entries at the bottom, and supersede old ones rather than editing them.
 5. Set `.factory/MODEL_ROUTING.md` for your plan and the models you can use.
 6. Copy the starters in `.factory/sketches/` into place (`CONTRIBUTING.md`, PR template, CODEOWNERS), and add your own `LICENSE` and `SECURITY.md`.
+7. Examples labeled with a source repo (for example "perspectiverse #88" in `DECISIONS.md`) are illustrative, taken from repos where the method was run. Keep them or replace them with your own.
 
 ## File map
 
