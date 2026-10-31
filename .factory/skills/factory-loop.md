@@ -20,7 +20,7 @@ Also follow `liability-gates.md` on every change.
 - **Handoff block** on every ready-to-work issue, so any agent or harness (including a Local open-weights run, `local-open-weights-run.md`) can pick it up:
   ```
   Goal: <one sentence>
-  Prompt: <self-contained prompt: repo, issue #, what to change, constraints; sync latest default branch, branch, open a PR that references the issue, fill the PR template>
+  Prompt: Read issue #N with `gh issue view N` and `.factory/FACTORY.md` first. <self-contained prompt: repo, issue #, what to change, constraints; sync latest default branch, branch, open a PR that references the issue, fill the PR template>. Tick the done checks in the PR body as you finish them.
   Read first: <paths on the current default branch, e.g. FACTORY.md, DOCS.md, relevant docs or style guides>
   Done checks: <acceptance checks>
   Complexity: S | M | L (simple | standard | complex); Risk: trivial | normal | high

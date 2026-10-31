@@ -105,6 +105,7 @@ Scheduled workflows (daily data jobs, nightly builds) can fail with no PR in fli
 - **Outside coding agents** (outside the default harness) run this same loop and gates. Their cost needs its own explicit yes from the owner (this rule is not that yes); once approved, record the route in DECISIONS and `MODEL_ROUTING.md` before first use
 - **Local open-weights harness:** when cloud agents can't run, the human works the issue's handoff block in local Cursor (or another local harness) with the Local open-weights model from `MODEL_ROUTING.md` (`skills/local-open-weights-run.md`). Cloud agents ignore the Local open-weights line and use the model they were launched with. Same loop and gates; the API key is never committed; each issue aims for under $0.10 of provider spend with a hard cap of $1 (complex may scale up; split anything bigger)
 - **Local agent safety:** a local agent runs only after the owner has done the one-time setup in `skills/local-agent-safety.md` (gitleaks pre-commit hook, scoped `gh` token, command approvals on)
+- **Local-agent PRs:** pass the PR check (`scripts/pr-check.sh`) and get a `Factory review` comment from the reviewing bot (`skills/review-local-pr.md`) before the human merge gate
 - **Questions to the owner** are one decision each, phrased as (a)/(b) with a recommended pick and its consequence (e.g. cost or done-bar impact), so a short reply can't be read two ways
 
 ## Private repos
