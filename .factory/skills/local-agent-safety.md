@@ -7,7 +7,7 @@
 A pushed secret stays in git history and has to be revoked. The stop has to happen before the commit.
 
 1. Install gitleaks: `brew install gitleaks` (macOS or Linux with Homebrew). On Linux without Homebrew, download the `linux_x64` release from https://github.com/gitleaks/gitleaks/releases and put `gitleaks` on your PATH.
-2. In each clone, run once: `scripts/install-hooks.sh`. It adds a pre-commit hook that scans staged changes and blocks the commit if it finds a secret (values are redacted in the output). If you already had a pre-commit hook, it's kept as `pre-commit.local` and still runs. Running the script again is safe.
+2. In each clone, run once: `scripts/install-hooks.sh`. It adds a pre-commit hook that scans staged changes and blocks the commit if it finds a secret (values are redacted in the output), and a pre-push hook that blocks pushes to `main` (part 4). If you already had either hook, it's kept as `pre-commit.local` or `pre-push.local` and still runs. Running the script again is safe.
 3. Test it with a fake GitHub token made on the fly (never a real key):
    ```
    printf 'token = "ghp_%s"\n' "$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 36)" > leak-test.txt
@@ -37,12 +37,17 @@ Logged in as your full account, `gh` can do anything you can. Give it only what 
 
 - Keep the harness asking before it runs terminal commands. Don't turn on its auto-run or "run everything" setting (the name differs by harness and version; look for the command approval or auto-run setting).
 - Fine to approve: `gh issue view`, `gh issue comment`, `gh pr create`, `git push` to a feature branch.
-- Always yours to run, never approved for the agent: `gh pr merge`, any `gh repo …`, any `gh api …`, `git push` to `main`, force pushes (`--force`, `-f`), and anything that deletes (branches, files outside the change, repos, releases).
+- Always yours to run, never approved for the agent: `gh pr merge`, any `gh repo …`, any `gh api …`, `git push` to `main`, force pushes (`--force`, `-f`), anything with `FACTORY_ALLOW_MAIN_PUSH`, and anything that deletes (branches, files outside the change, repos, releases).
 - If unsure, say no and run it yourself.
 
-## 4. Protect `main` where you can
+## 4. Protect `main`
 
-Add a branch protection rule or ruleset on `main` that requires a pull request. On private repos this needs a paid GitHub plan (see `FACTORY.md` → Private repos). If it isn't available, the factory merge gate is the control: only you, or the manager within its authority, merge.
+Changes reach `main` only through a pull request that a human merges.
+
+1. **On GitHub (owner, once per repo):** run `scripts/protect-main.sh`, logged in to `gh` as an account with admin rights on the repo (not the agent's scoped token). It applies `.github/rulesets/protect-main.json`: no direct pushes, force pushes or deletes on the default branch; changes only through a PR, merged with a merge commit; the `gitleaks` secret-scan check must pass on a branch that's up to date with `main`. No approvals are required, so a solo owner can merge their own PRs, and no one can bypass it. Running it again updates the rule.
+2. **Private repo on GitHub Free:** GitHub won't enforce branch rules there. The script says so and changes nothing. Options are GitHub Pro or making the repo public; until then, the next step and the merge gate are the controls.
+3. **On your machine (free, every clone):** the pre-push hook from `scripts/install-hooks.sh` blocks pushes to `main` or `master` with "Pushes to main are blocked. Open a PR instead." A human can override it for a real emergency with `FACTORY_ALLOW_MAIN_PUSH=1 git push ...`. Agents must never use the override; treat it like `gh pr merge` (part 3).
+4. Bots never merge on their own: merges go through the human merge gate in `FACTORY.md`.
 
 ## 5. Keep keys out of the repo
 
