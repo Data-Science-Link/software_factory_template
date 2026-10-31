@@ -1,0 +1,31 @@
+# PR check: holds every PR body to a few factory rules (issue link, AI
+# disclosure, Cost line for Local open-weights runs). Script only: no model,
+# no spend. Rules live in scripts/pr-check.sh.
+name: pr-check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  pr-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the PR body against the factory rules
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Passed through env, never pasted into the script, so the body can't run as code.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          PR_FILES="$(gh pr diff "$PR_NUMBER" --name-only --repo "$GITHUB_REPOSITORY")"
+          export PR_FILES
+          bash scripts/pr-check.sh
