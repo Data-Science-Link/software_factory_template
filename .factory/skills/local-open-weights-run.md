@@ -8,6 +8,8 @@ Use when cloud agents can't run (e.g. Cursor usage is used up) and the human wor
 
 ## One-time setup (human)
 
+**Required first:** do the one-time setup in `local-agent-safety.md` (secret-scan hook, scoped `gh` token, command approvals). Don't start a local run until it's done.
+
 1. Create a provider API key (DeepInfra: account dashboard → API keys).
 2. In desktop Cursor, open **Cursor Settings → Models**, add the key as the OpenAI API key, turn on the OpenAI base-URL override with `https://api.deepinfra.com/v1/openai`, and add each model ID from `MODEL_ROUTING.md` as a custom model (name must match the ID exactly). Source: https://cursor.com/help/models-and-usage/api-keys (checked 2026-10-27); menu names change, so follow Cursor's current docs if they differ.
 3. While the override is on, Cursor's own OpenAI-family models also route to that URL; turn it off to go back to Cursor models.

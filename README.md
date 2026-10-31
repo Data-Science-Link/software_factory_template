@@ -31,6 +31,7 @@ Get started with this template in under a minute:
 2. [Fill in `.factory/DOCS.md`](#how-to-adopt-it-in-a-repo) with your repo's specifics
 3. [Set `.factory/MODEL_ROUTING.md`](#how-to-adopt-it-in-a-repo) for your plan and models
 4. [Open your first issue](#how-to-adopt-it-in-a-repo) to start the factory process
+5. Running agents on your own machine? Do the one-time safety setup in [`.factory/skills/local-agent-safety.md`](.factory/skills/local-agent-safety.md) first
 
 For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) section below.
 
@@ -41,8 +42,9 @@ For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) se
 3. Add repo-specific skills under `.factory/skills/`.
 4. Keep `.factory/DECISIONS.md` append-only: add new entries at the bottom, and supersede old ones rather than editing them.
 5. Set `.factory/MODEL_ROUTING.md` for your plan and the models you can use.
-6. Copy the starters in `.factory/sketches/` into place (`CONTRIBUTING.md`, PR template, CODEOWNERS), and add your own `LICENSE` and `SECURITY.md`.
-7. Examples labeled with a source repo (for example "perspectiverse #88" in `DECISIONS.md`) are illustrative, taken from repos where the method was run. Keep them or replace them with your own.
+6. Copy `scripts/` and `.github/` (secret-scan workflow and the `protect-main` ruleset) into the repo. Then, as the owner: run `scripts/install-hooks.sh` in each clone and `scripts/protect-main.sh` once per repo (see `.factory/skills/local-agent-safety.md`).
+7. Copy the starters in `.factory/sketches/` into place (`CONTRIBUTING.md`, PR template, CODEOWNERS), and add your own `LICENSE` and `SECURITY.md`.
+8. Examples labeled with a source repo (for example "perspectiverse #88" in `DECISIONS.md`) are illustrative, taken from repos where the method was run. Keep them or replace them with your own.
 
 ## File map
 
