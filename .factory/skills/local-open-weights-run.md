@@ -36,7 +36,7 @@ Allowlist only these command prefixes in Cursor's agent settings, so a run doesn
 - `gh pr view`, `gh pr create`, `gh pr comment`, `gh pr edit`
 - `git status`, `git diff`, `git log`
 - `git checkout -b issue-`, `git add`, `git commit`, `git push origin issue-`
-- `bash scripts/`
+- `bash scripts/factory-cost.sh`, `bash scripts/pr-check.sh` (exact scripts only, never `bash scripts/` as a whole: the agent could write a new script and run it unasked)
 
 Never allow: `curl`, `gh pr merge`, `gh api`, bare `git push`, `--no-verify`, `env`, `printenv`. Leave everything else on ask.
 
