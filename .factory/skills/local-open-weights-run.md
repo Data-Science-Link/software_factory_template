@@ -19,6 +19,7 @@ Use when cloud agents can't run (e.g. Cursor usage is used up) and the human wor
 
 1. Open the repo in desktop Cursor and pick the model the issue's **handoff block** names on its `Local open-weights` line.
 2. Tell the agent: `do issue #N` (or paste the handoff prompt).
-3. The agent syncs to latest default branch, branches, follows `factory-loop.md`, and opens a PR that references the issue. AI disclosure in the PR names the harness (`local Cursor + <provider>`) and model ID.
-4. Review, CI and human gates are unchanged.
-5. **Budget:** target under $0.10 per issue (complex may scale up), hard cap $1 (`MODEL_ROUTING.md` → Per-issue budget). After the run, check spend on the provider's usage page (e.g. DeepInfra's) and note it on the issue. If spend nears $1, stop and comment on the issue instead of continuing.
+3. The agent syncs to latest default branch, branches, follows `factory-loop.md`, and opens a PR that references the issue. The PR body has `AI disclosure: harness local Cursor + <provider>; model <model ID>` and a `Cost:` line (e.g. `Cost: $0.04 on DeepInfra`); the PR check fails without them.
+4. Review, CI and human gates are unchanged. The reviewing bot posts a `Factory review` comment on the PR (`review-local-pr.md`).
+5. **Fixes:** when the owner says "address the review on PR #N", the agent runs `gh pr view N --comments`, fixes each numbered item in the latest `Factory review`, pushes to the same branch, and replies on the PR with what changed, item by item.
+6. **Budget:** target under $0.10 per issue (complex may scale up), hard cap $1 (`MODEL_ROUTING.md` → Per-issue budget). After the run, check spend on the provider's usage page (e.g. DeepInfra's) and note it on the issue. If spend nears $1, stop and comment on the issue instead of continuing.
