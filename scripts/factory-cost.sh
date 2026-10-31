@@ -99,7 +99,7 @@ Factory cost start: DeepInfra spend on the factory key was \$$(awk -v s="$spend"
     # Late start: the marker must come before the branch's first commit.
     work_at="$(first_branch_commit_at)"
     if [ -n "$work_at" ] && [[ "$start_at" > "$work_at" ]]; then
-      die "Cost start was posted after work began (start $start_at, first commit $work_at); cost can't be measured. Write 'Cost: not measured' in the PR body and tell the owner."
+      die "Cost start was posted after work began (start $start_at, first commit $work_at); cost can't be measured. Write 'Cost: not measured on DeepInfra (start was late on issue #$issue)' in the PR body and tell the owner."
     fi
 
     spend="$(read_spend)"
