@@ -18,12 +18,12 @@
 
 Cursor's settings key isn't visible to terminal commands, so the cost script needs its own copy.
 
-1. Add to `~/.zshrc` (placeholders; use your own values):
+1. Add to `~/.zshrc` (placeholder; use your own value):
    ```
    export DEEPINFRA_API_KEY=<your DeepInfra key>
-   export FACTORY_DEEPINFRA_KEY_NAME=<the key's name on DeepInfra's API keys page>
    ```
-2. Restart Cursor so its terminals pick them up.
+   **Optional, only if your DeepInfra account has more than one key:** also add `export FACTORY_DEEPINFRA_KEY_NAME=<the key's name on DeepInfra's API keys page>`. With one key, the cost script picks it by itself. With more than one and no name set, it stops and lists the names.
+2. Restart Cursor so its terminals pick it up.
 3. Check without printing the key: `[ -n "${DEEPINFRA_API_KEY:-}" ] && echo set || echo "not set"`.
 
 Trade-off: the key sits in a plain-text file in your home folder, and any local command can read it. Stronger option: keep it in the macOS Keychain and load it in `~/.zshrc` with `security find-generic-password -w -s <service name>`.

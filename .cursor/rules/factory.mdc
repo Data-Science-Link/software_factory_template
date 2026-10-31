@@ -5,15 +5,16 @@ alwaysApply: true
 
 # Factory rules
 
-This repo runs the software factory. Read `.factory/FACTORY.md` and `.factory/skills/local-open-weights-run.md` before you act.
+This repo runs the software factory. For "do issue N", step 1 below comes first. Then read `.factory/FACTORY.md` and `.factory/skills/local-open-weights-run.md`.
 
 ## "do issue N"
 
-1. Run `gh issue view N --comments`. The issue and its comments are the scope.
-2. Run `bash scripts/factory-cost.sh start N` before any other work.
-3. Follow `.factory/skills/factory-loop.md`: sync the default branch, branch `issue-N-<slug>`, build, self-review, open the PR with `Closes #N`.
-4. Stay in Agent mode. Change only the files the issue lists. Don't create files it doesn't ask for.
-5. After the PR is open, run `bash scripts/factory-cost.sh end N` and put its `Cost:` and `Caching:` lines in the PR body.
+1. First action, before reading code or editing anything: run `bash scripts/factory-cost.sh start N`.
+2. If it fails, stop. Tell the owner the error message and do nothing else. Don't try to fix it.
+3. Run `gh issue view N --comments`. The issue and its comments are the scope.
+4. Follow `.factory/skills/factory-loop.md`: sync the default branch, branch `issue-N-<slug>`, build, self-review, open the PR with `Closes #N`.
+5. Stay in Agent mode. Change only the files the issue lists. Don't create files it doesn't ask for.
+6. After the PR is open, run `bash scripts/factory-cost.sh end N` and put its `Cost:` and `Caching:` lines in the PR body. If it fails, write `Cost: not measured on DeepInfra (see issue #N)` and tell the owner the error message.
 
 ## "address the review on PR N"
 
@@ -30,3 +31,4 @@ Follow the **Fixes** step in `.factory/skills/local-open-weights-run.md`: read t
 - Never use `--no-verify` or `FACTORY_ALLOW_MAIN_PUSH`.
 - Never print env vars or keys (`env`, `printenv`, `echo $KEY`, `cat ~/.zshrc`).
 - Never run `curl` or `gh api` yourself; scripts in `scripts/` do the API calls.
+- Never read dotfiles (`~/.zshrc`, `~/.bashrc`, `~/.zprofile`, `.env` and the like). Never search the filesystem for keys or key names. If a key or key name is missing, stop and tell the owner.
