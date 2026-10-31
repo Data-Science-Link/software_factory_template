@@ -14,7 +14,8 @@
 #      or the branch starts with cursor/. Accepted forms:
 #        AI disclosure: harness <name>; model <model ID>
 #        or the PR template's "Tools used: <...>" and "Model(s) used: <...>" lines, both filled in;
-#   3. the body mentions "Local open-weights" or "DeepInfra" and has no "Cost:" line with an amount.
+#   3. the body mentions "Local open-weights" or "DeepInfra" and has no "Cost:" line with a "$"
+#      amount or the words "not measured".
 # Warns (doesn't fail) when the PR changes .factory/DECISIONS.md, .github/workflows/,
 # or this script, so the human looks closer.
 set -euo pipefail
@@ -52,8 +53,8 @@ if [ "$agent" = yes ]; then
 fi
 
 # 3. Cost line for Local open-weights runs
-if has 'local open-weights|deepinfra' && ! has '^Cost:.*[0-9]'; then
-  fail 'Local open-weights PR needs a "Cost:" line with the amount (e.g. "Cost: $0.04 on DeepInfra").'
+if has 'local open-weights|deepinfra' && ! has '^Cost:.*[$][0-9]' && ! has '^Cost:.*not measured'; then
+  fail 'Local open-weights PR needs a "Cost:" line with a $ amount (e.g. "Cost: $0.04 on DeepInfra") or "not measured".'
 fi
 
 # Warnings: paths the human should look at closely
