@@ -331,3 +331,11 @@ Append-only. Newest at the bottom.
 - **Why:** Local runs skip the Manager's launch and review loop; in #2 the agent skipped plan steps and left required PR lines out. Review against the issue belongs on the PR, where it lasts, not in a chat the owner relays.
 - **Alternatives:** Owner copies review notes into the local chat by hand (slow, lost); a model-based CI review (costs per run); no check (misses repeat).
 - **Revisit:** After #5, the first local run through all three layers; or if the check flags too many false failures.
+
+## 2026-10-31 — Local open-weights cost comes from the single factory key's spend difference
+- **Status:** Proposed, pending Michael.
+- **Decision:** Cost for a Local open-weights run is measured by calling the DeepInfra billing API (`GET /payment/key-limits`) before and after the run using the owner's single factory DeepInfra key exported as `DEEPINFRA_API_KEY`. The `scripts/deepinfra-cost.sh` script saves the pre-run spend, computes the difference on `end`, and prints the issue's `Cost:` and `Caching:` lines for the PR body. A new key per issue was considered but rejected at the owner's request (2026-10-31).
+- **Decided by:** Proposed by the Software Factory Builder at the owner's ask (Michael, 2026-10-31, issue #5).
+- **Why:** Cursor doesn't expose token cost to the local agent, so the only authoritative source is the provider's billing API. A single factory key avoids key-management overhead per issue.
+- **Alternatives:** One new DeepInfra key per issue (rejected: too much overhead; owner asked to use the existing factory key).
+- **Revisit:** If the DeepInfra billing API changes or per-issue cost tracking needs a different approach.

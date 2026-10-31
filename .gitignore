@@ -218,5 +218,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Factory cost start marker -- never committed
+.factory-cost-start
+
 # Streamlit
 .streamlit/secrets.toml

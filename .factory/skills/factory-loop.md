@@ -38,7 +38,7 @@ Also follow `liability-gates.md` on every change.
 - Stay inside issue scope. Lasting choices → `.factory/DECISIONS.md`.
 - Follow repo conventions via `.factory/DOCS.md` and any repo-specific skills here.
 - **Fill the whole PR template**, especially the **Factory loop** section (steps 1–8). That checklist is how humans audit process adherence — leave it blank only if a step is truly N/A, with a one-line note.
-- Fill risk class, AI disclosure, safety checklist, and evidence.
+- Fill risk class, AI disclosure, safety checklist, evidence, and — for Local open-weights PRs — a `Cost:` line (from `scripts/deepinfra-cost.sh end`) and a `Caching:` line.
 - **UI / frontend / website / pages:** put screenshots in the PR **Evidence** section of the description (embed or link; before/after when practical). Thread-only comments do **not** count. No Evidence screenshots → do not treat the PR as ready.
 
 ## Review & verify
