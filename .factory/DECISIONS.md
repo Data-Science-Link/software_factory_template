@@ -315,3 +315,11 @@ Append-only. Newest at the bottom.
 - **Why:** Keeps the cost of one issue small and predictable, and makes oversized issues get split.
 - **Alternatives:** A monthly cap only; no cap.
 - **Revisit:** Once issue #2's cache test reports real per-issue costs.
+
+## 2026-10-31 — Local agents: gitleaks pre-commit + CI backstop, scoped gh token, human approval for merge/repo/api commands
+- **Status:** Proposed, pending Michael.
+- **Decision:** Before any local agent run, the owner does the one-time setup in `skills/local-agent-safety.md`: a gitleaks pre-commit hook (`scripts/install-hooks.sh`) that blocks commits with secrets, a `secret-scan` CI workflow as a backstop, `gh` logged in with a fine-grained token limited to the factory repos (Contents, Pull requests and Issues read/write, Metadata read; no Administration, no Workflows), and the harness's command approvals left on, with `gh pr merge`, `gh repo …`, `gh api …`, pushes to `main`, force pushes and deletes always left to the human. `.env` and `.env.*` are gitignored (`.env.example` kept). Protect `main` where the plan allows.
+- **Decided by:** Proposed by the Software Factory Builder at the owner's ask (Michael, 2026-10-31, issue #6); waiting on the owner's approval of the PR.
+- **Why:** A local agent runs commands as the owner, so a mistake or a prompt injected into something it reads could leak a secret or take a broad GitHub action. A pushed secret stays in history, so the stop has to be local and before the commit; CI only reports.
+- **Alternatives:** CI scan only (finds a leak after it's public in history); the owner's full-account `gh` login (too broad); auto-run commands (no human check on merge or delete).
+- **Revisit:** If the harness gets per-command allow and deny lists, if branch protection becomes available on the plan, or after the first local run (#5).

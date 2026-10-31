@@ -31,6 +31,7 @@ Get started with this template in under a minute:
 2. [Fill in `.factory/DOCS.md`](#how-to-adopt-it-in-a-repo) with your repo's specifics
 3. [Set `.factory/MODEL_ROUTING.md`](#how-to-adopt-it-in-a-repo) for your plan and models
 4. [Open your first issue](#how-to-adopt-it-in-a-repo) to start the factory process
+5. Running agents on your own machine? Do the one-time safety setup in [`.factory/skills/local-agent-safety.md`](.factory/skills/local-agent-safety.md) first
 
 For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) section below.
 
