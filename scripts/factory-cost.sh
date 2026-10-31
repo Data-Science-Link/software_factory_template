@@ -12,9 +12,13 @@ set -euo pipefail
 #       Find the latest start marker on the issue and print:
 #         Cost: $X.XXXX on DeepInfra
 #         Caching: ...
+#       Refuses (exit 1) when the marker was posted after the first commit
+#       on this branch that isn't on origin/main: the cost can't be measured.
 #
-# Key name: FACTORY_DEEPINFRA_KEY_NAME, or the optional third argument.
-# Needs DEEPINFRA_API_KEY (read by scripts/deepinfra-cost.sh), gh, jq, awk.
+# Key name: the optional third argument, else FACTORY_DEEPINFRA_KEY_NAME,
+# else the only key on the account (scripts/deepinfra-cost.sh picks it, and
+# stops with the list of names if there is more than one).
+# Needs DEEPINFRA_API_KEY (read by scripts/deepinfra-cost.sh), gh, git, jq, awk.
 # The key is never printed. gh must be able to reach its token: in Cursor,
 # run this script outside the agent sandbox (the sandbox can't read the
 # macOS Keychain).
@@ -32,15 +36,30 @@ key_name="${3:-${FACTORY_DEEPINFRA_KEY_NAME:-}}"
 if [ -z "$command" ] || [ -z "$issue" ]; then usage; fi
 case "$command" in start|end) ;; *) usage ;; esac
 [[ "$issue" =~ ^[0-9]+$ ]] || die "Issue must be a number, got \"$issue\"."
-[ -n "$key_name" ] || die "No key name. Set FACTORY_DEEPINFRA_KEY_NAME in ~/.zshrc or pass it as the third argument."
-[ -n "${DEEPINFRA_API_KEY:-}" ] || die "DEEPINFRA_API_KEY is not set. Add it to ~/.zshrc and restart Cursor (see .factory/skills/local-owner-setup.md)."
-for tool in gh jq awk; do
+[ -n "${DEEPINFRA_API_KEY:-}" ] || die "DEEPINFRA_API_KEY is not set. Agent: stop here and tell the owner this message; don't look for the key. Owner: add it to ~/.zshrc and restart Cursor (see .factory/skills/local-owner-setup.md step 3)."
+for tool in gh git jq awk; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is required but not installed."
 done
 [ -f "$reader" ] || die "Missing $reader."
 
 # Current spend, as a plain number (errors from the reader go to stderr).
-spend="$(bash "$reader" spend "$key_name")" || die "Could not read spend from DeepInfra (see the message above)."
+read_spend() {
+  bash "$reader" spend "$key_name" \
+    || die "Could not read spend from DeepInfra (see the message above). Agent: stop here and tell the owner this message."
+}
+
+# First commit on this branch that isn't on origin/main, as a UTC ISO time
+# (same form as GitHub's createdAt, so the two compare as plain strings).
+# Uses the author time, which a rebase or amend doesn't move. Prints
+# nothing when the branch has no commits of its own yet.
+first_branch_commit_at() {
+  local sha
+  git rev-parse --verify -q origin/main >/dev/null \
+    || die "origin/main not found. Run 'git fetch origin' and try again."
+  sha="$(git log origin/main..HEAD --reverse --format=%H | awk 'NR == 1')"
+  [ -n "$sha" ] || return 0
+  TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%ad "$sha"
+}
 
 # Print the latest start marker on the issue as "<createdAt> <spend>".
 # Reads `gh issue view --json comments` output on stdin. Only comments by
@@ -59,6 +78,7 @@ latest_marker() {
 
 case "$command" in
   start)
+    spend="$(read_spend)"
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     body="<!-- factory-cost-start: $spend -->
 Factory cost start: DeepInfra spend on the factory key was \$$(awk -v s="$spend" 'BEGIN { printf "%.4f", s }') at $now. \`scripts/factory-cost.sh end $issue\` reads this after the PR is open."
@@ -75,6 +95,14 @@ Factory cost start: DeepInfra spend on the factory key was \$$(awk -v s="$spend"
     [ -n "$marker" ] || die "No factory-cost-start marker on issue #$issue. Run '$0 start $issue' before the work starts."
     start_at="${marker%% *}"
     start_spend="${marker#* }"
+
+    # Late start: the marker must come before the branch's first commit.
+    work_at="$(first_branch_commit_at)"
+    if [ -n "$work_at" ] && [[ "$start_at" > "$work_at" ]]; then
+      die "Cost start was posted after work began (start $start_at, first commit $work_at); cost can't be measured. Write 'Cost: not measured' in the PR body and tell the owner."
+    fi
+
+    spend="$(read_spend)"
 
     # Month rollover: DeepInfra key spend resets each month, so the
     # difference is only exact when start and end fall in the same UTC month.
