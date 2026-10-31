@@ -10,7 +10,7 @@ set -euo pipefail
 #
 #   deepinfra-cost.sh end <key-name>
 #       Print the difference between the current spend and the saved start
-#       value: "Cost: $X.XX on DeepInfra". Also prints caching info if
+#       value: "Cost: $X.XXXX on DeepInfra". Also prints caching info if
 #       the response includes cached_input tokens.
 #
 # Requires DEEPINFRA_API_KEY in the environment, plus curl and jq.
