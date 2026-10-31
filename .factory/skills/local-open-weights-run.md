@@ -14,7 +14,7 @@ Use when cloud agents can't run (e.g. Cursor usage is used up) and the human wor
 2. In desktop Cursor, open **Cursor Settings → Models**, add the key as the OpenAI API key, turn on the OpenAI base-URL override with `https://api.deepinfra.com/v1/openai`, and add each model ID from `MODEL_ROUTING.md` as a custom model (name must match the ID exactly). Source: https://cursor.com/help/models-and-usage/api-keys (checked 2026-10-27); menu names change, so follow Cursor's current docs if they differ.
 3. While the override is on, Cursor's own OpenAI-family models also route to that URL; turn it off to go back to Cursor models.
 4. The key stays in local Cursor settings or env only. Never commit, paste or log it.
-5. **(One-time, per repo)** Export the factory DeepInfra key in the terminal the agent will use: `export DEEPINFRA_API_KEY=...` via your shell profile or a local dotenv loader (never committed). The key name on DeepInfra is recorded in `DOCS.md`. Check with: `bash scripts/deepinfra-cost.sh start "<key-name>"` (the `start` subcommand saves the current spend).
+5. **(One-time, per computer)** Add `export DEEPINFRA_API_KEY=<DeepInfra key>` to `~/.zshrc` (or your shell's rc file), then restart Cursor or start a new terminal. The key name (visible on DeepInfra's API keys page) is the one to pass as the argument to `deepinfra-cost.sh`. Verify with: `[ -n "$DEEPINFRA_API_KEY" ] && echo "key is set" || echo "key is not set"`.
 
 ## Per issue
 

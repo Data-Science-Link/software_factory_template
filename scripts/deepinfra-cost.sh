@@ -21,7 +21,7 @@ STATE_FILE="${GITIGNORE_DIR}/.factory-cost-start"
 command="${1:-}"
 key_name="${2:-}"
 
-if [ -z "$DEEPINFRA_API_KEY" ]; then
+if [ -z "${DEEPINFRA_API_KEY:-}" ]; then
   echo "ERROR: DEEPINFRA_API_KEY is not set." >&2
   exit 1
 fi
@@ -38,6 +38,11 @@ fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "ERROR: jq is required but not installed." >&2
+  exit 1
+fi
+
+if ! command -v bc >/dev/null 2>&1; then
+  echo "ERROR: bc is required but not installed." >&2
   exit 1
 fi
 
@@ -79,17 +84,30 @@ case "$command" in
     start_spend="$(cat "$STATE_FILE")"
     diff="$(echo "$spend - $start_spend" | bc -l 2>/dev/null || echo "")"
     if [ -z "$diff" ]; then
-      echo "ERROR: Failed to compute spend difference. bc may be missing." >&2
+      echo "ERROR: Failed to compute spend difference." >&2
       exit 1
     fi
-    # Format to 2 decimal places, strip leading zero
-    formatted="$(printf "%.2f" "$diff" | sed 's/^\./0./')"
+
+    # Check for month rollover — if end is lower than start the billing
+    # period reset and key-limits spend is for the new month only.
+    rollover="$(echo "$diff < 0" | bc -l 2>/dev/null || echo "")"
+    if [ "$rollover" = "1" ]; then
+      echo "NOTE: spend went down (month may have rolled over)." >&2
+      echo "Cost: see usage page — month rolled over during the run" >&2
+      echo "Caching: see usage page" >&2
+      exit 0
+    fi
+
+    # Format to 4 decimal places for sub-$0.01 precision, strip leading zero
+    formatted="$(printf "%.4f" "$diff" | sed 's/^\./0./')"
     echo "Cost: \$$formatted on DeepInfra"
 
+    # /payment/key-limits does not reliably return cached_input across all
+    # key types; check the field and fall back to telling the human.
     if [ -n "$cached_input" ] && [ "$cached_input" != "null" ] && [ "$cached_input" != "0" ]; then
       echo "Caching: yes - cached_input tokens: $cached_input"
     else
-      echo "Caching: no - no cached_input tokens reported"
+      echo "Caching: check usage page (cached tokens per model; the API may not expose this field)"
     fi
     ;;
 
