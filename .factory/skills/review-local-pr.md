@@ -5,7 +5,7 @@
 ## Steps
 
 1. Read the issue: `gh issue view N --comments` (outcome, scope list, done checks, handoff block).
-2. Read the PR: `gh pr view P --comments` and `gh pr diff P`. Note the PR check and secret scan results (`gh pr checks P`).
+2. Read the PR: `gh pr view P --comments` and `gh pr diff P`. Note the PR check and secret scan results (`gh pr checks P`). If the PR changes `scripts/pr-check.sh`, run `bash scripts/test-pr-check.sh` and check it passes.
 3. Compare and note each miss:
    - **Scope:** only the files the issue lists change; nothing extra.
    - **Done checks:** each one is ticked in the PR body and actually true in the diff or evidence.

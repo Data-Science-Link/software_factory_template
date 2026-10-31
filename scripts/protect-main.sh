@@ -6,7 +6,7 @@
 # Applies .github/rulesets/protect-main.json as a repository ruleset: the
 # default branch can't be deleted or force-pushed, changes reach it only
 # through a pull request (merge commits only, 0 approvals needed so a solo
-# owner can merge their own PRs), and the gitleaks secret-scan check must
+# owner can merge their own PRs), and the gitleaks and pr-check checks must
 # pass on a branch that is up to date with main. No one can bypass it.
 # (integration_id 15368 in the JSON is the GitHub Actions app, so only an
 # Actions run can satisfy the check.)
