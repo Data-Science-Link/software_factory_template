@@ -23,6 +23,17 @@ It draws on two talks:
 
 Workers (the cloud agents the manager launches) build, test, and review on a branch; they don't merge.
 
+## Quickstart
+
+Get started with this template in under a minute:
+
+1. [Copy the `.factory/` folder](#how-to-adopt-it-in-a-repo) into your repo root as-is
+2. [Fill in `.factory/DOCS.md`](#how-to-adopt-it-in-a-repo) with your repo's specifics
+3. [Set `.factory/MODEL_ROUTING.md`](#how-to-adopt-it-in-a-repo) for your plan and models
+4. [Open your first issue](#how-to-adopt-it-in-a-repo) to start the factory process
+
+For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) section below.
+
 ## How to adopt it in a repo
 
 1. Copy the `.factory/` folder into the repo root as-is.
