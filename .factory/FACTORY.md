@@ -74,6 +74,9 @@ Scheduled workflows (daily data jobs, nightly builds) can fail with no PR in fli
     giver.md                      ← giver: asks ledger, decision drafts, healthy challenge
     liability-gates.md            ← hard stops (secrets, license, CI, over-claims, merge authority)
     local-open-weights-run.md     ← local agents only: run an issue on a Local open-weights model with your own provider key
+    local-owner-setup.md          ← owner, once per computer: gh, hooks, DeepInfra key, antivirus, allowlist
+    local-agent-safety.md         ← owner, once: secret-scan hook, scoped gh token, command approvals, protect main
+    review-local-pr.md            ← reviewing bot: Factory review comment on a local agent's PR
   sketches/                       ← copy these into the repo root / .github/
     CONTRIBUTING.md
     github/pull_request_template.md
@@ -82,6 +85,7 @@ Scheduled workflows (daily data jobs, nightly builds) can fail with no PR in fli
 ```
 
 - **Factory skills** → `.factory/skills/`
+- **Local agent rule** → `.cursor/rules/factory.mdc` (always on in Cursor; `do issue N`, `address the review on PR N`)
 - **Repo documentation** → stays in the repo (`README`, `docs/`, …); list paths in `DOCS.md`
 - **Contributor / PR / owners sketches** → copy from `.factory/sketches/` into the repo, then point `DOCS.md` at them
 

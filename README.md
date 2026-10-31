@@ -32,6 +32,7 @@ Get started with this template in under a minute:
 3. [Set `.factory/MODEL_ROUTING.md`](#how-to-adopt-it-in-a-repo) for your plan and models
 4. [Open your first issue](#how-to-adopt-it-in-a-repo) to start the factory process
 5. Running agents on your own machine? Do the one-time safety setup in [`.factory/skills/local-agent-safety.md`](.factory/skills/local-agent-safety.md) first
+6. Running an issue locally (desktop Cursor + DeepInfra)? Do the owner checklist in [`.factory/skills/local-owner-setup.md`](.factory/skills/local-owner-setup.md) once, then type `do issue N` in Agent mode. The always-on rule [`.cursor/rules/factory.mdc`](.cursor/rules/factory.mdc) does the rest
 
 For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) section below.
 
@@ -59,6 +60,10 @@ For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) se
 | `.factory/skills/giver.md` | For the giver: asks ledger, decision drafts, healthy challenge, and how it behaves in the room. |
 | `.factory/skills/liability-gates.md` | Hard stops and always-do rules (secrets, licenses, CI, over-claims, merge authority). Not legal advice. |
 | `.factory/skills/local-open-weights-run.md` | For a human running an issue locally on an open-weights model with their own provider key. |
+| `.factory/skills/local-owner-setup.md` | One-time owner checklist for local runs: gh, hooks, DeepInfra key, spending limit, antivirus, command allowlist. |
+| `.factory/skills/local-agent-safety.md` | One-time safety setup before any local agent runs: secret-scan hook, scoped `gh` token, command approvals, protect `main`. |
+| `.factory/skills/review-local-pr.md` | For the reviewing bot: the `Factory review` comment on a local agent's PR. |
+| `.cursor/rules/factory.mdc` | Always-on Cursor rule: handles `do issue N` and `address the review on PR N`, honest reporting, never rules. |
 | `.factory/sketches/README.md` | Where each sketch should be copied. |
 | `.factory/sketches/CONTRIBUTING.md` | Starter contributing guide: how the repo ships work, AI disclosure, DCO sign-off, high-risk paths. |
 | `.factory/sketches/github/pull_request_template.md` | PR template with the Factory loop checklist, risk class, AI disclosure, safety checklist, and Evidence section. |
