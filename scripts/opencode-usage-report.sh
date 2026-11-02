@@ -9,12 +9,7 @@ mkdir -p "$(dirname "$out")"
 {
   echo "## OpenCode usage report"
   echo
-  echo "### opencode stats --models"
-  if command -v opencode >/dev/null 2>&1; then
-    opencode stats --models 2>&1 || echo "(opencode stats failed or no sessions yet)"
-  else
-    echo "(opencode binary not on PATH)"
-  fi
+  bash scripts/opencode-capture-usage.sh "${OC_ARTIFACT_DIR:-/tmp/oc-artifacts}/usage-metrics.md" || true
   echo
   echo "### Session storage (typical paths)"
   for d in \
