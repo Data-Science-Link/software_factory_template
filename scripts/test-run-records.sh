@@ -71,6 +71,7 @@ run_expect_fail tests/run-records/fail-cached-gt-in.json "tokens_cached must be 
 run_expect_fail tests/run-records/fail-local-timestamp.json "started_at must be UTC ISO 8601 ending in Z"
 run_expect_fail tests/run-records/fail-cost-mismatch.json "actual_cost_usd must match tokens × record prices"
 run_expect_fail tests/run-records/fail-unknown-field.json "Additional properties are not allowed"
+run_expect_fail tests/run-records/fail-step-cost-mismatch.json "step prices within"
 
 echo ""
 echo "Results: $passed passed, $failed failed"
