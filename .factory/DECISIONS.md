@@ -415,7 +415,7 @@ Append-only. Newest at the bottom.
 ### 2026-11-02 — DeepInfra default worker model and escalation (models.yaml)
 - **Status:** Proposed, pending Michael.
 - **Decision:** GitHub Actions factory workers default to `deepseek-ai/DeepSeek-V4-Flash-0731` (standard tier). Escalate to `deepseek-ai/DeepSeek-V4-Pro-0813` for high risk, complex work, `/oc spec` runs, and one retry after Flash fails on standard work. On DeepSeek tool-call or reasoning-format errors, fall back to `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` and open an issue. Prices, priors, and rules live in `.factory/models.yaml`; `MODEL_ROUTING.md` explains them for humans.
-- **Decided by:** Proposed by the Software Factory Builder implementing issue #26 (vision §10, epic #38); waiting on Michael's approval of the PR.
+- **Decided by:** Proposed by a Cursor cloud agent (composer-2.5) implementing issue #26; Michael decides at merge.
 - **Why:** One machine-readable table lets routing and cost scripts stay deterministic; Flash is the cheapest capable default for simple/standard work under the $0.10 target.
 - **Alternatives:** Keep Qwen3-Coder as the local default only (2026-10-27) without a separate Actions table; duplicate prices in scripts instead of YAML.
 - **Revisit:** After the OpenCode spike (#22) reports tool-call results; after the first month of forecast vs actual (#36).

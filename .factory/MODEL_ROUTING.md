@@ -6,12 +6,12 @@ GitHub Actions workers (OpenCode + DeepInfra) pick models from **`.factory/model
 
 - Dated DeepInfra **standard-tier** prices (input, cached input, output per million tokens), with source URLs and `checked_at` dates
 - **Token priors** per complexity (`simple`, `standard`, `complex`) for cost prediction
-- Ordered **routing rules** (first match wins; see `.factory/VISION.md` §10)
+- Ordered **routing rules** for model selection (first match wins) plus a **checks** block (rules 6 and 8) applied after a model is picked (see `.factory/VISION.md` §10)
 - **Budget** caps (`deepinfra_monthly_limit_usd`, per-issue cap and target, Actions minutes warning)
 
 **Default worker model:** `deepseek-ai/DeepSeek-V4-Flash-0731` for most runs. **Escalation:** `deepseek-ai/DeepSeek-V4-Pro-0813` for high risk, complex work, `/oc spec` runs, and one retry after Flash fails on standard work. **Fallback:** `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` when DeepSeek hits tool-call or reasoning-format errors.
 
-Scripts such as `scripts/factory-predict-cost.py` and the routing helper (#27) read `models.yaml` directly; do not duplicate prices in this file.
+The routing and cost-prediction scripts (issue **#27**) will read `models.yaml` directly once they land; do not duplicate prices in this file.
 
 **Spend rules (unchanged):** never enable on-demand spend (Cursor or elsewhere). Workers and the manager stay within the issue cap ($1 hard, $0.10 target) and the Actions-only DeepInfra key limit ($10/month per `.factory/DECISIONS.md`).
 
