@@ -2,6 +2,7 @@
 # Test runner for scripts/pr-check.sh.
 # Runs each fixture under tests/pr-check/ through pr-check.sh and checks
 # that pass-* fixtures exit 0 and fail-* fixtures exit non-zero.
+# For fail-* fixtures, a sibling .expect file must contain a substring of the FAIL line.
 # Bash only, no new dependencies.
 set -euo pipefail
 
@@ -30,14 +31,25 @@ for fixture in "$fixtures_dir"/*.md; do
         passed=$((passed + 1))
       else
         echo "FAIL  $name (expected exit 0, got $rc)"
-        echo "       $output" | head -1
+        echo "       $output" | head -3
         failed=$((failed + 1))
       fi
       ;;
     fail-*)
+      expect_file="${fixture%.md}.expect"
       if [ "$rc" -ne 0 ]; then
-        echo "PASS  $name"
-        passed=$((passed + 1))
+        if [ ! -f "$expect_file" ]; then
+          echo "FAIL  $name (missing $expect_file)"
+          failed=$((failed + 1))
+        elif ! grep -Fq "$(tr -d '\n' < "$expect_file")" <<<"$output" && ! grep -Fq "$(cat "$expect_file")" <<<"$output"; then
+          echo "FAIL  $name (output missing expected FAIL substring from $(basename "$expect_file"))"
+          echo "       expected contains: $(head -1 "$expect_file")"
+          echo "       got: $(grep '^FAIL:' <<<"$output" | head -1)"
+          failed=$((failed + 1))
+        else
+          echo "PASS  $name"
+          passed=$((passed + 1))
+        fi
       else
         echo "FAIL  $name (expected non-zero exit, got 0)"
         echo "       $output" | head -1
