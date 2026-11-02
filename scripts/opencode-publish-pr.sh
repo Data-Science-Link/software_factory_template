@@ -14,8 +14,11 @@ summary="$OC_ARTIFACT_DIR/summary.md"
 PRISTINE_DIR="$(mktemp -d)"
 trap 'rm -rf "$PRISTINE_DIR"' EXIT
 git show HEAD:scripts/opencode-artifact-scan.sh >"$PRISTINE_DIR/opencode-artifact-scan.sh"
+git show HEAD:scripts/opencode-git-push-scoped.sh >"$PRISTINE_DIR/opencode-git-push-scoped.sh"
 git show HEAD:scripts/pr-check.sh >"$PRISTINE_DIR/pr-check.sh"
-chmod +x "$PRISTINE_DIR/opencode-artifact-scan.sh" "$PRISTINE_DIR/pr-check.sh"
+chmod +x "$PRISTINE_DIR/opencode-artifact-scan.sh" \
+  "$PRISTINE_DIR/opencode-git-push-scoped.sh" \
+  "$PRISTINE_DIR/pr-check.sh"
 
 bash "$PRISTINE_DIR/opencode-artifact-scan.sh" "$patch" "$summary"
 
@@ -115,7 +118,12 @@ if ! bash "$PRISTINE_DIR/pr-check.sh" "$body_file" "$OC_ARTIFACT_DIR/pr-files.tx
   exit 1
 fi
 
-git push -u origin "$branch"
+# Push only after scan/apply/commit/pr-check (checkout stays persist-credentials: false).
+if [ -z "${GH_TOKEN:-}" ]; then
+  echo "publish: GH_TOKEN is required to push and open the PR" >&2
+  exit 1
+fi
+bash "$PRISTINE_DIR/opencode-git-push-scoped.sh" "$branch"
 
 gh pr create \
   --title "OpenCode: issue #${OC_ISSUE_NUMBER} (run ${OC_RUN_ID})" \

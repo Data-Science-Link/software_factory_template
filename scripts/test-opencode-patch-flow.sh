@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Simulate agent capture → artifact scan → publish apply (hello.md only). No OpenCode/DeepInfra.
+# Simulate agent capture → artifact scan → publish apply (hello.md only).
+# Does NOT run opencode-publish-pr.sh or git push — see scripts/test-opencode-publish-push.sh.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-echo "== simulate: clone pristine repo =="
+echo "== simulate: clone pristine repo (main) =="
 git clone -q "$root" "$work/repo"
 cd "$work/repo"
-git checkout -q cursor/issue-22-opencode-spike-dbd1 2>/dev/null || true
+git checkout -q main 2>/dev/null || git checkout -q master 2>/dev/null || true
 
 echo "== simulate: agent job installs gitleaks =="
 bash scripts/install-gitleaks-ci.sh >/dev/null
@@ -50,11 +51,11 @@ if [ "$files_in_patch" != "factory/spikes/hello.md" ]; then
 fi
 echo "OK: patch contains only factory/spikes/hello.md"
 
-echo "== simulate: publish job (fresh checkout + apply) =="
+echo "== simulate: publish apply + commit only (no push, not opencode-publish-pr.sh) =="
 publish="$work/publish"
 git clone -q "$root" "$publish"
 cd "$publish"
-git checkout -q cursor/issue-22-opencode-spike-dbd1 2>/dev/null || true
+git checkout -q main 2>/dev/null || true
 bash scripts/install-gitleaks-ci.sh >/dev/null
 if [ -n "$(git status --porcelain)" ]; then
   echo "FAIL: publish checkout dirty after gitleaks install"
@@ -71,4 +72,5 @@ if [ "$(git diff-tree --no-commit-id --name-only -r HEAD | sort -u)" != "factory
   exit 1
 fi
 echo "OK: publish apply + commit contains only factory/spikes/hello.md"
-echo "PASS: full agent-then-publish simulation"
+echo "NOTE: push path not covered here — run scripts/test-opencode-publish-push.sh"
+echo "PASS: agent + publish-apply simulation"
