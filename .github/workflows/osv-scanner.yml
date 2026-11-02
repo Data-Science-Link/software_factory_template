@@ -36,4 +36,12 @@ jobs:
           osv-scanner --version
 
       - name: Scan repository
-        run: osv-scanner scan --recursive ./
+        run: |
+          set +e
+          osv-scanner scan --recursive ./
+          code=$?
+          if [ "$code" -eq 128 ]; then
+            echo "No package manifests to scan (expected for docs/shell-only repos)."
+            exit 0
+          fi
+          exit "$code"
