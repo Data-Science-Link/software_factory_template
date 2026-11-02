@@ -17,11 +17,17 @@ git show HEAD:scripts/opencode-artifact-scan.sh >"$PRISTINE_DIR/opencode-artifac
 git show HEAD:scripts/opencode-git-push-scoped.sh >"$PRISTINE_DIR/opencode-git-push-scoped.sh"
 git show HEAD:scripts/pr-check.sh >"$PRISTINE_DIR/pr-check.sh"
 git show HEAD:scripts/opencode-run-facts.sh >"$PRISTINE_DIR/opencode-run-facts.sh"
+for f in opencode-text-block.sh opencode-build-context.py factory-spec-check.py; do
+  git show "HEAD:scripts/$f" >"$PRISTINE_DIR/$f"
+done
 chmod +x "$PRISTINE_DIR/opencode-artifact-scan.sh" \
   "$PRISTINE_DIR/opencode-git-push-scoped.sh" \
   "$PRISTINE_DIR/pr-check.sh"
+block() { bash "$PRISTINE_DIR/opencode-text-block.sh" fence "$@"; }
 
-bash "$PRISTINE_DIR/opencode-artifact-scan.sh" "$patch" "$summary"
+note="$OC_ARTIFACT_DIR/worker-note.md"
+evidence="$OC_ARTIFACT_DIR/evidence.md"
+bash "$PRISTINE_DIR/opencode-artifact-scan.sh" "$patch" "$summary" "$note" "$evidence"
 
 if [ ! -s "$patch" ]; then
   echo "publish: empty patch" >&2
@@ -36,10 +42,34 @@ if [ ! -s "$OC_ARTIFACT_DIR/pr-files.txt" ]; then
   grep -E '^(\+\+\+ b/|--- b/|diff --git a/.+ b/)' "$patch" | sed -E 's/^\+\+\+ b\///; s/^--- b\///; s/^diff --git a\/[^ ]+ b\///' | sort -u | grep -v '^$' >"$OC_ARTIFACT_DIR/pr-files.txt" || true
 fi
 
+# Spec comment used by job A (scripts/opencode-build-context.py). Digits only; URL built here.
+spec_id="$(sed -n 's/^spec_comment_id=//p' "$OC_ARTIFACT_DIR/context-meta.txt" 2>/dev/null | head -n 1 || true)"
+case "$spec_id" in '' | none | *[!0-9]*) ;; *) spec_id_ok=yes ;; esac
+case "$spec_id" in '' | none) ;; *[!0-9]*) echo "publish: invalid spec_comment_id in context-meta.txt" >&2; exit 1 ;; esac
+
 branch="oc/issue-${OC_ISSUE_NUMBER}-${OC_RUN_ID}"
 git checkout -b "$branch"
 git apply --check "$patch"
 git apply "$patch"
+
+# The committed spec must be the exact approved comment text (#75). Re-fetch that comment with
+# this job's token and re-validate it (pristine build-context.py); never trust the artifact copy.
+spec_path="factory/specs/issue-${OC_ISSUE_NUMBER}.md"
+spec_file_line="not written (no approved spec comment)"
+if [ "${spec_id_ok:-no}" = yes ]; then
+  canonical="$PRISTINE_DIR/spec-canonical.md"
+  python3 "$PRISTINE_DIR/opencode-build-context.py" --print-spec "$spec_id" \
+    --repo "${GITHUB_REPOSITORY:-}" --issue "$OC_ISSUE_NUMBER" ${OC_SPEC_FIXTURE:+--from-json "$OC_SPEC_FIXTURE"} >"$canonical"
+  if [ ! -e "$spec_path" ]; then
+    mkdir -p "$(dirname "$spec_path")"; cp "$canonical" "$spec_path"
+    spec_file_line="written by publish from spec comment ${spec_id} (the patch did not include it)"
+  elif [ -L "$spec_path" ] || ! cmp -s "$canonical" "$spec_path"; then
+    echo "publish: ${spec_path} in the patch is not the exact approved spec comment ${spec_id}; refusing" >&2
+    exit 1
+  else
+    spec_file_line="exact copy of spec comment ${spec_id}, checked by publish against the comment"
+  fi
+fi
 git add -A
 
 if git diff --cached --quiet; then
@@ -62,15 +92,24 @@ fi
 # Run-record facts (pr-check rule 4) come from env, artifact and the committed spec only.
 facts="$(OC_BRANCH="$branch" bash "$PRISTINE_DIR/opencode-run-facts.sh")"
 
-# Spec comment used by job A (scripts/opencode-build-context.py). Digits only; URL built here.
-spec_id="$(sed -n 's/^spec_comment_id=//p' "$OC_ARTIFACT_DIR/context-meta.txt" 2>/dev/null | head -n 1 || true)"
 case "$spec_id" in
   '' ) spec_line="Spec: not fetched (no issue context step in this run)"; spec_gate="N/A (no context step)" ;;
   none ) spec_line="Spec: no approved spec comment found; worker used the issue body and the /oc instruction only"; spec_gate="no approved spec found" ;;
-  *[!0-9]* ) echo "publish: invalid spec_comment_id in context-meta.txt" >&2; exit 1 ;;
   * ) spec_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/issues/${OC_ISSUE_NUMBER}#issuecomment-${spec_id}"
       spec_line="Spec: approved owner spec comment ${spec_id} (${spec_url}), validated by factory-spec-check.py"; spec_gate="approved spec comment ${spec_id}" ;;
 esac
+
+# Risk class and Gate line both come from the committed spec's front matter (#76).
+risk="$(OC_BRANCH="$branch" bash "$PRISTINE_DIR/opencode-run-facts.sh" --risk)"
+box() { if [ "$risk" = "$1" ] || { [ "$1" = high ] && [ "$risk" = unknown ]; }; then echo x; else echo ' '; fi; }
+case "$risk" in
+  trivial) triage="risk class **trivial** (spec front matter)"; product_gate="N/A trivial: manager may merge after green checks" ;;
+  normal | high) triage="risk class **${risk}** (spec front matter)"; product_gate="**required** (${risk} risk)" ;;
+  *) triage="risk class unknown (no spec front matter): treated as **high**"; product_gate="**required** (risk unknown, treated as high)" ;;
+esac
+
+note_block="$(block "$note" 3000 "(the worker did not write a labeled note)")"
+evidence_block="$(block "$evidence" 12000 "(no verification output in this run's artifact)")"
 
 cat >"$body_file" <<EOF
 ## Summary
@@ -84,9 +123,11 @@ Refs #38
 
 ${spec_line}
 
+Spec file: ${spec_file_line}.
+
 ## Success metric from the original ask
 
-N/A — spike / trivial automation run.
+See the approved spec's success metric; this automation run reports evidence only.
 
 ## What changes in production on merge
 
@@ -95,23 +136,29 @@ Only the files in this PR diff. No workflow or secret changes.
 ## Factory loop
 
 - [x] **1. Intake** — Triggered by owner \`/oc\` on issue #${OC_ISSUE_NUMBER}
-- [x] **2. Triage** — spike run; **high** risk (Actions + secret on agent job)
+- [x] **2. Triage** — ${triage}
 - [x] **3. Spec gate** — ${spec_gate}
 - [x] **4. Build** — OpenCode agent job + publish job
 - [ ] **5. Review** — Grok Bot / Michael
-- [ ] **6. Verify** — Michael checks run logs and this PR for leaks
-- [ ] **7. Product gate** — **required** (high risk)
-- [ ] **8. Ship + monitor** — Michael merges if satisfied; workers never merge
+- [ ] **6. Verify** — harness verification output in Evidence; required CI must still run on this PR (#74)
+- [ ] **7. Product gate** — ${product_gate}
+- [ ] **8. Ship + monitor** — merge only per risk class; workers never merge
 
 ## Risk class
 
-- [ ] trivial
-- [ ] normal
-- [x] **high** (Actions harness + DeepInfra secret)
+- [$(box trivial)] trivial
+- [$(box normal)] normal
+- [$(box high)] **high**
 
 ## AI disclosure
 
 AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Flash-0731
+
+## What I changed and why
+
+Worker note (model-written, unverified; capped and defanged by publish):
+
+${note_block}
 
 ## Safety checklist
 
@@ -124,6 +171,10 @@ AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Flash-073
 
 ${facts}
 
+Verification output (run by the harness in a sandbox, not by the model; capped):
+
+${evidence_block}
+
 ${usage_block}
 
 ${cost_line}
@@ -131,6 +182,8 @@ ${cost_line}
 ## Notes for reviewers
 
 Michael: review diff and Actions logs before merge. Rotate \`DEEPINFRA_API_KEY\` if anything looks leaked (see \`.factory/actions-security.md\`).
+
+Checks: this PR was opened with the workflow token, so pr-check and gitleaks wait for approval (#74). On this PR, use **Approve workflows to run**, or have Grok Bot run \`bash scripts/factory-kick-checks.sh <PR number>\` (close and reopen as the owner).
 EOF
 
 git diff --name-only HEAD~1..HEAD >"$OC_ARTIFACT_DIR/pr-files.txt"

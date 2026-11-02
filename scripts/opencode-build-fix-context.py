@@ -10,7 +10,9 @@ Two modes:
                  fix-context.md   PR facts, changed files, owner review/PR comments since the last
                               push (capped, newest kept), then the linked issue context built
                               by scripts/opencode-build-context.py (issue body + approved spec)
-                 fix-meta.txt     pr_number, issue_number, head_ref, head_sha, since, sizes
+                 fix-meta.txt     pr_number, issue_number, head_ref, head_sha, since, spec id and
+                              sha256, sizes
+                 spec.md          the exact approved spec, when there is one (#75)
                and, in Actions, head_sha / head_ref / issue_number to $GITHUB_OUTPUT.
 
 Only comments by the repository owner login with author_association OWNER count, created after
@@ -23,6 +25,7 @@ Live mode uses `gh api` (GH_TOKEN from the workflow step). --from-json reads a f
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -129,7 +132,7 @@ def owner_items(data: dict, owner: str, since: datetime | None) -> list[tuple[da
     return items
 
 
-def issue_context(args: argparse.Namespace, data: dict, issue: str, tmp: Path) -> tuple[str, str]:
+def issue_context(args: argparse.Namespace, data: dict, issue: str, tmp: Path) -> tuple[str, str, bytes | None]:
     """Reuse opencode-build-context.py for the linked issue (body + approved spec)."""
     out = tmp / "issue"
     cmd = [sys.executable, str(HERE / "opencode-build-context.py"), "--out-dir", str(out),
@@ -148,7 +151,9 @@ def issue_context(args: argparse.Namespace, data: dict, issue: str, tmp: Path) -
         die("linked issue context failed (see build-context output above)")
     meta = (out / "context-meta.txt").read_text(encoding="utf-8")
     m = re.search(r"^spec_comment_id=(\S+)$", meta, re.M)
-    return (out / "issue-context.md").read_text(encoding="utf-8"), (m.group(1) if m else "none")
+    spec = out / "spec.md"
+    return ((out / "issue-context.md").read_text(encoding="utf-8"), (m.group(1) if m else "none"),
+            spec.read_bytes() if spec.is_file() else None)
 
 
 def main() -> int:
@@ -221,14 +226,18 @@ def main() -> int:
                     + ("".join(shown) if shown else "\nNone; work from the /oc fix instruction.\n"))
 
     with tempfile.TemporaryDirectory() as td:
-        issue_ctx, spec_id = issue_context(args, data, facts["issue_number"], Path(td))
+        issue_ctx, spec_id, spec_bytes = issue_context(args, data, facts["issue_number"], Path(td))
 
     ctx = f"{head}{files_block}{review_block}\n{END}\n\n{issue_ctx}"
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     (out / "fix-context.md").write_text(ctx, encoding="utf-8")
+    spec_sha = "none"
+    if spec_bytes is not None:  # exact approved spec; agent-fix restores factory/specs/issue-<N>.md from it
+        (out / "spec.md").write_bytes(spec_bytes)
+        spec_sha = hashlib.sha256(spec_bytes).hexdigest()
     meta = {**facts, "since": data["head_commit_date"], "owner_comments": str(len(shown)),
-            "spec_comment_id": spec_id, "context_bytes": str(len(ctx.encode()))}
+            "spec_comment_id": spec_id, "spec_sha256": spec_sha, "context_bytes": str(len(ctx.encode()))}
     (out / "fix-meta.txt").write_text("".join(f"{k}={v}\n" for k, v in meta.items()), encoding="utf-8")
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:

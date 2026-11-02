@@ -25,6 +25,8 @@
 #   - the AI disclosure line names harness opencode-actions (vision §7 standard PR).
 # HTML comments are stripped before rules 1-4 read the body, so unfilled template placeholders
 # (e.g. "AI disclosure: harness <!-- ... -->", "Cost: <!-- ... -->") never satisfy a rule.
+# Fenced code blocks (``` ... ```) are stripped too: pasted evidence or a worker note inside a
+# fence can't stand in for a missing fact line.
 # Human PRs, Cursor cloud agent PRs without those markers, and legacy agent PRs do not trigger rule 4.
 # When triggered, the body must include non-empty: Run ID, Tokens in / cached / out, Predicted cost ($),
 # Actual cost ($), Gate, and a spec path `factory/specs/issue-<N>.md` (matches run record fields run_id,
@@ -41,9 +43,10 @@ files="${PR_FILES:-}"
 author="${PR_AUTHOR:-}"
 branch="${PR_BRANCH:-}"
 
-# Plain lines: drop HTML comments (template placeholders, even multi-line), **bold** markers,
-# and leading list or quote marks.
-plain="$(printf '%s\n' "$body" | tr -d '\r' | perl -0pe 's/<!--.*?-->//gs' | sed -E 's/\*\*//g; s/^[[:space:]]*([-*>][[:space:]]+)*//')"
+# Plain lines: drop HTML comments (template placeholders, even multi-line), fenced code blocks
+# (pasted command output or model text must never satisfy a rule, #76), **bold** markers, and
+# leading list or quote marks.
+plain="$(printf '%s\n' "$body" | tr -d '\r' | perl -0pe 's/<!--.*?-->//gs; s/^[ \t]*```[^\n]*\n.*?^[ \t]*```[ \t]*$//gms' | sed -E 's/\*\*//g; s/^[[:space:]]*([-*>][[:space:]]+)*//')"
 
 errors=0
 fail() { echo "FAIL: $1"; [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=PR check::$1"; errors=$((errors + 1)); }

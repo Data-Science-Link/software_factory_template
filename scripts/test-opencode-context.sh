@@ -103,7 +103,8 @@ publish_body() { # $1 = context-meta.txt content ("" = no file); body left in $w
   printf '# summary\n' >"$pub/art/summary.md"
   if [ -n "$1" ]; then printf '%s\n' "$1" >"$pub/art/context-meta.txt"; fi
   (cd "$pub/repo" && env -u GH_TOKEN OC_ISSUE_NUMBER=7 OC_RUN_ID=1 OC_ARTIFACT_DIR="$pub/art" GITHUB_WORKSPACE="$pub/repo" \
-    GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=o/r GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+    GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=o/r OC_SPEC_FIXTURE="$root/tests/oc-context/approved.json" \
+    GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
     GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t bash scripts/opencode-publish-pr.sh >/dev/null 2>&1) || true
 }
 publish_body 'spec_comment_id=102' 1

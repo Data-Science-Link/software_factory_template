@@ -3,16 +3,24 @@
 
 Writes to --out-dir (default $OC_ARTIFACT_DIR):
   issue-context.md   issue title/body, latest owner-approved spec, recent owner comments (capped)
-  context-meta.txt   spec_comment_id=<id|none> and sizes; read by agent-run and publish
+  context-meta.txt   spec_comment_id=<id|none>, spec_sha256 and sizes; read by agent-run and publish
+  spec.md            only when an approved spec exists: the exact spec (marker line on, LF line
+                     ends, one trailing newline). The harness commits it as
+                     factory/specs/issue-<N>.md; the worker never copies it by hand (#75).
 
 Only comments with author_association OWNER count. The spec is the latest owner comment that
 contains the factory-spec marker and has front matter status: approved; it must pass
 factory-spec-check.py or this script exits 1 (fail closed). No spec -> issue body only.
 Live mode uses `gh api` (GH_TOKEN from the workflow step). --from-json reads a fixture instead.
+
+--print-spec <comment id>: fetch that one comment again, re-run the same checks (owner, marker,
+status approved, factory-spec-check.py, belongs to --issue) and print the canonical spec text to
+stdout. Publish uses it to confirm the committed spec file is that exact text.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -54,8 +62,13 @@ def spec_text(body: str) -> str:
     return body[body.index(MARKER):]
 
 
+def canonical_spec(body: str) -> str:
+    """Exact spec file text: from the marker on, LF line ends, one trailing newline."""
+    return spec_text(body.replace("\r\n", "\n")).rstrip() + "\n"
+
+
 def says_approved(text: str) -> bool:
-    rest = text.split(MARKER, 1)[1].lstrip()
+    rest = text.replace("\r\n", "\n").split(MARKER, 1)[1].lstrip()
     m = re.match(r"---[ \t]*\n(.*?)\n---[ \t]*(\n|$)", rest, re.S)
     return bool(m and re.search(r"^status:\s*[\"']?approved[\"']?\s*$", m.group(1), re.M))
 
@@ -88,6 +101,31 @@ def clip(s: str, limit: int) -> str:
     return b[:keep].decode("utf-8", "ignore") + f"\n[truncated {len(b) - keep} bytes]"
 
 
+def print_spec(args: argparse.Namespace) -> int:
+    cid = str(args.print_spec)
+    if not cid.isdigit():
+        die("--print-spec needs a numeric comment id")
+    if args.from_json:
+        _, comments = load(args)
+        found = [c for c in comments if str(c.get("id")) == cid]
+        if not found:
+            die(f"comment {cid} not in fixture")
+        c = found[0]
+    else:
+        if not (args.repo and args.issue):
+            die("--print-spec needs --repo and --issue")
+        c = json.loads(gh(f"repos/{args.repo}/issues/comments/{cid}"))
+        if not str(c.get("issue_url", "")).endswith(f"/issues/{args.issue}"):
+            die(f"comment {cid} does not belong to issue #{args.issue}")
+    body = c.get("body") or ""
+    if not is_owner(c) or MARKER not in body or not says_approved(spec_text(body)):
+        die(f"comment {cid} is not an owner-approved spec comment")
+    text = canonical_spec(body)
+    check_spec(text)
+    sys.stdout.write(text)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"))
@@ -97,11 +135,14 @@ def main() -> int:
     ap.add_argument("--max-bytes", type=int, default=60000)
     ap.add_argument("--max-comments", type=int, default=5)
     ap.add_argument("--comment-bytes", type=int, default=1500)
+    ap.add_argument("--print-spec", metavar="COMMENT_ID", help="print the canonical spec of this comment")
     args = ap.parse_args()
-    if not args.out_dir or not (args.from_json or (args.repo and args.issue)):
-        die("need --out-dir and either --from-json or --repo/--issue")
     if args.issue and not str(args.issue).isdigit():
         die("issue number must be digits")
+    if args.print_spec is not None:
+        return print_spec(args)
+    if not args.out_dir or not (args.from_json or (args.repo and args.issue)):
+        die("need --out-dir and either --from-json or --repo/--issue")
 
     issue, comments = load(args)
     owner = [c for c in comments if is_owner(c)]
@@ -110,10 +151,12 @@ def main() -> int:
     spec = approved[-1] if approved else None
 
     parts = [f"## Issue #{issue.get('number', args.issue)}: {clean(issue.get('title'))}\n"]
-    spec_block, spec_id = "", "none"
+    spec_block, spec_id, canonical = "", "none", None
     if spec:
         text = spec_text(clean(spec["body"]))
         check_spec(text)
+        canonical = canonical_spec(spec["body"])
+        check_spec(canonical)
         spec_id = str(spec["id"])
         spec_block = f"\n## Approved spec (owner comment {spec_id})\n\n{text}\n"
     else:
@@ -142,8 +185,13 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     ctx = "".join(parts)
     (out / "issue-context.md").write_text(ctx, encoding="utf-8")
+    spec_sha = "none"
+    if canonical is not None:
+        (out / "spec.md").write_bytes(canonical.encode("utf-8"))
+        spec_sha = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     (out / "context-meta.txt").write_text(
-        f"spec_comment_id={spec_id}\ncontext_bytes={len(ctx.encode())}\nowner_comments={len(shown)}\n",
+        f"spec_comment_id={spec_id}\nspec_sha256={spec_sha}\ncontext_bytes={len(ctx.encode())}\n"
+        f"owner_comments={len(shown)}\n",
         encoding="utf-8")
     msg = f"approved spec comment {spec_id}" if spec else "no approved spec found"
     print(f"build-context: {msg}; {len(ctx.encode())} bytes; {len(shown)} owner comment(s)")

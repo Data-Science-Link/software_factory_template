@@ -16,7 +16,8 @@ make_repo() {
   local dir=$1
   git init -q "$dir"
   mkdir -p "$dir/scripts"
-  for s in opencode-publish-pr.sh opencode-artifact-scan.sh opencode-git-push-scoped.sh pr-check.sh opencode-run-facts.sh; do
+  for s in opencode-publish-pr.sh opencode-artifact-scan.sh opencode-git-push-scoped.sh pr-check.sh opencode-run-facts.sh \
+    opencode-text-block.sh opencode-build-context.py factory-spec-check.py; do
     cp "$root/scripts/$s" "$dir/scripts/$s"
   done
   echo base >"$dir/README.md"
@@ -70,6 +71,11 @@ check "$body" "Predicted cost: \$0.033 (spec front matter)" "predicted cost from
 check "$body" "Actual cost: \$0.0257" "actual cost from usage-metrics"
 check "$body" "Gate: risk normal: owner product gate required" "gate from spec risk"
 check "$body" "factory/specs/issue-99.md" "spec link"
+check "$body" "- [x] normal" "Risk class box ticked from the spec (normal)"
+check "$body" "- [ ] **high**" "high box not ticked for a normal spec"
+check "$body" "risk class **normal** (spec front matter)" "triage line from the spec"
+check "$body" "## What I changed and why" "narrative section present"
+check "$body" "(the worker did not write a labeled note)" "missing note stated, not invented"
 echo "--- direct pr-check on the body ---"
 if bash "$r1/scripts/pr-check.sh" "$body"; then echo "OK    pr-check.sh exit 0"; else echo "FAIL  pr-check.sh"; fails=$((fails + 1)); fi
 
@@ -82,7 +88,8 @@ run_publish "$r2"
 body="$r2.artifacts/pr-body.md"
 check "$body" "Actual cost: \$0 (not measured)" "unmetered cost uses run-record not_measured form"
 check "$body" "Predicted cost: not available" "no invented prediction"
-check "$body" "Gate: risk unknown (no spec): treat as high" "unknown risk gated like high"
+check "$body" "Gate: risk unknown (no spec" "unknown risk gated like high"
+check "$body" "- [x] **high**" "unknown risk ticks the high box"
 check "$r2.out" "needs a spec link" "pr-check fails without spec"
 check "$r2.out" "pr-check failed on generated body" "publish refuses to open the PR"
 

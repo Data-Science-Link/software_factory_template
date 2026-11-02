@@ -231,7 +231,7 @@ publish() { # label want [expected_sha]
   PATH="$work/bin:$PATH" FAKE_GH_OUT="$work/comment.md" GH_TOKEN=fake-token-for-test \
     OPENCODE_GIT_CREDENTIAL_HELPER="!$work/cred.sh" OC_PR_FIXTURE="$work/pub.json" \
     OC_PR_NUMBER=72 OC_RUN_ID=999 OC_ARTIFACT_DIR="$work/art" OC_PR_DIR="$work/pr" \
-    OC_EXPECTED_HEAD_SHA="${3:-$head_sha}" GITHUB_REPOSITORY="$REPO" \
+    OC_EXPECTED_HEAD_SHA="${3:-$head_sha}" GITHUB_REPOSITORY="$REPO" OC_SPEC_FIXTURE="${SPEC_FX:-}" \
     bash "$trusted/scripts/opencode-publish-fix.sh" >"$work/pub.log" 2>&1
   rc=$?
   set -e
@@ -248,10 +248,36 @@ if [ "$new_remote" != "$head_sha" ] && [ "$(git -C "$bare" rev-parse "$new_remot
   && [ "$(git -C "$bare" for-each-ref --format='%(refname)' refs/heads | wc -l)" = 2 ] \
   && grep -q '^Run ID: 999' "$work/comment.md" && grep -q 'What I changed and why' "$work/comment.md" \
   && grep -q '(at)someone' "$work/comment.md" && ! grep -q '<!-- hidden' "$work/comment.md" \
-  && [ "$(grep -c '```' "$work/comment.md")" = 2 ] && grep -q '#74' "$work/comment.md" \
+  && [ "$(grep -c '^```' "$work/comment.md")" = 4 ] && grep -q '#74' "$work/comment.md" \
   && grep -q 'factory/b.md' "$work/comment.md"; then
   ok "publish-fix: remote branch advanced by one commit; comment has run facts and defanged note"
 else bad "publish-fix: push/comment content"; cat "$work/comment.md" 2>/dev/null || true; fi
+
+if grep -q '^Predicted cost: not predicted (fix run' "$work/comment.md" && grep -q 'Evidence: verification output' "$work/comment.md" \
+  && grep -q 'no verification output in this run' "$work/comment.md"; then
+  ok "publish-fix: fix run has its own cost line; Evidence section present"
+else bad "publish-fix: fix cost line / evidence"; fi
+
+# Spec file (#75): the fixed branch must hold the exact approved spec comment, checked by publish.
+canon="$work/canon.md"
+"$py" scripts/opencode-build-context.py --from-json tests/oc-context/approved.json --print-spec 102 >"$canon"
+setup_remote
+echo "spec_comment_id=102" >>"$work/art/fix-meta.txt"
+SPEC_FX="$root/tests/oc-context/approved.json"
+publish "fixed branch without the approved spec file refused" fail
+if [ "$(remote_head)" = "$head_sha" ] && grep -q 'not the exact approved spec comment 102' "$work/pub.log"; then
+  ok "publish-fix: remote untouched after spec-file refusal"; else bad "publish-fix: spec refusal"; fi
+setup_remote
+echo "spec_comment_id=102" >>"$work/art/fix-meta.txt"
+( cd "$work/seed" && echo fixed >>factory/b.md && mkdir -p factory/specs && cp "$canon" factory/specs/issue-33.md \
+  && git add -N factory/specs/issue-33.md && git diff >"$work/art/changes.patch" && git checkout -q -- factory/b.md \
+  && git rm -q --cached factory/specs/issue-33.md && rm -rf factory/specs )
+echo "+ dbt build" >"$work/art/evidence.md"; echo "Done. PASS=3" >>"$work/art/evidence.md"
+rm -f "$work/comment.md"
+publish "fix with the exact approved spec file pushed" ok
+if grep -q 'exact copy of spec comment 102, checked by publish' "$work/comment.md" && grep -qx 'Done. PASS=3' "$work/comment.md"; then
+  ok "publish-fix: spec checked against the comment; harness evidence pasted"; else bad "publish-fix: spec ok / evidence"; fi
+SPEC_FX=''
 
 # Head moved per API (fixture head differs from job A's SHA): refuse before touching the remote.
 setup_remote
