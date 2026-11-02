@@ -12,6 +12,21 @@ permissions:
   pull-requests: read
 
 jobs:
+  run-records:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install factory Python requirements
+        run: pip install -r requirements-factory.txt
+
+      - name: Run run-record fixture tests
+        run: bash scripts/test-run-records.sh
+
   pr-check:
     runs-on: ubuntu-latest
     steps:
@@ -29,3 +44,4 @@ jobs:
           PR_FILES="$(gh pr diff "$PR_NUMBER" --name-only --repo "$GITHUB_REPOSITORY")"
           export PR_FILES
           bash scripts/pr-check.sh
+          bash scripts/test-opencode-capture-usage.sh

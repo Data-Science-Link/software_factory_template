@@ -1,0 +1,2 @@
+# Pinned deps for factory scripts (validators, future run-end tooling).
+jsonschema==4.23.0
