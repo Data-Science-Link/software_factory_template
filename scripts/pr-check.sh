@@ -21,7 +21,7 @@
 # Factory Actions run PR (rule 4), detected deterministically when either:
 #   - the raw body contains the HTML marker `<!-- factory-run:start -->` (added by factory-run-end.sh when
 #     filling the block — the empty PR template does not include this marker), or
-#   - a plain line matches harness opencode-actions (e.g. AI disclosure: harness opencode-actions; model …).
+#   - the AI disclosure line names harness opencode-actions (vision §7 standard PR).
 # Human PRs, Cursor cloud agent PRs without those markers, and legacy agent PRs do not trigger rule 4.
 # When triggered, the body must include non-empty: Run ID, Tokens in / cached / out, Predicted cost ($),
 # Actual cost ($), Gate, and a spec path `factory/specs/issue-<N>.md` (matches run record fields run_id,
@@ -71,7 +71,7 @@ fi
 
 # 4. Factory Actions run block (opencode-actions harness or factory-run HTML markers)
 factory_run=no
-if has_raw '<!-- factory-run:start -->' || has 'harness[[:space:]]+opencode-actions'; then
+if has_raw '<!-- factory-run:start -->' || has '^AI disclosure:.*harness[[:space:]]+opencode-actions'; then
   factory_run=yes
 fi
 if [ "$factory_run" = yes ]; then
