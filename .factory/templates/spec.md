@@ -30,10 +30,10 @@ drafted_by: grok-bot
 <!-- What changes. -->
 
 ## Out of scope
-<!-- What the worker must not touch. -->
+<!-- What the worker must not touch. The /oc path policy (`scripts/opencode-artifact-scan.sh --list-rules`) already forbids `.github/`, `opencode.json`, `.factory/actions-security.md`, `.factory/models.yaml`, other dot-paths and edits to existing scripts; don't ask for those. -->
 
 ## Files
-<!-- Create, change, or read first. -->
+<!-- Create, change, or read first. New scripts: a new hyphenated file directly under scripts/ (e.g. scripts/dbt-seed-check.sh). Never plan an edit to an existing script, .github/, or an owner-only .factory/ file for the worker; list it under Manual steps for Michael. .gitignore: added lines only. -->
 
 ## Acceptance criteria
 <!-- Tick only when diff or command output proves it. -->
