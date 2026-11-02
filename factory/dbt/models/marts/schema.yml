@@ -1,0 +1,206 @@
+version: 2
+
+models:
+  - name: fct_agent_runs
+    description: "One row per agent run, joined to its prices, with cost variance vs the forecast, cache hit rate and first-time gate pass."
+    data_tests:
+      - unique:
+          column_name: run_id
+      - not_null:
+          column_name: run_id
+    columns:
+      - name: run_id
+        description: "Unique identifier for the run."
+      - name: issue
+        description: "Issue number the run belongs to."
+      - name: pr
+        description: "PR number opened or updated by the run, when any."
+      - name: model_id
+        description: "Normalized model identifier."
+      - name: complexity
+        description: "Complexity class of the work: simple, standard or complex."
+      - name: risk
+        description: "Risk class of the work: trivial, normal or high."
+      - name: work_type
+        description: "Type of work: code, docs, spec, review or data."
+      - name: cost_method
+        description: "How the actual cost was computed."
+      - name: outcome
+        description: "Outcome of the run."
+      - name: gate_passed
+        description: "Whether the run passed the pre-spin-down gate."
+      - name: started_at_utc
+        description: "Run start time in UTC."
+      - name: ended_at_utc
+        description: "Run end time in UTC."
+      - name: run_date
+        description: "Calendar date (UTC) of the run start."
+      - name: requests
+        description: "Number of model requests."
+      - name: tokens_in
+        description: "Input tokens, including cached."
+      - name: tokens_cached
+        description: "Cached input tokens."
+      - name: tokens_out
+        description: "Output tokens."
+      - name: tokens_reasoning
+        description: "Reasoning tokens."
+      - name: predicted_cost_usd
+        description: "Predicted cost of the run in USD."
+      - name: actual_cost_usd
+        description: "Actual cost of the run in USD."
+      - name: cost_variance_usd
+        description: "Actual minus predicted cost in USD."
+      - name: cost_variance_pct
+        description: "Cost variance as a percentage of predicted cost; null when predicted is zero."
+      - name: cache_hit_rate
+        description: "Fraction of input tokens served from cache."
+      - name: is_merged
+        description: "Whether the run's PR was merged; not yet collected."
+      - name: issue_run_seq
+        description: "Order of the run within its issue by start time."
+      - name: first_time_gate_pass
+        description: "True when this was the issue's first run and it passed the gate."
+      - name: duration_s
+        description: "Run duration in seconds."
+      - name: actions_minutes
+        description: "GitHub Actions minutes billed for the run."
+
+  - name: agg_spend_daily
+    description: "Spend, runs, tokens and Actions minutes by calendar day (UTC)."
+    data_tests:
+      - unique:
+          column_name: spend_date
+      - not_null:
+          column_name: spend_date
+    columns:
+      - name: spend_date
+        description: "Calendar date (UTC)."
+      - name: runs
+        description: "Number of runs that day."
+      - name: spend_usd
+        description: "Total actual cost in USD that day."
+      - name: tokens_in
+        description: "Total input tokens that day."
+      - name: tokens_cached
+        description: "Total cached input tokens that day."
+      - name: tokens_out
+        description: "Total output tokens that day."
+      - name: actions_minutes
+        description: "Total Actions minutes that day."
+
+  - name: agg_spend_by_issue
+    description: "Spend, cap headroom, forecast variance and last-run outcome per issue."
+    data_tests:
+      - unique:
+          column_name: issue
+      - not_null:
+          column_name: issue
+    columns:
+      - name: issue
+        description: "Issue number."
+      - name: runs
+        description: "Number of runs for the issue."
+      - name: spend_usd
+        description: "Total actual cost in USD for the issue."
+      - name: cap_headroom_usd
+        description: "Per-issue cap minus spend, i.e. remaining budget headroom in USD."
+      - name: predicted_usd
+        description: "Total predicted cost in USD for the issue."
+      - name: variance_usd
+        description: "Spend minus predicted cost in USD."
+      - name: last_outcome
+        description: "Outcome of the issue's most recent run."
+      - name: last_run_at_utc
+        description: "Start time of the issue's most recent run in UTC."
+
+  - name: agg_spend_by_model
+    description: "Runs, tokens, spend, cache hit rate and gate pass rate per model."
+    data_tests:
+      - unique:
+          column_name: model_id
+      - not_null:
+          column_name: model_id
+    columns:
+      - name: model_id
+        description: "Normalized model identifier."
+      - name: runs
+        description: "Number of runs for the model."
+      - name: tokens_in
+        description: "Total input tokens for the model."
+      - name: tokens_cached
+        description: "Total cached input tokens for the model."
+      - name: tokens_out
+        description: "Total output tokens for the model."
+      - name: spend_usd
+        description: "Total actual cost in USD for the model."
+      - name: cache_hit_rate
+        description: "Fraction of input tokens served from cache."
+      - name: gate_pass_rate
+        description: "Fraction of runs that passed the gate."
+
+  - name: fct_forecast_vs_actual
+    description: "Predicted vs actual cost and median tokens, per issue and per complexity tier, for measured runs only."
+    data_tests:
+      - not_null:
+          column_name: grain
+      - not_null:
+          column_name: grain_key
+    columns:
+      - name: grain
+        description: "Grouping level: 'issue' or 'complexity'."
+      - name: grain_key
+        description: "The issue number (as text) or complexity tier the row is about."
+      - name: runs
+        description: "Number of measured runs in the group."
+      - name: predicted_usd
+        description: "Total predicted cost in USD for the group."
+      - name: actual_usd
+        description: "Total actual cost in USD for the group."
+      - name: median_tokens_in
+        description: "Median input tokens per run in the group; the input for recalibrating token priors."
+      - name: median_tokens_cached
+        description: "Median cached input tokens per run in the group."
+      - name: median_tokens_out
+        description: "Median output tokens per run in the group."
+      - name: error_pct
+        description: "Forecast error as a percentage of predicted cost; null when predicted is zero."
+
+  - name: rpt_run_rate
+    description: "One-row month-to-date run-rate report: spend, projected month-end, budget and Actions minutes usage."
+    data_tests:
+      - not_null:
+          column_name: as_of_date
+    columns:
+      - name: as_of_date
+        description: "The date the report is pinned to."
+      - name: month_start
+        description: "First day of the report month."
+      - name: days_elapsed
+        description: "Calendar day of as_of_date within the month."
+      - name: days_in_month
+        description: "Number of days in the report month."
+      - name: mtd_variable_usd
+        description: "Month-to-date variable (DeepInfra) spend in USD."
+      - name: trailing_7d_usd_per_day
+        description: "Average variable spend per day over the trailing 7 days."
+      - name: trailing_30d_usd_per_day
+        description: "Average variable spend per day over the trailing 30 days."
+      - name: projected_month_end_variable_usd
+        description: "Projected variable spend at month end, from month-to-date run rate."
+      - name: fixed_costs_month_usd
+        description: "Fixed costs for the month (e.g. Cursor plan)."
+      - name: total_mtd_usd
+        description: "Month-to-date variable plus fixed cost in USD."
+      - name: projected_month_end_total_usd
+        description: "Projected month-end variable plus fixed cost in USD."
+      - name: deepinfra_budget_usd
+        description: "Monthly DeepInfra budget in USD."
+      - name: budget_used_pct
+        description: "Month-to-date variable spend as a percentage of the budget."
+      - name: actions_minutes_mtd
+        description: "Month-to-date GitHub Actions minutes used."
+      - name: actions_minutes_quota
+        description: "Monthly Actions minutes quota."
+      - name: actions_minutes_used_pct
+        description: "Month-to-date Actions minutes as a percentage of the quota."

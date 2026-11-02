@@ -46,3 +46,20 @@ seeds:
         runner: varchar
         outcome: varchar
         gate_passed: boolean
+
+flags:
+  send_anonymous_usage_stats: false
+  version_check: false
+
+models:
+  factory:
+    marts:
+      +materialized: table
+
+vars:
+  issue_cap_usd: 1.00
+  deepinfra_monthly_budget_usd: 10
+  fixed_costs_monthly_usd: 20
+  actions_minutes_month: 2000
+  warn_pct: 80
+  as_of_date: ""
