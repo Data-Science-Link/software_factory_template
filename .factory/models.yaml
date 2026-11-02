@@ -1,0 +1,163 @@
+# DeepInfra price table and routing rules for GitHub Actions factory runs.
+# Human-readable explanation: .factory/MODEL_ROUTING.md (Factory runs section).
+# Selection/check scripts land in issue #27; they read this file as the source of truth.
+
+price_table_version: "2026-11-02"
+checked_at: "2026-11-02"
+price_sources:
+  - model: deepseek-ai/DeepSeek-V4-Flash-0731
+    url: https://deepinfra.com/deepseek-ai/DeepSeek-V4-Flash-0731
+    checked_at: "2026-11-02"
+  - model: deepseek-ai/DeepSeek-V4-Pro-0813
+    url: https://deepinfra.com/deepseek-ai/DeepSeek-V4-Pro-0813
+    checked_at: "2026-11-02"
+  - model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
+    url: https://deepinfra.com/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
+    checked_at: "2026-11-02"
+
+models:
+  - id: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider: deepinfra
+    price_in_per_mtok: 0.06
+    price_cached_per_mtok: 0.015
+    price_out_per_mtok: 0.18
+    context: 1048576
+    thinking: configurable
+    status: default
+    notes: Standard tier; reasoning_effort low|high|max per DeepInfra docs.
+
+  - id: deepseek-ai/DeepSeek-V4-Pro-0813
+    provider: deepinfra
+    price_in_per_mtok: 1.30
+    price_cached_per_mtok: 0.10
+    price_out_per_mtok: 2.60
+    context: 1048576
+    thinking: configurable
+    status: escalation
+    notes: Standard tier; used for complex, high-risk, and spec runs.
+
+  - id: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
+    provider: deepinfra
+    price_in_per_mtok: 0.30
+    price_cached_per_mtok: 0.10
+    price_out_per_mtok: 1.00
+    context: 262144
+    thinking: "off"
+    status: fallback
+    notes: Non-thinking coder model; fallback when DeepSeek fails on tool calls.
+
+token_priors:
+  simple:
+    tokens_in: 300000
+    tokens_cached_fraction: 0.80
+    tokens_out: 20000
+  standard:
+    tokens_in: 1000000
+    tokens_cached_fraction: 0.80
+    tokens_out: 50000
+  complex:
+    tokens_in: 800000
+    tokens_cached_fraction: 0.70
+    tokens_out: 50000
+
+# Model selection: first match wins (vision §10 rules 1–5, 7, 3). Order matters.
+# `when`: every key at the same level must match (AND). Use `any:` for OR among alternatives.
+routing_rules:
+  - rule: 5
+    description: Tool-call or reasoning-format errors on DeepSeek → Qwen3-Coder; file an issue
+    when:
+      error_class: tool_or_reasoning_format
+      prior_model_family: deepseek-ai
+    model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
+    also: open_issue_for_model_failure
+
+  - rule: 4
+    description: One failed attempt on Flash for standard work → rerun once on Pro
+    when:
+      retry: true
+      complexity: standard
+      escalated_from: deepseek-ai/DeepSeek-V4-Flash-0731
+    model: deepseek-ai/DeepSeek-V4-Pro-0813
+
+  - rule: 7
+    description: Agent review uses a different model than the builder
+    when:
+      work_type: review
+    model: use_different_model_than_builder
+    notes: Grok Bot review on Cursor plan satisfies this for Actions workers.
+
+  - rule: 1
+    description: High risk or complex work → V4 Pro
+    when:
+      any:
+        - risk: high
+        - complexity: complex
+    model: deepseek-ai/DeepSeek-V4-Pro-0813
+
+  - rule: 2
+    description: "/oc spec run (complex specs only) → V4 Pro"
+    when:
+      work_type: spec
+    model: deepseek-ai/DeepSeek-V4-Pro-0813
+
+  - rule: 3
+    description: Default for all other factory worker runs → V4 Flash
+    when: {}
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    tier: standard
+
+# Guards (vision §10 rules 6 and 8): evaluated on every run after a model is selected.
+# Rule 6 uses predicted cost on the chosen model (not the selection list).
+checks:
+  - rule: 6
+    description: Predicted cost above issue cap → do not run; split the issue first
+    when:
+      predicted_cost_usd_gt: 1.00
+    action: do_not_run_split_issue
+
+  - rule: 8
+    description: Standard DeepInfra pricing tier only (no Priority 1.5× unless owner asks)
+    when:
+      tier_requested: priority
+    action: reject_unless_owner_approved
+
+# Worked examples for #27 routing script tests (selection → checks).
+routing_worked_examples:
+  - name: high_risk_predicted_over_cap_not_run
+    context:
+      risk: high
+      complexity: standard
+      predicted_cost_usd: 1.20
+    expect:
+      selected_model: deepseek-ai/DeepSeek-V4-Pro-0813
+      selected_via_rule: 1
+      check_actions: [do_not_run_split_issue]
+
+  - name: high_risk_pro_tool_error_goes_to_qwen
+    context:
+      risk: high
+      error_class: tool_or_reasoning_format
+      prior_model_family: deepseek-ai
+    expect:
+      selected_model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
+      selected_via_rule: 5
+      check_actions: []
+
+  - name: normal_standard_run_goes_to_flash
+    context:
+      risk: normal
+      complexity: standard
+      work_type: code
+      predicted_cost_usd: 0.033
+    expect:
+      selected_model: deepseek-ai/DeepSeek-V4-Flash-0731
+      selected_via_rule: 3
+      check_actions: []
+
+budget:
+  deepinfra_monthly_limit_usd: 10
+  issue_cap_usd: 1.00
+  issue_target_usd: 0.10
+  actions_minutes_month: 2000
+  actions_minutes_warn_pct: 80
+  actions_minute_shadow_usd: 0
