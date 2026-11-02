@@ -22,14 +22,24 @@ This directory on `main` holds **only this README** until real runs land; do not
 
 ## Validation
 
+Use a virtualenv (PEP 668–safe; do not rely on `pip install` into the system Python):
+
 ```bash
-python3 -m pip install -r requirements-factory.txt
-python3 scripts/factory-validate-run.py factory/runs/gha-....json
-python3 scripts/factory-validate-run.py path/to/issue-comment.md   # extracts ```json block
+python3 -m venv .venv
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements-factory.txt
+python scripts/factory-validate-run.py factory/runs/gha-....json
+python scripts/factory-validate-run.py path/to/issue-comment.md   # extracts ```json block
 bash scripts/test-run-records.sh
 ```
 
-The validator checks JSON Schema, `run_id` vs file name, token subset rules, UTC `...Z` timestamps, and recomputed cost when `cost_method` is `usage_x_price_table`.
+If `jsonschema` is missing, `test-run-records.sh` exits with the same instructions (no automatic install).
+
+The validator checks JSON Schema, `run_id` vs file name, token subset rules, UTC `...Z` timestamps, run-level cost when `cost_method` is `usage_x_price_table`, and per-step cost against each step's own model prices when `steps[]` is present.
+
+## Extensions beyond vision §8
+
+See [`.factory/schemas/README.md`](../../.factory/schemas/README.md): `provider_reported` on `cost_method` (#30) and optional `steps[]` with per-step prices (#41).
 
 ## Field reference
 
@@ -78,6 +88,6 @@ The validator checks JSON Schema, `run_id` vs file name, token subset rules, UTC
 | `gate` | object | Each of `gitleaks`, `run_record_valid`, `cost_recorded`, `pr_template`, `pr_check`, `budget_cap`, `no_workflow_changes`, `spec_present` → `pass` \| `fail` \| `skip` |
 | `gate_passed` | bool | All required gate checks passed |
 | `notes` | string | Free text; no secrets |
-| `steps` | array (optional) | Per-step costs for harness vs **review** jobs ([#41](https://github.com/Data-Science-Link/software_factory_template/issues/41)); each step has `step_kind` (`harness` \| `review`), model, tokens, and costs |
+| `steps` | array (optional, **extension**) | Per-step costs for harness vs **review** ([#41](https://github.com/Data-Science-Link/software_factory_template/issues/41)); each step has `step_kind`, `model`, its own `price_*_per_mtok`, tokens, and costs |
 
 Authoritative types and enums: [run-record.schema.json](../../.factory/schemas/run-record.schema.json).

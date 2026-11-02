@@ -57,17 +57,29 @@ def utc_timestamp_ok(value: str) -> bool:
     return True
 
 
-def cost_from_tokens(record: dict) -> float:
-    tin = record["tokens_in"]
-    cached = record["tokens_cached"]
-    tout = record["tokens_out"]
-    pin = record["price_in_per_mtok"]
-    pcached = record["price_cached_per_mtok"]
-    pout = record["price_out_per_mtok"]
+def cost_from_usage(
+    tokens_in: int,
+    tokens_cached: int,
+    tokens_out: int,
+    price_in_per_mtok: float,
+    price_cached_per_mtok: float,
+    price_out_per_mtok: float,
+) -> float:
     return (
-        (tin - cached) * pin / 1_000_000
-        + cached * pcached / 1_000_000
-        + tout * pout / 1_000_000
+        (tokens_in - tokens_cached) * price_in_per_mtok / 1_000_000
+        + tokens_cached * price_cached_per_mtok / 1_000_000
+        + tokens_out * price_out_per_mtok / 1_000_000
+    )
+
+
+def cost_from_tokens(record: dict) -> float:
+    return cost_from_usage(
+        record["tokens_in"],
+        record["tokens_cached"],
+        record["tokens_out"],
+        record["price_in_per_mtok"],
+        record["price_cached_per_mtok"],
+        record["price_out_per_mtok"],
     )
 
 
@@ -113,13 +125,20 @@ def validate_business_rules(record: dict, path: Path | None) -> list[str]:
         if step.get("tokens_reasoning", 0) > step.get("tokens_out", 0):
             errors.append(f"steps[{idx}]: tokens_reasoning must be <= tokens_out")
         if step.get("cost_method") == "usage_x_price_table":
-            merged = {**record, **step}
-            expected = cost_from_tokens(merged)
+            expected = cost_from_usage(
+                step["tokens_in"],
+                step["tokens_cached"],
+                step["tokens_out"],
+                step["price_in_per_mtok"],
+                step["price_cached_per_mtok"],
+                step["price_out_per_mtok"],
+            )
             actual = step.get("actual_cost_usd", 0)
             if abs(expected - actual) > COST_TOLERANCE_USD:
                 errors.append(
                     f"steps[{idx}]: actual_cost_usd must match step tokens × "
-                    f"record prices within ${COST_TOLERANCE_USD}"
+                    f"step prices within ${COST_TOLERANCE_USD} "
+                    f"(expected {expected:.6f}, got {actual})"
                 )
 
     return errors

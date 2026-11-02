@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Data-Science-Link/software_factory_template/.factory/schemas/run-record.schema.json",
   "title": "Factory agent run record",
+  "description": "Vision §8 field set, plus extensions documented in .factory/schemas/README.md: cost_method provider_reported (#30) and optional steps[] with per-step model prices (#41).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -158,7 +159,7 @@
     "notes": { "type": "string" },
     "steps": {
       "type": "array",
-      "description": "Optional per-step costs (e.g. harness vs independent review job).",
+      "description": "Extension (#41): optional per-step costs (harness vs review). Not in vision §8 table; see schemas/README.md.",
       "items": { "$ref": "#/$defs/run_step" }
     }
   },
@@ -170,6 +171,9 @@
       "required": [
         "step_kind",
         "model",
+        "price_in_per_mtok",
+        "price_cached_per_mtok",
+        "price_out_per_mtok",
         "requests",
         "tokens_in",
         "tokens_cached",
@@ -182,6 +186,9 @@
       "properties": {
         "step_kind": { "type": "string", "enum": ["harness", "review"] },
         "model": { "type": "string", "minLength": 1 },
+        "price_in_per_mtok": { "type": "number", "minimum": 0 },
+        "price_cached_per_mtok": { "type": "number", "minimum": 0 },
+        "price_out_per_mtok": { "type": "number", "minimum": 0 },
         "requests": { "type": "integer", "minimum": 0 },
         "tokens_in": { "type": "integer", "minimum": 0 },
         "tokens_cached": { "type": "integer", "minimum": 0 },
