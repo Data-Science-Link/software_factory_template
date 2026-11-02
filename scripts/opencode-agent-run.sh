@@ -110,7 +110,7 @@ bash scripts/opencode-capture-usage.sh "$usage_metrics" >/dev/null || true
   echo "## Git diff stat"
   git diff --cached --stat || true
   echo
-  cat "$usage_metrics" 2>/dev/null || echo "## Token usage (opencode stats)"$'\n'"$(echo '(not captured)')"
+  cat "$usage_metrics" 2>/dev/null || printf '%s\n\n%s\n' "## Token usage (opencode stats)" "(not captured)"
 } >"$OC_ARTIFACT_DIR/summary.md"
 
 # Rewrite the meta file from the value read before the model ran (publish reads it).
