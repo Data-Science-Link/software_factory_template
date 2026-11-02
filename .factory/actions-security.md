@@ -10,7 +10,7 @@ Threat model and controls for the `/oc` spike workflow (`opencode-spike.yml`). *
 | [GHSA-632h-h47v-g4x4](https://github.com/anomalyco/opencode/security/advisories/GHSA-632h-h47v-g4x4) — RCE via `opencode serve` `/global/upgrade` on npm installs | RCE on runner | **Never** run `opencode serve` or `opencode web`. Install pinned **GitHub release** tarball (≥ 1.18.33; spike pins 1.19.5), not npm `@latest`. |
 | MCP OAuth RCE (fixed 1.18.33, no advisory) | RCE on Windows/WSL | Ubuntu runners only; `"mcp": {}`; `opencode run --pure`; no MCP OAuth flow. |
 | Malicious npm skills (`opencode-skills-collection`, `agentic-awesome-skills`, Oct 2026) | Supply chain | No npm skill packages; `"skill": "deny"`; no `.opencode/plugins` in repo. |
-| Prompt injection via issue text | Unwanted edits / exfil | Scope from owner comment only; patch cannot touch `.github/`, dotfiles, or `scripts/protect-main.sh`; gitleaks + token-pattern scan on patch and logs. |
+| Prompt injection via issue text | Unwanted edits / exfil | Scope from owner comment only; patch cannot touch `.github/`, `opencode.json`, owner-only `.factory/` files, other dot-paths, or any existing script (new scripts only; `--list-rules` in `scripts/opencode-artifact-scan.sh`); gitleaks + token-pattern scan on patch and logs. |
 | Script injection in Actions | Runner compromise | Pass `github.event.comment.body` only through `env:`; never interpolate `${{ github.event.* }}` into `run:` scripts. |
 
 ## Controls (checklist)
