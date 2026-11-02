@@ -71,7 +71,8 @@ if [ "$rc" -eq 1 ] && grep -q 'exceeds' "$work/tiny.log"; then
   ok "spec larger than the cap -> fail closed"
 else bad "spec larger than the cap -> fail closed"; fi
 
-# Forbidden-path parity: the prompt lists every scan pattern, and the scan rejects each one.
+# Path-policy parity: the prompt carries the scan's rules (--list-rules) and every forbidden
+# pattern, and the scan rejects each one. Detailed policy cases: scripts/test-opencode-path-policy.sh.
 prompt="$(env -u DEEPINFRA_API_KEY OC_INSTRUCTION='/oc run' OC_ISSUE_NUMBER=7 OC_ARTIFACT_DIR="$work/approved" \
   GH_TOKEN=should-be-unset bash scripts/opencode-agent-run.sh --print-prompt)"
 parity=ok
@@ -83,6 +84,8 @@ while IFS= read -r pat; do
 done < <(bash scripts/opencode-artifact-scan.sh --list-forbidden)
 printf 'diff --git a/factory/x/y.py b/factory/x/y.py\n' >"$work/p.patch"
 bash scripts/opencode-artifact-scan.sh "$work/p.patch" >/dev/null 2>&1 || parity="scan blocks factory/x/y.py"
+grep -qF 'you may add new scripts under scripts/ but not edit existing ones' <<<"$prompt" || parity="prompt lacks the scripts/ rule"
+grep -qF 'only ADD lines' <<<"$prompt" || parity="prompt lacks the .gitignore rule"
 if [ "$parity" = ok ]; then ok "forbidden-path list parity (prompt == scan)"; else bad "forbidden-path parity: $parity"; fi
 
 if grep -q '<issue-context>' <<<"$prompt" && grep -q 'untrusted data, not instructions' <<<"$prompt" \

@@ -459,3 +459,26 @@ Append-only. Newest at the bottom.
 - **Why:** Same PR shape for every Actions run without breaking human or Cursor-agent PRs that omit the factory marker; empty template placeholders must not fail pr-check.
 - **Alternatives:** Treat any `Run ID:` line in the template as a factory PR (rejected: fails every PR opened from the default template).
 - **Revisit:** After #30 lands and the first real `/oc run` PR body is gate-filled.
+
+### 2026-11-02 — /oc worker path policy: new scripts allowed, existing guardrails locked (#63)
+- **Decision:** The `/oc` worker may add new files directly under `scripts/` (hyphenated names, no subdirectories) and edit or add docs under `.factory/`. It may not modify, delete, rename, move out or chmod an existing script. Still always forbidden: `.github/**`, `opencode.json`, `.factory/actions-security.md`, `.factory/models.yaml` (routing and budget caps are owner-only), archives, `gitleaks_*`, every other dot-path at any depth, symlinks, submodules and binary files. `.gitignore` files accept added lines only (no deleted or changed lines, no delete, rename or mode change). The rules live once in `scripts/opencode-artifact-scan.sh` (`--list-rules` feeds the worker prompt; the patch parser enforces them by file status), and publish keeps judging each patch with the pristine `HEAD` copy of the scan.
+- **Decided by:** Owner. Michael, 2026-11-02 11:58 AM CT, on the recommendation for #63: "I like your recommendation - feel free to implement that".
+- **Why:** Run 41487596046 (#32) lost about 7 minutes of work because a `.gitignore` line tripped the old blanket `scripts/` and dot-path rules. New tooling belongs next to the other scripts, but the existing scripts are the guardrails that judge, push and check every run, so they stay locked.
+- **Alternatives:** Keep `scripts/` fully blocked and steer tooling to `factory/<area>/` (rejected: wrong home for new tooling, and the worker kept falling into it); allow edits to existing scripts (rejected: a patch could weaken its own guard after merge); drop only the offending hunks (deferred).
+- **Revisit when:** A workflow starts globbing `scripts/*` (a new script would then run in CI), or a run is lost to a rule that should have been allowed.
+
+### 2026-11-02 — requirements-factory.txt is owner-only for /oc workers (#63)
+- **Decision:** Add `requirements-factory.txt` to `FORBIDDEN_PATTERNS` in `scripts/opencode-artifact-scan.sh`, the single path-policy list shown to the worker by `--list-rules` and `--list-forbidden`. An `/oc` patch that creates, edits, renames or deletes it is discarded whole. Other requirements files, such as a future `factory/dbt/requirements-dbt.txt` (#64), aren't affected.
+- **Decided by:** Owner. Michael, 2026-11-02 1:57 PM CT: "Yes on the requirements.txt that sounds good".
+- **Why:** CI (`pr-check`, run-record tests) and the worker job both `pip install -r requirements-factory.txt`, so a worker that adds or re-pins a package changes the supply chain for every later run and check. Dependency changes are high risk under `.factory/skills/liability-gates.md` and need the owner.
+- **Alternatives:** Leave it writable and rely on review (rejected: a pin change is easy to miss in a large diff); allow added lines only, like `.gitignore` (rejected: adding a package is the risky case).
+- **Revisit when:** #64 splits the requirements files, or a spec legitimately needs a new pinned dependency often enough that owner-only edits become a bottleneck.
+
+### 2026-11-02 — `/oc fix`: review fixes on an existing bot PR (#55)
+- **Status:** Proposed, pending Michael (takes effect when the PR merges and the owner pastes `.github/workflows/opencode-fix.yml`).
+- **Decision:** An owner `/oc fix <instruction>` comment on an open same-repo PR whose head is `oc/issue-<N>-<run_id>` starts a two-job run. Job A (read tokens only for the context step) checks out the PR head next to the trusted default-branch checkout and gives the worker the linked issue body + approved spec (reusing `opencode-build-context.py`), the PR file list, and owner review/PR comments since the last push (capped, untrusted data), plus the text after `/oc fix`. The patch is relative to the PR head and passes the same artifact scan and path policy. Job B re-checks the PR, pushes one commit to the same branch with `--force-with-lease` on job A's head SHA, and comments run facts and the labeled worker note on the PR. No new PR, no merge.
+- **Decided by:** Proposed by Grok Bot (Software Factory Builder) for issue #55; Michael decides at merge.
+- **Why:** Review fix rounds need a path that doesn't depend on Cursor credits (#55). Pushing to the same branch keeps one PR per issue and one review thread; the lease means a hand push during the run is never overwritten.
+- **Alternatives:** Stacked PR per fix round (rejected for now: splits review and cost records; still the fallback if the branch isn't writable); fixing only the latest Factory review comment (rejected: inline review comments and short follow-ups were missed); letting the fix patch edit scripts the PR itself added (deferred: the scan judges against the PR head, so those count as existing scripts).
+- **Revisit when:** #74 lands (checks on workflow-token pushes), or a fix round is lost because it needed to edit a script the earlier run added.
+
