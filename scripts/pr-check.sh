@@ -19,9 +19,12 @@
 #   4. Factory Actions run PR (see below): missing or empty required factory-run block fields.
 #
 # Factory Actions run PR (rule 4), detected deterministically when either:
-#   - the raw body contains the HTML marker `<!-- factory-run:start -->` (added by factory-run-end.sh when
-#     filling the block — the empty PR template does not include this marker), or
+#   - the factory-run start HTML marker (added by factory-run-end.sh when filling the block; the empty
+#     PR template does not include it) sits alone on its own line. A mention in prose or a code span
+#     does not count; or
 #   - the AI disclosure line names harness opencode-actions (vision §7 standard PR).
+# HTML comments are stripped before rules 1-4 read the body, so unfilled template placeholders
+# (e.g. "AI disclosure: harness <!-- ... -->", "Cost: <!-- ... -->") never satisfy a rule.
 # Human PRs, Cursor cloud agent PRs without those markers, and legacy agent PRs do not trigger rule 4.
 # When triggered, the body must include non-empty: Run ID, Tokens in / cached / out, Predicted cost ($),
 # Actual cost ($), Gate, and a spec path `factory/specs/issue-<N>.md` (matches run record fields run_id,
@@ -38,14 +41,16 @@ files="${PR_FILES:-}"
 author="${PR_AUTHOR:-}"
 branch="${PR_BRANCH:-}"
 
-# Plain lines: drop **bold** markers and leading list or quote marks.
-plain="$(printf '%s\n' "$body" | tr -d '\r' | sed -E 's/\*\*//g; s/^[[:space:]]*([-*>][[:space:]]+)*//')"
+# Plain lines: drop HTML comments (template placeholders, even multi-line), **bold** markers,
+# and leading list or quote marks.
+plain="$(printf '%s\n' "$body" | tr -d '\r' | perl -0pe 's/<!--.*?-->//gs' | sed -E 's/\*\*//g; s/^[[:space:]]*([-*>][[:space:]]+)*//')"
 
 errors=0
 fail() { echo "FAIL: $1"; [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=PR check::$1"; errors=$((errors + 1)); }
 warn() { echo "WARN: $1"; [ -n "${GITHUB_ACTIONS:-}" ] && echo "::warning title=PR check::$1"; return 0; }
 has()  { grep -qiE "$1" <<<"$plain"; }
-has_raw() { grep -qF "$1" <<<"$body"; }
+# Exact line match on the raw body (comments kept), ignoring CR and surrounding whitespace.
+has_line() { tr -d '\r' <<<"$body" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -qxF "$1"; }
 
 # 1. Issue link
 if ! has '(^|[^[:alnum:]])(closes|refs) #[0-9]+'; then
@@ -71,7 +76,7 @@ fi
 
 # 4. Factory Actions run block (opencode-actions harness or factory-run HTML markers)
 factory_run=no
-if has_raw '<!-- factory-run:start -->' || has '^AI disclosure:.*harness[[:space:]]+opencode-actions'; then
+if has_line '<!-- factory-run:start -->' || has '^AI disclosure:.*harness[[:space:]]+opencode-actions'; then
   factory_run=yes
 fi
 if [ "$factory_run" = yes ]; then

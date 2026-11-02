@@ -54,7 +54,7 @@ Cost: <!-- $ amount on DeepInfra, or "not measured" for non-DeepInfra harnesses 
 ## Factory run
 
 <!-- The block below is filled by scripts/factory-run-end.sh only — never by hand or by the model.
-     That script wraps the filled lines with <!-- factory-run:start --> and <!-- factory-run:end -->. -->
+     That script wraps the filled lines in the factory-run start/end HTML marker lines. -->
 
 Run ID:
 Workflow run:
