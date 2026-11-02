@@ -19,12 +19,21 @@ jobs:
     permissions:
       contents: read
     continue-on-error: true
+    env:
+      OSV_VERSION: "2.7.0"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: OSV-Scanner
-        uses: google/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
-        with:
-          scan-args: |-
-            --recursive
-            ./
+      - name: Install OSV-Scanner (pinned)
+        run: |
+          set -euo pipefail
+          file="osv-scanner_linux_amd64"
+          curl -sSfL -o "$file" "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/${file}"
+          curl -sSfL -o SHA256SUMS "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_SHA256SUMS"
+          grep " ${file}$" SHA256SUMS | sha256sum -c -
+          chmod +x "$file"
+          sudo mv "$file" /usr/local/bin/osv-scanner
+          osv-scanner --version
+
+      - name: Scan repository
+        run: osv-scanner scan --recursive ./
