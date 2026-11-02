@@ -59,6 +59,16 @@ if [ -f "$usage_metrics" ]; then
   fi
 fi
 
+# Spec comment used by job A (scripts/opencode-build-context.py). Digits only; URL built here.
+spec_id="$(sed -n 's/^spec_comment_id=//p' "$OC_ARTIFACT_DIR/context-meta.txt" 2>/dev/null | head -n 1 || true)"
+case "$spec_id" in
+  '' ) spec_line="Spec: not fetched (no issue context step in this run)"; spec_gate="N/A (no context step)" ;;
+  none ) spec_line="Spec: no approved spec comment found; worker used the issue body and the /oc instruction only"; spec_gate="no approved spec found" ;;
+  *[!0-9]* ) echo "publish: invalid spec_comment_id in context-meta.txt" >&2; exit 1 ;;
+  * ) spec_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/issues/${OC_ISSUE_NUMBER}#issuecomment-${spec_id}"
+      spec_line="Spec: approved owner spec comment ${spec_id} (${spec_url}), validated by factory-spec-check.py"; spec_gate="approved spec comment ${spec_id}" ;;
+esac
+
 cat >"$body_file" <<EOF
 ## Summary
 
@@ -66,6 +76,10 @@ OpenCode (DeepInfra \`deepseek-ai/DeepSeek-V4-Flash-0731\`) applied the owner \`
 
 Closes #${OC_ISSUE_NUMBER}
 Refs #38
+
+## Spec
+
+${spec_line}
 
 ## Success metric from the original ask
 
@@ -79,7 +93,7 @@ Only the files in this PR diff. No workflow or secret changes.
 
 - [x] **1. Intake** — Triggered by owner \`/oc\` on issue #${OC_ISSUE_NUMBER}
 - [x] **2. Triage** — spike run; **high** risk (Actions + secret on agent job)
-- [x] **3. Spec gate** — N/A (spike)
+- [x] **3. Spec gate** — ${spec_gate}
 - [x] **4. Build** — OpenCode agent job + publish job
 - [ ] **5. Review** — Grok Bot / Michael
 - [ ] **6. Verify** — Michael checks run logs and this PR for leaks

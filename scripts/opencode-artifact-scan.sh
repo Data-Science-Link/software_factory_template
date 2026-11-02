@@ -26,19 +26,25 @@ scan_one() {
   fi
 }
 
+# Single source of truth for forbidden patch paths (bash glob; `*` also matches `/`).
+# opencode-agent-run.sh prints this list into the worker prompt via --list-forbidden.
+FORBIDDEN_PATTERNS=(
+  '.github' '.github/*'
+  'scripts' 'scripts/*'
+  'opencode.json'
+  '.factory/actions-security.md'
+  '*.tar.gz' '*.tgz' '*.zip' '*.tar' '*.deb' '*.rpm'
+  'gitleaks_*'
+  '.*'
+)
+
 path_is_forbidden() {
-  local p="$1"
-  case "$p" in
-    /dev/null) return 1 ;;
-    .github/*|.github) return 0 ;;
-    scripts/*|scripts) return 0 ;;
-    scripts/protect-main.sh) return 0 ;;
-    opencode.json) return 0 ;;
-    .factory/actions-security.md) return 0 ;;
-    *.tar.gz|*.tgz|*.zip|*.tar|*.deb|*.rpm) return 0 ;;
-    gitleaks_*) return 0 ;;
-    .*) return 0 ;;
-  esac
+  local p="$1" pat
+  [ "$p" = /dev/null ] && return 1
+  for pat in "${FORBIDDEN_PATTERNS[@]}"; do
+    # shellcheck disable=SC2254 # unquoted on purpose: pattern match
+    case "$p" in $pat) return 0 ;; esac
+  done
   return 1
 }
 
@@ -74,6 +80,11 @@ forbidden_paths() {
     esac
   done <"$patch"
 }
+
+if [ "${1:-}" = "--list-forbidden" ]; then
+  printf '%s\n' "${FORBIDDEN_PATTERNS[@]}"
+  exit 0
+fi
 
 if [ "$#" -lt 1 ]; then
   echo "usage: opencode-artifact-scan.sh <files...>" >&2
