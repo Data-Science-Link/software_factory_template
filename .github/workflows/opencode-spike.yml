@@ -91,7 +91,6 @@ jobs:
           name: oc-artifacts-${{ github.run_id }}
           path: ${{ env.OC_ARTIFACT_DIR }}
 
-      # GH_TOKEN only for push/pr create (after pristine scan + apply). Checkout stays credentialless.
       - name: Open pull request from patch
         env:
           GH_TOKEN: ${{ github.token }}
