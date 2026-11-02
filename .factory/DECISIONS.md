@@ -473,3 +473,12 @@ Append-only. Newest at the bottom.
 - **Why:** CI (`pr-check`, run-record tests) and the worker job both `pip install -r requirements-factory.txt`, so a worker that adds or re-pins a package changes the supply chain for every later run and check. Dependency changes are high risk under `.factory/skills/liability-gates.md` and need the owner.
 - **Alternatives:** Leave it writable and rely on review (rejected: a pin change is easy to miss in a large diff); allow added lines only, like `.gitignore` (rejected: adding a package is the risky case).
 - **Revisit when:** #64 splits the requirements files, or a spec legitimately needs a new pinned dependency often enough that owner-only edits become a bottleneck.
+
+### 2026-11-02 — `/oc fix`: review fixes on an existing bot PR (#55)
+- **Status:** Proposed, pending Michael (takes effect when the PR merges and the owner pastes `.github/workflows/opencode-fix.yml`).
+- **Decision:** An owner `/oc fix <instruction>` comment on an open same-repo PR whose head is `oc/issue-<N>-<run_id>` starts a two-job run. Job A (read tokens only for the context step) checks out the PR head next to the trusted default-branch checkout and gives the worker the linked issue body + approved spec (reusing `opencode-build-context.py`), the PR file list, and owner review/PR comments since the last push (capped, untrusted data), plus the text after `/oc fix`. The patch is relative to the PR head and passes the same artifact scan and path policy. Job B re-checks the PR, pushes one commit to the same branch with `--force-with-lease` on job A's head SHA, and comments run facts and the labeled worker note on the PR. No new PR, no merge.
+- **Decided by:** Proposed by Grok Bot (Software Factory Builder) for issue #55; Michael decides at merge.
+- **Why:** Review fix rounds need a path that doesn't depend on Cursor credits (#55). Pushing to the same branch keeps one PR per issue and one review thread; the lease means a hand push during the run is never overwritten.
+- **Alternatives:** Stacked PR per fix round (rejected for now: splits review and cost records; still the fallback if the branch isn't writable); fixing only the latest Factory review comment (rejected: inline review comments and short follow-ups were missed); letting the fix patch edit scripts the PR itself added (deferred: the scan judges against the PR head, so those count as existing scripts).
+- **Revisit when:** #74 lands (checks on workflow-token pushes), or a fix round is lost because it needed to edit a script the earlier run added.
+

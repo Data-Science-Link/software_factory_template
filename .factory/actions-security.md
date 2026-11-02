@@ -26,6 +26,18 @@ Threat model and controls for the `/oc` spike workflow (`opencode-spike.yml`). *
 9. **No merge** step; no push to `main`; concurrency per issue; job timeout.
 10. **Bot-opened PRs + `main` ruleset:** PRs from `github-actions[bot]` (publish job) are first-time contributors from GitHub’s workflow perspective. On the protected `main` branch (`pr-check` + gitleaks required, strict), open the PR → **Approve workflows to run** (or org/repo **Actions → General → Fork pull request workflows** / workflow approval settings as configured) so `pr-check` and gitleaks execute on the harness PR before merge.
 
+## `/oc fix` on an existing PR (issue #55)
+
+Proposed workflow `.github/workflows/opencode-fix.yml` (owner pastes it; workers can't edit `.github/`). Same two-job split and controls as above, plus:
+
+1. **Trigger:** `issue_comment` on a **pull request**, `startsWith('/oc fix')`, same login + `OWNER` check. `opencode-spike.yml` ignores PR comments, so the two never both fire.
+2. **PR guard** (`scripts/opencode-build-fix-context.py --check-pr`, run in both jobs): PR open, head repo = base repo and not a fork, head branch exactly `oc/issue-<N>-<run_id>`, base = default branch, head SHA well-formed. Job B passes the SHA job A used and refuses if it moved.
+3. **Trusted code:** both jobs run scripts and `opencode.json` from the default-branch checkout; the PR head is a second checkout in `pr/` and none of its scripts run. Job A refuses if the PR head has a different `opencode.json` or a `.opencode/` dir (project config overrides the trusted one), or if the worker changed `.git/config` (a planted filter or hook would run on `git add`).
+4. **Context:** only comments and reviews by the repo owner login with `author_association: OWNER`, posted after the head commit, each capped and the whole section capped, inside the untrusted-data block. Bot, collaborator and look-alike logins are dropped.
+5. **Push:** `scripts/opencode-git-push-lease.sh` pushes `HEAD:refs/heads/<branch>` only, with `--force-with-lease=refs/heads/<branch>:<job A SHA>`, and only when HEAD is exactly one commit on that SHA. No plain force, no other ref, credentials via `gh auth git-credential` without writing git config.
+6. **PR comment:** built from script facts (`opencode-run-facts.sh`, usage metrics); the worker note is capped, put in a text block with fences, `@` mentions and HTML comments defanged, and scanned with the rest of the body before posting.
+7. **Checks:** pushes with `GITHUB_TOKEN` don't trigger `pull_request` workflows (#74). Close and reopen the PR before merge so pr-check and gitleaks run on the new head.
+
 ## If a secret leaks
 
 1. **Rotate immediately:** DeepInfra → delete compromised Actions key → create new key (`sft-actions`) → update repo secret `DEEPINFRA_API_KEY`.
