@@ -58,6 +58,9 @@ git add -A -- . \
   ":(exclude)gitleaks_*"
 git diff --cached --binary >"$OC_ARTIFACT_DIR/changes.patch" || true
 
+usage_metrics="$OC_ARTIFACT_DIR/usage-metrics.md"
+bash scripts/opencode-capture-usage.sh "$usage_metrics" >/dev/null || true
+
 {
   echo "# OpenCode agent summary"
   echo
@@ -67,13 +70,13 @@ git diff --cached --binary >"$OC_ARTIFACT_DIR/changes.patch" || true
   echo "## Git diff stat"
   git diff --cached --stat || true
   echo
-  echo "## Token usage (opencode stats)"
-  opencode stats --models 2>/dev/null || echo "(stats unavailable)"
+  cat "$usage_metrics" 2>/dev/null || echo "## Token usage (opencode stats)"$'\n'"$(echo '(not captured)')"
 } >"$OC_ARTIFACT_DIR/summary.md"
 
 bash scripts/opencode-artifact-scan.sh \
   "$OC_ARTIFACT_DIR/changes.patch" \
   "$OC_ARTIFACT_DIR/summary.md" \
+  "$OC_ARTIFACT_DIR/usage-metrics.md" \
   "$OC_ARTIFACT_DIR/opencode.log"
 
 if [ ! -s "$OC_ARTIFACT_DIR/changes.patch" ]; then
