@@ -4,6 +4,7 @@ name: opencode-spike
 
 on:
   issue_comment:
+    # zizmor: ignore[dangerous-triggers] owner-only /oc; controls in .factory/actions-security.md
     types: [created]
 
 permissions: {}
