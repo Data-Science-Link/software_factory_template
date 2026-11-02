@@ -29,7 +29,9 @@ For every **selected** issue ready to work, the Factory Manager writes a **spec*
 ## Triage (manager, before spec)
 
 - **High-risk** (license, secrets, auth, crypto, safety, workflows): always standard/complex spec + human spec approval and merge gate.
-- Post a one-line triage note on the issue when classifying: `Complexity: …; Risk: …; Model: …`. For Cursor backup/epic runs, pick the model from `.factory/MODEL_ROUTING.md`, pin every launch (never Auto), and copy the triage line into the PR body.
+- Assign a **risk class** on the PR: `trivial` | `normal` | `high` (see merge authority).
+- **Rate complexity, then pick the model** (required before any launch). Post a one-line triage note on the issue: `Complexity: simple | standard | complex — <reason>; Risk: trivial | normal | high; Model: <pinned model + effort>`. Complexity picks the model; risk class alone decides the merge gate. Never use risk words (trivial/normal/high) for complexity. Judge by what the change touches, not its size (workflows, algorithms, data stores, spend paths, security, multi-file logic are **complex**). Then pick the model from the full `.factory/MODEL_ROUTING.md` table — its writing, review, escalation and stuck rows included — not a two-model shortcut. Pin the model on every cloud-agent launch, including restarts and reviews (never Auto, never Fast). An unpinned or mismatched launch is stopped and relaunched pinned. Copy the triage line into the PR body.
+- Triage scopes each issue to hit the budget target and splits any issue likely to cost more than $1 into smaller issues.
 
 ## Build
 
