@@ -49,8 +49,13 @@ if ! opencode run --pure --format default \
   echo "agent-run: opencode run exited non-zero; see opencode.log in artifacts" >&2
 fi
 
-# Include new (untracked) files in the patch.
-git add -A
+# Include new (untracked) files in the patch, but never CI install litter or archives.
+rm -f gitleaks_*.tar.gz opencode-linux-*.tar.gz 2>/dev/null || true
+git add -A -- . \
+  ":(exclude)*.tar.gz" \
+  ":(exclude)*.tgz" \
+  ":(exclude)*.zip" \
+  ":(exclude)gitleaks_*"
 git diff --cached --binary >"$OC_ARTIFACT_DIR/changes.patch" || true
 
 {

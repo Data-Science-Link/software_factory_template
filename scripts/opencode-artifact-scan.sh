@@ -35,6 +35,8 @@ path_is_forbidden() {
     scripts/protect-main.sh) return 0 ;;
     opencode.json) return 0 ;;
     .factory/actions-security.md) return 0 ;;
+    *.tar.gz|*.tgz|*.zip|*.tar|*.deb|*.rpm) return 0 ;;
+    gitleaks_*) return 0 ;;
     .*) return 0 ;;
   esac
   return 1
@@ -43,6 +45,9 @@ path_is_forbidden() {
 forbidden_paths() {
   local patch="$1"
   [ -f "$patch" ] || return 0
+  if grep -q '^GIT binary patch' "$patch" 2>/dev/null; then
+    fail "patch contains a GIT binary patch (forbidden)"
+  fi
   local line p
   while IFS= read -r line; do
     case "$line" in
