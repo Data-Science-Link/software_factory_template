@@ -223,3 +223,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+gitleaks_8.30.1_linux_x64.tar.gz
