@@ -10,11 +10,26 @@ set -euo pipefail
 patch="$OC_ARTIFACT_DIR/changes.patch"
 summary="$OC_ARTIFACT_DIR/summary.md"
 
-bash scripts/opencode-artifact-scan.sh "$patch" "$summary"
+# Pristine copies from base ref — never run repo scripts that the patch might replace.
+PRISTINE_DIR="$(mktemp -d)"
+trap 'rm -rf "$PRISTINE_DIR"' EXIT
+git show HEAD:scripts/opencode-artifact-scan.sh >"$PRISTINE_DIR/opencode-artifact-scan.sh"
+git show HEAD:scripts/pr-check.sh >"$PRISTINE_DIR/pr-check.sh"
+chmod +x "$PRISTINE_DIR/opencode-artifact-scan.sh" "$PRISTINE_DIR/pr-check.sh"
+
+bash "$PRISTINE_DIR/opencode-artifact-scan.sh" "$patch" "$summary"
 
 if [ ! -s "$patch" ]; then
   echo "publish: empty patch" >&2
   exit 1
+fi
+
+# Derive changed paths from the patch before applying anything.
+git apply --stat "$patch" >"$OC_ARTIFACT_DIR/patch-stat.txt" 2>/dev/null || true
+grep -E '^ [^|]+ \|' "$OC_ARTIFACT_DIR/patch-stat.txt" 2>/dev/null | awk '{print $1}' >"$OC_ARTIFACT_DIR/pr-files.txt" || true
+if [ ! -s "$OC_ARTIFACT_DIR/pr-files.txt" ]; then
+  # Fallback: parse diff headers
+  grep -E '^(\+\+\+ b/|--- b/|diff --git a/.+ b/)' "$patch" | sed -E 's/^\+\+\+ b\///; s/^--- b\///; s/^diff --git a\/[^ ]+ b\///' | sort -u | grep -v '^$' >"$OC_ARTIFACT_DIR/pr-files.txt" || true
 fi
 
 branch="oc/issue-${OC_ISSUE_NUMBER}-${OC_RUN_ID}"
@@ -95,10 +110,10 @@ Michael: review diff and Actions logs before merge. Rotate \`DEEPINFRA_API_KEY\`
 EOF
 
 git diff --name-only HEAD~1..HEAD >"$OC_ARTIFACT_DIR/pr-files.txt"
-if ! bash scripts/pr-check.sh "$body_file" "$OC_ARTIFACT_DIR/pr-files.txt"; then
+if ! bash "$PRISTINE_DIR/pr-check.sh" "$body_file" "$OC_ARTIFACT_DIR/pr-files.txt"; then
   echo "publish: pr-check failed on generated body" >&2
   exit 1
-}
+fi
 
 git push -u origin "$branch"
 

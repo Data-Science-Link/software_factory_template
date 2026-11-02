@@ -8,10 +8,6 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: factory-issue-${{ github.event.issue.number }}
-  cancel-in-progress: true
-
 jobs:
   agent:
     if: >-
@@ -22,7 +18,10 @@ jobs:
       github.event.comment.author_association == 'OWNER' &&
       github.event.issue.pull_request == null
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    concurrency:
+      group: oc-agent-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
     permissions:
       contents: read
     env:
@@ -56,11 +55,16 @@ jobs:
         run: bash scripts/opencode-agent-run.sh
 
       - name: Upload agent artifacts
+        if: success()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: oc-artifacts-${{ github.run_id }}
           path: ${{ env.OC_ARTIFACT_DIR }}/
           if-no-files-found: error
+
+      - name: Usage report (always)
+        if: always()
+        run: bash scripts/opencode-usage-report.sh
 
   publish:
     needs: agent
@@ -76,6 +80,8 @@ jobs:
       OC_ARTIFACT_DIR: /tmp/oc-artifacts
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install gitleaks
         run: bash scripts/install-gitleaks-ci.sh

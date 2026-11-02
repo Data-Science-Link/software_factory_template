@@ -26,19 +26,48 @@ scan_one() {
   fi
 }
 
+path_is_forbidden() {
+  local p="$1"
+  case "$p" in
+    /dev/null) return 1 ;;
+    .github/*|.github) return 0 ;;
+    scripts/*|scripts) return 0 ;;
+    scripts/protect-main.sh) return 0 ;;
+    opencode.json) return 0 ;;
+    .factory/actions-security.md) return 0 ;;
+    .*) return 0 ;;
+  esac
+  return 1
+}
+
 forbidden_paths() {
   local patch="$1"
   [ -f "$patch" ] || return 0
-  local paths
-  paths="$(grep -E '^(\+\+\+|---) [ab]/' "$patch" 2>/dev/null | sed -E 's/^(\+\+\+|---) [ab]\///' | sort -u || true)"
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    case "$p" in
-      .github/*|.github) fail "patch touches forbidden path: $p" ;;
-      scripts/protect-main.sh) fail "patch touches forbidden path: $p" ;;
-      .*) fail "patch touches dotfile: $p" ;;
+  local line p
+  while IFS= read -r line; do
+    case "$line" in
+      "+++ b/"*)
+        p="${line#+++ b/}"
+        if path_is_forbidden "$p"; then fail "patch touches forbidden path: $p"; fi
+        ;;
+      "--- b/"*)
+        p="${line#--- b/}"
+        if path_is_forbidden "$p"; then fail "patch touches forbidden path: $p"; fi
+        ;;
+      diff\ --git\ a/*\ b/*)
+        p="${line##* b/}"
+        if path_is_forbidden "$p"; then fail "patch touches forbidden path: $p"; fi
+        ;;
+      rename\ from\ *)
+        p="${line#rename from }"
+        if path_is_forbidden "$p"; then fail "patch renames forbidden path: $p"; fi
+        ;;
+      rename\ to\ *)
+        p="${line#rename to }"
+        if path_is_forbidden "$p"; then fail "patch renames forbidden path: $p"; fi
+        ;;
     esac
-  done <<<"$paths"
+  done <"$patch"
 }
 
 if [ "$#" -lt 1 ]; then

@@ -32,7 +32,7 @@ Read .factory/FACTORY.md and the GitHub issue #${OC_ISSUE_NUMBER} context from t
 Make the smallest correct change that satisfies the instruction. Stay inside issue scope.
 
 Never read, print, or exfiltrate environment variables or API keys.
-Do not modify anything under .github/, dotfiles, or scripts/protect-main.sh.
+Do not modify anything under .github/, scripts/, dotfiles, opencode.json, or scripts/protect-main.sh.
 Do not run git push, gh, curl, wget, env, or printenv.
 
 Owner instruction (from /oc comment):
@@ -49,7 +49,9 @@ if ! opencode run --pure --format default \
   echo "agent-run: opencode run exited non-zero; see opencode.log in artifacts" >&2
 fi
 
-git diff >"$OC_ARTIFACT_DIR/changes.patch" || true
+# Include new (untracked) files in the patch.
+git add -A
+git diff --cached --binary >"$OC_ARTIFACT_DIR/changes.patch" || true
 
 {
   echo "# OpenCode agent summary"
@@ -58,7 +60,7 @@ git diff >"$OC_ARTIFACT_DIR/changes.patch" || true
   echo "- Instruction: ${instruction}"
   echo
   echo "## Git diff stat"
-  git diff --stat || true
+  git diff --cached --stat || true
   echo
   echo "## Token usage (opencode stats)"
   opencode stats --models 2>/dev/null || echo "(stats unavailable)"

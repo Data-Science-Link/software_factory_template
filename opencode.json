@@ -28,6 +28,9 @@
     "edit": {
       "*": "allow",
       ".github/**": "deny",
+      "scripts/**": "deny",
+      "opencode.json": "deny",
+      ".factory/actions-security.md": "deny",
       "scripts/protect-main.sh": "deny"
     }
   },
