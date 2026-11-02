@@ -355,3 +355,59 @@ Append-only. Newest at the bottom.
 - **Why:** On #16 the key name wasn't in the agent's environment, so the start failed. The agent kept going, read `~/.zshrc` (which holds the API key) to find the name, and posted the start marker after the work, so the reported cost covered only PR creation.
 - **Alternatives:** Keep the key name required (the same failure again); have the agent find the name itself (the agent ends up reading secrets); accept a late marker with a warning (reports a wrong cost).
 - **Revisit:** If the owner adds a second DeepInfra key, or if `/payment/key-limits` changes shape.
+
+## 2026-11-02 — Cloud factory: run records in the PR plus an issue copy
+- **Status:** Accepted.
+- **Decision:** Each Actions run's record is committed in its PR as `factory/runs/<run_id>.json`, and a copy is posted on the issue (`<!-- factory-run-record -->`, trusted only from `github-actions[bot]`), so failed, rejected and closed runs still count. No separate data branch. (`.factory/VISION.md` §18, decision 1.)
+- **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat), accepting the recommended picks in vision §18.
+- **Why:** Every dollar has to reach the dataset, including spend on abandoned work, without a second branch to manage.
+- **Alternatives:** A `factory-data` branch the workflow writes to directly.
+- **Revisit:** If PR conflicts on `factory/runs/` become common.
+
+## 2026-11-02 — Cloud factory: financials dashboard is generated markdown, refreshed weekly and on demand
+- **Status:** Accepted.
+- **Decision:** The dashboard is a generated markdown page, `factory/financials/README.md` (Mermaid charts allowed), not GitHub Pages. A workflow refreshes it weekly at an odd minute and on demand, and opens a trivial-risk refresh PR. (Vision §18, decisions 2 and 8.)
+- **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat).
+- **Why:** It works on a private GitHub Free repo (Pages there needs a paid plan) and reads well on GitHub mobile. Keeping it out of run PRs avoids conflicts between parallel PRs.
+- **Alternatives:** GitHub Pages; regenerating the page inside every run PR.
+- **Revisit:** If the repo moves to a paid plan or goes public.
+
+## 2026-11-02 — Cloud factory: runs use the default GITHUB_TOKEN with in-job checks
+- **Status:** Accepted.
+- **Decision:** Actions runs use the default `GITHUB_TOKEN`. Because its PRs and pushes don't trigger other workflows, the run job runs `scripts/pr-check.sh` and gitleaks itself and sets a `factory-gate` commit status. No OpenCode GitHub App and no extra token. (Vision §18, decision 3.)
+- **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat).
+- **Why:** No third-party app with write access and no extra secret to manage. The in-job gate is the check of record anyway.
+- **Alternatives:** OpenCode GitHub App (OIDC); a fine-grained token stored as an Actions secret.
+- **Revisit:** If in-job checks drift from `pr-check.yml` / `secret-scan.yml`.
+
+## 2026-11-02 — Cloud factory: Actions-only DeepInfra key, $10/month limit (refines the 2026-10-31 single-key entry for Actions)
+- **Status:** Accepted.
+- **Decision:** GitHub Actions runs use a new DeepInfra key of their own, stored only as the `DEEPINFRA_API_KEY` Actions secret, with a DeepInfra spending limit of $10/month to start. The single factory key from 2026-10-31 stays for local runs only. (Vision §18, decisions 4 and 5.)
+- **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat).
+- **Why:** Separates Actions spend from local spend, limits the blast radius if the key leaks from a runner, and gives the key-spend cross-check a cleaner number. $10 covers about 100 issues at the $0.10 target.
+- **Alternatives:** Reuse the single factory key; a different starting limit.
+- **Revisit:** When monthly spend nears $8 (80%), or after the first full month.
+
+## 2026-11-02 — Cloud factory: Grok Bot writes specs; specs live as issue comments
+- **Status:** Accepted.
+- **Decision:** Grok Bot writes specs on its Cursor plan. A complex spec may instead be drafted by an `/oc spec` run on `deepseek-ai/DeepSeek-V4-Pro-0813`, logged like any run. The approved spec lives as a spec comment on the issue (`<!-- factory-spec v1 -->`), and the run commits it into its PR as `factory/specs/issue-<N>.md`. No separate spec PR. (Vision §18, decisions 6 and 7.)
+- **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat).
+- **Why:** No DeepInfra spend for most specs, no extra PR before each run, and specs reach `main` with the work they describe.
+- **Alternatives:** Every complex spec on V4 Pro; a spec PR merged to `main` before the run.
+- **Revisit:** If Grok Bot's specs for complex work need more than one revision on average.
+
+## 2026-11-02 — Cloud factory: keep the trivial-risk merge rule
+- **Status:** Accepted.
+- **Decision:** Grok Bot may still merge trivial-risk PRs after green checks and, for Actions runs, a passing gate. Normal and high risk still need Michael's approval. Workers never merge. (Vision §18, decision 9; no change to the 2026-10-07 and 2026-10-12 entries.)
+- **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat).
+- **Why:** Simple work ships without waiting on Michael; product judgment stays with him.
+- **Alternatives:** Michael approves every PR.
+- **Revisit:** If a trivial merge ever changes behavior.
+
+## 2026-11-02 — Cloud factory: fallback harness is the Claude Code Action on DeepInfra
+- **Status:** Accepted.
+- **Decision:** If the OpenCode + DeepInfra + Actions spike (#22) fails, switch to the Claude Code Action with `ANTHROPIC_BASE_URL=https://api.deepinfra.com/anthropic`. No custom harness. (Vision §18, decision 10.)
+- **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat).
+- **Why:** A maintained action on the same provider keeps the rest of the design (specs, run records, gate) unchanged.
+- **Alternatives:** A thin custom harness script.
+- **Revisit:** If both actions fail with DeepInfra models.
