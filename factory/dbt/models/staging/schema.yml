@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: stg_agent_runs
+    description: "Deduplicated agent runs from the agent_runs seed, with normalized model and UTC timestamps."
+    data_tests:
+      - unique:
+          column_name: run_id
+      - not_null:
+          column_name: run_id
+      - accepted_values:
+          column_name: complexity
+          arguments:
+            values: ['simple', 'standard', 'complex']
+      - accepted_values:
+          column_name: risk
+          arguments:
+            values: ['trivial', 'normal', 'high']
+      - accepted_values:
+          column_name: work_type
+          arguments:
+            values: ['code', 'docs', 'spec', 'review', 'data']
+      - accepted_values:
+          column_name: cost_method
+          arguments:
+            values: ['provider_reported', 'usage_x_price_table', 'key_spend_delta', 'not_measured']
+      - accepted_values:
+          column_name: outcome
+          arguments:
+            values: ['pr_opened', 'pr_updated', 'no_changes', 'failed', 'cap_exceeded', 'gate_failed', 'cancelled']
+      - not_null:
+          column_name: actual_cost_usd

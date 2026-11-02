@@ -16,6 +16,7 @@ trap 'rm -rf "$PRISTINE_DIR"' EXIT
 git show HEAD:scripts/opencode-artifact-scan.sh >"$PRISTINE_DIR/opencode-artifact-scan.sh"
 git show HEAD:scripts/opencode-git-push-scoped.sh >"$PRISTINE_DIR/opencode-git-push-scoped.sh"
 git show HEAD:scripts/pr-check.sh >"$PRISTINE_DIR/pr-check.sh"
+git show HEAD:scripts/opencode-run-facts.sh >"$PRISTINE_DIR/opencode-run-facts.sh"
 chmod +x "$PRISTINE_DIR/opencode-artifact-scan.sh" \
   "$PRISTINE_DIR/opencode-git-push-scoped.sh" \
   "$PRISTINE_DIR/pr-check.sh"
@@ -58,6 +59,8 @@ if [ -f "$usage_metrics" ]; then
     cost_line="Cost: ${reported} on DeepInfra (OpenCode stats; factory metering is issue #30)"
   fi
 fi
+# Run-record facts (pr-check rule 4) come from env, artifact and the committed spec only.
+facts="$(OC_BRANCH="$branch" bash "$PRISTINE_DIR/opencode-run-facts.sh")"
 
 # Spec comment used by job A (scripts/opencode-build-context.py). Digits only; URL built here.
 spec_id="$(sed -n 's/^spec_comment_id=//p' "$OC_ARTIFACT_DIR/context-meta.txt" 2>/dev/null | head -n 1 || true)"
@@ -119,7 +122,7 @@ AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Flash-073
 
 ## Evidence
 
-Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${OC_RUN_ID}
+${facts}
 
 ${usage_block}
 
