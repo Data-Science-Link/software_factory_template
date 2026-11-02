@@ -24,6 +24,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      issues: read
     env:
       OC_INSTRUCTION: ${{ github.event.comment.body }}
       OC_ISSUE_NUMBER: ${{ github.event.issue.number }}
