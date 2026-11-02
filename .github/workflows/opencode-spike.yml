@@ -24,6 +24,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      issues: read
     env:
       OC_INSTRUCTION: ${{ github.event.comment.body }}
       OC_ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -44,6 +45,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          
+      - name: Fetch issue context (read-only token, this step only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/opencode-build-context.py
 
       - name: Install gitleaks
         run: bash scripts/install-gitleaks-ci.sh

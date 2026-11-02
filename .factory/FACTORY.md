@@ -45,7 +45,7 @@ Cloud factory path (selected issues). Detail: `.factory/VISION.md` §4.
 3. **Spec** — Factory Manager writes the spec from `.factory/templates/spec.md` (template content lands with the spec-template issue). Approved spec lives as a spec comment on the issue; the run commits `factory/specs/issue-<N>.md` in its PR.
 4. **Classify** — Complexity (`simple | standard | complex` + reason), risk class (`trivial | normal | high`), model (`.factory/models.yaml` when present), predicted cost. Split before run if predicted cost exceeds $1.
 5. **Spec approval** — Michael for standard/complex or normal/high risk; Grok Bot may self-approve **simple + trivial** only.
-6. **Run** — `/oc run` on the issue: Actions worker on DeepInfra executes the spec.
+6. **Run** — `/oc run` on the issue: Actions worker on DeepInfra executes the spec. Job A (`scripts/opencode-build-context.py`) gives the worker the issue body, the latest **owner** spec comment with `status: approved` (validated; a malformed one stops the run) and recent owner comments, as data. A short `/oc` comment is enough. The prompt lists the scan's forbidden paths (`scripts/opencode-artifact-scan.sh --list-forbidden`); new worker tooling goes under `factory/<area>/`.
 7. **Gate** — Pre-spin-down checklist on the VM (cost tracked, run record, PR template + `pr-check`, gitleaks, budget, no workflow edits). Fails loudly on any miss.
 8. **PR** — Standard PR contents (template v2 when landed); worker + gate fill human sections; run end fills the factory-run block.
 9. **Review** — Grok Bot: one `Factory review` comment (`skills/review-local-pr.md`). Fixes via `/oc` on the PR.
