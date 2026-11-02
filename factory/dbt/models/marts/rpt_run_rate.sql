@@ -9,7 +9,7 @@ with params as (
 rates as (
     select
         p.as_of_date,
-        date_trunc('month', p.as_of_date) as month_start,
+        cast(date_trunc('month', p.as_of_date) as date) as month_start,
         day(p.as_of_date) as days_elapsed,
         day(last_day(p.as_of_date)) as days_in_month,
         coalesce(sum(f.actual_cost_usd) filter (
@@ -32,7 +32,7 @@ rates as (
     left join {{ ref('fct_agent_runs') }} f on true
     group by
         p.as_of_date,
-        date_trunc('month', p.as_of_date),
+        cast(date_trunc('month', p.as_of_date) as date),
         day(p.as_of_date),
         day(last_day(p.as_of_date))
 )

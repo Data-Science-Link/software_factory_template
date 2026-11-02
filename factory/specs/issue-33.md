@@ -11,7 +11,7 @@ complexity_reason: six small SQL marts plus schema.yml and four singular tests, 
 risk: normal
 work_type: code
 model: deepseek-ai/DeepSeek-V4-Flash-0731
-model_reason: \"Default for all other factory worker runs → V4 Flash\"
+model_reason: "Default for all other factory worker runs → V4 Flash"
 predicted_tokens_in: 1000000
 predicted_tokens_cached: 800000
 predicted_tokens_out: 50000
@@ -19,7 +19,7 @@ predicted_cost_usd: 0.033
 budget_cap_usd: 1.0
 price_table_version: '2026-11-02'
 approved_by: michael
-approved_at: \"2026-11-02T13:44:00-06:00\"
+approved_at: "2026-11-02T13:44:00-06:00"
 drafted_by: grok-bot
 ---
 
@@ -80,7 +80,7 @@ All paths are relative to `factory/dbt/`. dbt 1.11 syntax (`data_tests:`). No pa
 
    Each outputs `runs`, `predicted_usd` (sum), `actual_usd` (sum), `median_tokens_in`, `median_tokens_cached`, `median_tokens_out` (DuckDB `median()`). Then add `error_pct = (actual_usd - predicted_usd) / predicted_usd * 100` when `predicted_usd > 0`, else null.
 7. **`models/marts/rpt_run_rate.sql`**: always **one row**, even when there are no runs.
-   - `as_of_date = coalesce(try_cast(nullif('{{ var(\"as_of_date\") }}', '') as date), cast(now() at time zone 'UTC' as date))`
+   - `as_of_date = coalesce(try_cast(nullif('{{ var("as_of_date") }}', '') as date), cast(now() at time zone 'UTC' as date))`
    - `month_start = date_trunc('month', as_of_date)`, `days_elapsed = day(as_of_date)`, `days_in_month = day(last_day(as_of_date))`
    - Left join `fct_agent_runs ... on true` and aggregate with `filter (where ...)` and `coalesce(..., 0)`. Output columns, in order:
      - `as_of_date, month_start, days_elapsed, days_in_month`
@@ -263,5 +263,3 @@ N/A: no secrets, auth, workflows, dependencies or licenses change. The changes a
 - **This spec:** all six marts, tests and docs in one run (predicted $0.033, well under the target).
 - **If the worker runs long:** stop after `fct_agent_runs`, `agg_spend_*` and the cap test. Open the PR with those and list `fct_forecast_vs_actual`, `rpt_run_rate` and the warn tests as the remaining half.
 - **Later (not this issue):** #32 slice 2 replaces the vars with `stg_budget` / `stg_fixed_costs` and adds the price join; #41 adds step-level cost; #34 fills `is_merged` and reads the marts.
-
-## Recent owner comments (0)
