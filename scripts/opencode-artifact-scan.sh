@@ -41,6 +41,7 @@ FORBIDDEN_PATTERNS=(
   'opencode.json'
   '.factory/actions-security.md'
   '.factory/models.yaml'
+  'requirements-factory.txt'
   'scripts'
   '*.tar.gz' '*.tgz' '*.zip' '*.tar' '*.deb' '*.rpm'
   'gitleaks_*'
@@ -78,6 +79,9 @@ Also forbidden everywhere: symlinks, submodules, binary files, ".." in paths, an
 names with spaces or special characters. Other tooling can go under factory/<area>/
 (for example factory/dbt/). If the spec asks for a forbidden change, skip that part and
 say so in your final message.
+
+requirements-factory.txt (the pinned factory Python dependencies) is owner-only: never add,
+remove or re-pin a package. If the spec needs a new dependency, stop and say so instead.
 RULES
 }
 

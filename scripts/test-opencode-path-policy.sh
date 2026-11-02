@@ -31,6 +31,7 @@ new_repo() {
   printf '# Security\n' >.factory/actions-security.md
   printf '# Doc\n' >docs/readme.md
   printf '{}\n' >opencode.json
+  printf 'dbt-core==1.11.16\n' >requirements-factory.txt
   g add -A
   g commit -qm base
 }
@@ -118,6 +119,12 @@ new_repo; mkdir -p .github/workflows; printf 'on: push\n' >.github/workflows/x.y
 expect fail ".github/ stays forbidden" "forbidden path: .github/workflows/x.yml"
 new_repo; printf '{"a":1}\n' >opencode.json; capture
 expect fail "opencode.json stays forbidden" "forbidden path: opencode.json"
+new_repo; printf 'requests==2.32.3\n' >>requirements-factory.txt; capture
+expect fail "requirements-factory.txt is owner-only (edit)" "forbidden path: requirements-factory.txt"
+new_repo; g rm -q requirements-factory.txt; capture
+expect fail "requirements-factory.txt is owner-only (delete)" "forbidden path: requirements-factory.txt"
+new_repo; printf 'requests==2.32.3\n' >factory/dbt/requirements-dbt.txt; capture
+expect pass "other requirements files outside the root stay allowed"
 new_repo; printf 'K=V\n' >.env.example; capture
 expect fail "root dotfile stays forbidden" "forbidden path: .env.example"
 new_repo; printf 'x\n' >factory/dbt/.env; capture
@@ -155,7 +162,8 @@ expect fail "patch that ends inside a hunk is rejected" "ends inside a hunk"
 cd "$root"
 rules="$(bash "$scan" --list-rules)"
 if grep -qF 'you may add new scripts under scripts/ but not edit existing ones' <<<"$rules" \
-  && grep -qF '.factory/models.yaml' <<<"$rules" && grep -qF 'only ADD lines' <<<"$rules"; then
+  && grep -qF '.factory/models.yaml' <<<"$rules" && grep -qF 'only ADD lines' <<<"$rules" \
+  && grep -qF 'requirements-factory.txt' <<<"$rules"; then
   ok "--list-rules states the scripts/, .factory/ and .gitignore rules"
 else bad "--list-rules wording"; fi
 missing=""

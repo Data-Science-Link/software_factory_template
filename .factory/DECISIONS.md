@@ -466,3 +466,10 @@ Append-only. Newest at the bottom.
 - **Why:** Run 41487596046 (#32) lost about 7 minutes of work because a `.gitignore` line tripped the old blanket `scripts/` and dot-path rules. New tooling belongs next to the other scripts, but the existing scripts are the guardrails that judge, push and check every run, so they stay locked.
 - **Alternatives:** Keep `scripts/` fully blocked and steer tooling to `factory/<area>/` (rejected: wrong home for new tooling, and the worker kept falling into it); allow edits to existing scripts (rejected: a patch could weaken its own guard after merge); drop only the offending hunks (deferred).
 - **Revisit when:** A workflow starts globbing `scripts/*` (a new script would then run in CI), or a run is lost to a rule that should have been allowed.
+
+### 2026-11-02 — requirements-factory.txt is owner-only for /oc workers (#63)
+- **Decision:** Add `requirements-factory.txt` to `FORBIDDEN_PATTERNS` in `scripts/opencode-artifact-scan.sh`, the single path-policy list shown to the worker by `--list-rules` and `--list-forbidden`. An `/oc` patch that creates, edits, renames or deletes it is discarded whole. Other requirements files, such as a future `factory/dbt/requirements-dbt.txt` (#64), aren't affected.
+- **Decided by:** Owner. Michael, 2026-11-02 1:57 PM CT: "Yes on the requirements.txt that sounds good".
+- **Why:** CI (`pr-check`, run-record tests) and the worker job both `pip install -r requirements-factory.txt`, so a worker that adds or re-pins a package changes the supply chain for every later run and check. Dependency changes are high risk under `.factory/skills/liability-gates.md` and need the owner.
+- **Alternatives:** Leave it writable and rely on review (rejected: a pin change is easy to miss in a large diff); allow added lines only, like `.gitignore` (rejected: adding a package is the risky case).
+- **Revisit when:** #64 splits the requirements files, or a spec legitimately needs a new pinned dependency often enough that owner-only edits become a bottleneck.
