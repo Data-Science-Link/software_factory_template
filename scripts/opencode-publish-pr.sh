@@ -54,7 +54,7 @@ usage_block="$(cat "$usage_metrics" 2>/dev/null || echo '## Token usage (opencod
 cost_line="Cost: not measured on DeepInfra (opencode stats unavailable)"
 if [ -f "$usage_metrics" ]; then
   reported="$(grep -F 'OpenCode-reported cost:' "$usage_metrics" | sed 's/^- OpenCode-reported cost: //' || true)"
-  if [ -n "$reported" ] && [ "$reported" != "not available" ]; then
+  if [ -n "$reported" ] && [ "$reported" != "not available" ] && [ "$reported" != "not measured" ]; then
     cost_line="Cost: ${reported} on DeepInfra (OpenCode stats; factory metering is issue #30)"
   fi
 fi

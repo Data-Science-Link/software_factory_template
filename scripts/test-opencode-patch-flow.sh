@@ -7,6 +7,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+echo "== test: opencode usage capture parser =="
+bash "$root/scripts/test-opencode-capture-usage.sh"
+
 echo "== simulate: clone pristine repo (main) =="
 git clone -q "$root" "$work/repo"
 cd "$work/repo"
@@ -45,7 +48,7 @@ cat >"$OC_ARTIFACT_DIR/usage-metrics.md" <<'USAGE'
 - Input tokens: 1
 - Output tokens: 1
 - Cache read: 0
-- OpenCode-reported cost: $0.0000
+- OpenCode-reported cost: not measured
 - Source: `opencode stats --models`
 USAGE
 

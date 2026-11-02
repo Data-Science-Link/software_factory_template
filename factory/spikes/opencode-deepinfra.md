@@ -64,9 +64,22 @@ Part of [#38](https://github.com/Data-Science-Link/software_factory_template/iss
 | `pr-check` / `secret-scan` on harness PR? | required on `main` ruleset; bot PR needed **Approve workflows to run** before CI (see `.factory/actions-security.md`) |
 | **Go / no-go** | **go** for `/oc` spike harness on trivial issues; factory cost metering remains #30 |
 
+### `reasoning_content` / API errors
+
+Runs A and B: no `reasoning_content` (or similar) errors in agent `opencode.log` artifacts; OpenCode completed tool calls without reported API shape failures.
+
+### Still open on #22 (not closed by PR #52)
+
+These Phase 2 report rows remain **not measured** or owner-only; track on #22 until filled:
+
+- **Actions billable minutes** — not captured from GitHub billing/export for either run (wall times recorded only).
+- **Sample usage JSON (redacted)** — harness used `opencode stats --models` TUI only; no `opencode export … --sanitize` JSON attached yet.
+- **Cost vs key spend cross-check** — OpenCode-reported $0.0029 / $0.0028 not reconciled to DeepInfra dashboard spend for the Actions key on the same UTC window.
+- **$10/month limit on Actions key** — owner must confirm limit is set on the Actions-only DeepInfra key (no key name or value in repo).
+
 ### Spike conclusion
 
-Two-job split, pinned CLI, artifact scan, and scoped publish push work on a real `/oc` run. Token totals and OpenCode cost are available from `opencode stats --models` on the agent runner; harness PR bodies and Actions summaries must use parsed markdown (not raw TUI). Close-out PR fixes empty usage sections.
+Two-job split, pinned CLI, artifact scan, and scoped publish push work on a real `/oc` run. Token totals and OpenCode cost are available from `opencode stats --models` on the agent runner; harness PR bodies and Actions summaries must use parsed markdown (not raw TUI). Usage parsing and report gaps are addressed in PR #52; **Refs #22** until the rows above are closed.
 
 ## Security notes
 
