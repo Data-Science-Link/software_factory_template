@@ -1,6 +1,25 @@
 # Model routing
 
-How the factory manager picks a model for each cloud agent it launches. The goal is the cheapest model that can do the job well, with escalation only when needed. Each repo may tune this table; keep the structure.
+## Factory runs (GitHub Actions + DeepInfra)
+
+GitHub Actions workers (OpenCode + DeepInfra) pick models from **`.factory/models.yaml`**. That file is the **source of truth** for:
+
+- Dated DeepInfra **standard-tier** prices (input, cached input, output per million tokens), with source URLs and `checked_at` dates
+- **Token priors** per complexity (`simple`, `standard`, `complex`) for cost prediction
+- Ordered **routing rules** for model selection (first match wins) plus a **checks** block (rules 6 and 8) applied after a model is picked (see `.factory/VISION.md` §10)
+- **Budget** caps (`deepinfra_monthly_limit_usd`, per-issue cap and target, Actions minutes warning)
+
+**Default worker model:** `deepseek-ai/DeepSeek-V4-Flash-0731` for most runs. **Escalation:** `deepseek-ai/DeepSeek-V4-Pro-0813` for high risk, complex work, `/oc spec` runs, and one retry after Flash fails on standard work. **Fallback:** `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` when DeepSeek hits tool-call or reasoning-format errors.
+
+The routing and cost-prediction scripts (issue **#27**) will read `models.yaml` directly once they land; do not duplicate prices in this file.
+
+**Spend rules (unchanged):** never enable on-demand spend (Cursor or elsewhere). Workers and the manager stay within the issue cap ($1 hard, $0.10 target) and the Actions-only DeepInfra key limit ($10/month per `.factory/DECISIONS.md`).
+
+---
+
+## Cursor cloud agents (Grok Bot manager + backup workers)
+
+How the factory manager picks a model for each **Cursor cloud agent** it launches. The goal is the cheapest model that can do the job well, with escalation only when needed. Each repo may tune this table; keep the structure.
 
 Defaults below assume **Cursor Pro+** (as of 2026-10). Cursor has two monthly pools:
 - **Cursor Models** (Grok 4.7 / 4.6 / 4.5, Composer 2.5): much larger included allowance; use first.
@@ -39,7 +58,9 @@ Prices per million tokens (input / output): Composer 2.5 $0.50 / $2.50 · Grok 4
 
 Recommended Cursor default model: `composer-2.5` (cheapest, Cursor pool, and the fallback for any unpinned launch). Switch to Grok 4.7 by hand for hard work.
 
-## Local open-weights harness (when Cursor usage runs out)
+## Local open-weights harness (retired as default, optional)
+
+**Status:** Retired as the default worker path (see `.factory/VISION.md` §14–15). Actions + DeepInfra (`/oc run`) is the standard. This section remains for optional desktop Cursor runs when needed.
 
 The human runs desktop Cursor locally with their own key for an OpenAI-compatible provider and picks the model the issue's handoff block names (see `skills/local-open-weights-run.md`). Default filled-in provider: **DeepInfra** (base URL `https://api.deepinfra.com/v1/openai`). Same loop, review and human gates as cloud runs; only the harness and model change.
 
