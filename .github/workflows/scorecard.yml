@@ -1,0 +1,29 @@
+# OpenSSF Scorecard (public repos only). Informational; does not block merges.
+name: scorecard
+
+on:
+  schedule:
+    - cron: "31 5 * * 0"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  analysis:
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@ff5dd8929f96a8a4dc67d13f32b8c75057829621 # v2.4.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true

@@ -218,6 +218,23 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# --- Factory repo-security baseline (issue #44) ---
+# Secrets and credentials (keep .env.example tracked)
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_ecdsa
+id_ecdsa.*
+**/credentials.json
+**/service-account*.json
+*.tar.gz
+!docs/**/*.tar.gz
+
 # Factory cost start marker -- never committed
 .factory-cost-start
 

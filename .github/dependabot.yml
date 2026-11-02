@@ -1,0 +1,15 @@
+# Dependabot: keep GitHub Actions SHAs current and scan any package manifests
+# added later. PRs are not auto-merged; they must pass pr-check and gitleaks.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:17"
+      timezone: America/Chicago
+    groups:
+      github-actions:
+        patterns:
+          - "*"

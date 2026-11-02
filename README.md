@@ -32,7 +32,8 @@ Get started with this template in under a minute:
 3. [Set `.factory/MODEL_ROUTING.md`](#how-to-adopt-it-in-a-repo) for your plan and models
 4. [Open your first issue](#how-to-adopt-it-in-a-repo) to start the factory process
 5. Running agents on your own machine? Do the one-time safety setup in [`.factory/skills/local-agent-safety.md`](.factory/skills/local-agent-safety.md) first
-6. Running an issue locally (desktop Cursor + DeepInfra)? Do the owner checklist in [`.factory/skills/local-owner-setup.md`](.factory/skills/local-owner-setup.md) once, then type `do issue N` in Agent mode. The always-on rule [`.cursor/rules/factory.mdc`](.cursor/rules/factory.mdc) does the rest
+6. **Security baseline (every factory repo):** copy `.github/dependabot.yml`, the security workflows, `CODEOWNERS`, and `SECURITY.md`; merge the `.gitignore` block from this template; read [`.factory/repo-security-baseline.md`](.factory/repo-security-baseline.md). As owner, run `scripts/harden-repo.sh OWNER/REPO` once (see [#37 rollout checklist](https://github.com/Data-Science-Link/software_factory_template/issues/37) when adopting into another repo). Agents never run `harden-repo.sh`.
+7. Running an issue locally (desktop Cursor + DeepInfra)? Do the owner checklist in [`.factory/skills/local-owner-setup.md`](.factory/skills/local-owner-setup.md) once, then type `do issue N` in Agent mode. The always-on rule [`.cursor/rules/factory.mdc`](.cursor/rules/factory.mdc) does the rest
 
 For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) section below.
 
@@ -43,8 +44,8 @@ For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) se
 3. Add repo-specific skills under `.factory/skills/`.
 4. Keep `.factory/DECISIONS.md` append-only: add new entries at the bottom, and supersede old ones rather than editing them.
 5. Set `.factory/MODEL_ROUTING.md` for your plan and the models you can use.
-6. Copy `scripts/` and `.github/` (secret-scan workflow and the `protect-main` ruleset) into the repo. Then, as the owner: run `scripts/install-hooks.sh` in each clone and `scripts/protect-main.sh` once per repo (see `.factory/skills/local-agent-safety.md`).
-7. Copy the starters in `.factory/sketches/` into place (`CONTRIBUTING.md`, PR template, CODEOWNERS), and add your own `LICENSE` and `SECURITY.md`.
+6. Copy `scripts/` and `.github/` (workflows, `dependabot.yml`, `protect-main` ruleset, `CODEOWNERS`) into the repo. Run `scripts/install-hooks.sh` in each clone. As owner: `scripts/harden-repo.sh OWNER/REPO` (or `scripts/protect-main.sh` for ruleset-only) — see [`.factory/repo-security-baseline.md`](.factory/repo-security-baseline.md) and `.factory/skills/local-agent-safety.md`.
+7. Copy the starters in `.factory/sketches/` into place (`CONTRIBUTING.md`, PR template). `SECURITY.md` and `CODEOWNERS` ship in this template; add your own `LICENSE`.
 8. Examples labeled with a source repo (for example "perspectiverse #88" in `DECISIONS.md`) are illustrative, taken from repos where the method was run. Keep them or replace them with your own.
 
 ## File map
@@ -62,6 +63,7 @@ For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) se
 | `.factory/skills/local-open-weights-run.md` | For a human running an issue locally on an open-weights model with their own provider key. |
 | `.factory/skills/local-owner-setup.md` | One-time owner checklist for local runs: gh, hooks, DeepInfra key, spending limit, antivirus, command allowlist. |
 | `.factory/skills/local-agent-safety.md` | One-time safety setup before any local agent runs: secret-scan hook, scoped `gh` token, command approvals, protect `main`. |
+| `.factory/repo-security-baseline.md` | Dependabot, secret scanning, workflow hardening, CodeQL/OSV, and the owner-only `harden-repo.sh` checklist (public vs private table with doc links). |
 | `.factory/skills/review-local-pr.md` | For the reviewing bot: the `Factory review` comment on a local agent's PR. |
 | `.cursor/rules/factory.mdc` | Always-on Cursor rule: handles `do issue N` and `address the review on PR N`, honest reporting, never rules. |
 | `.factory/sketches/README.md` | Where each sketch should be copied. |

@@ -1,0 +1,7 @@
+# Factory security baseline — sensitive paths require owner review.
+# Replace @Data-Science-Link with the repo maintainer if you fork this template.
+
+/.github/                      @Data-Science-Link
+/scripts/                      @Data-Science-Link
+/.factory/                     @Data-Science-Link
+/opencode.json                 @Data-Science-Link
