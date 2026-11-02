@@ -412,6 +412,38 @@ Append-only. Newest at the bottom.
 - **Alternatives:** A thin custom harness script.
 - **Revisit:** If both actions fail with DeepInfra models.
 
+### 2026-11-01 — Cloud factory roles (CEO, manager, compute, inference, repo, worker)
+- **Status:** Proposed, pending Michael.
+- **Decision:** Adopt the vision roles in `FACTORY.md`: **CEO** (Michael), **Factory Manager** (Grok Bot), **Compute** (GitHub Actions runners), **Inference** (DeepInfra), **System of record** (the GitHub repo), **Worker** (OpenCode harness on Actions). Optional **Giver** unchanged. Cursor cloud agents and Local open-weights are backup/optional paths, not the default worker for selected project issues.
+- **Decided by:** Owner (Michael, 2026-11-01, factory vision notes: standardized cloud factory with Michael setting direction and Grok Bot running the line).
+- **Why:** One shared vocabulary for who does what; separates judgment (CEO), orchestration (manager), rented compute, token supplier, and the non-merge worker.
+- **Alternatives:** Keep the older "human owner / factory manager / child cloud agents" table only (rejected: blurs Actions worker vs Cursor agents).
+- **Revisit:** After the first end-to-end `/oc run` on a selected issue.
+
+### 2026-11-01 — Michael chooses which issues get worked (`factory:selected`)
+- **Status:** Proposed, pending Michael.
+- **Decision:** Not every issue becomes agent work. Only issues Michael selects — label `factory:selected` on GitHub or "select #N" to Grok Bot — get a spec and an Actions run. Intake issues without selection stop at the issue record.
+- **Decided by:** Owner (Michael, 2026-11-01: "What I want is standardization… Michael chooses the work" and "Only issues Michael selects get a spec and a run" in vision notes).
+- **Why:** Prevents the factory from running on every filed idea; keeps spend and attention on chosen work.
+- **Alternatives:** Auto-triage every open issue (rejected: no explicit CEO choice).
+- **Revisit:** If selection becomes a bottleneck, add a lightweight queue view — not auto-selection.
+
+### 2026-11-01 — Standard spec, standard PR, standard run record
+- **Status:** Proposed, pending Michael.
+- **Decision:** Every worked (selected) issue gets a spec with the same base sections (from `.factory/templates/spec.md`). Every factory PR uses the same template contents (PR template v2). Every Actions agent run writes the same run record JSON (`factory/runs/<run_id>.json`, schema in `.factory/schemas/run-record.schema.json` when landed). Cost is deterministic from usage × the committed price table, not guessed after the fact.
+- **Decided by:** Owner (Michael, 2026-11-01: "every worked on issue to have a spec, the same contents of a PR, the same logged data per agent run" and track tokens/cost on a standard dashboard).
+- **Why:** Commodity spend needs comparable units; auditors and Michael can read any PR or run the same way.
+- **Alternatives:** Ad-hoc issue comments and hand-filled PR bodies only (rejected: already caused misses on local runs).
+- **Revisit:** After ten runs, check whether extended spec sections are too heavy for simple issues.
+
+### 2026-11-01 — Default worker path: GitHub Actions + DeepInfra
+- **Status:** Proposed, pending Michael.
+- **Decision:** The default harness for selected project issues is a GitHub Actions run (`/oc run`) using OpenCode (or the decided fallback action) and DeepInfra models per `.factory/models.yaml`. Local open-weights and Cursor cloud agents remain documented fallbacks for building the factory and when Actions can't run.
+- **Decided by:** Owner (Michael, 2026-11-01: buy code on rented machines through one standard process with every unit metered; phone kickoff via `/oc run`).
+- **Why:** Matches the commodity-factory model: metered tokens, clean VM per run, no laptop required after one-time setup.
+- **Alternatives:** Cursor cloud agents as default (rejected for project issues: plan pooling and less deterministic cost capture).
+- **Revisit:** If the OpenCode spike fails, switch default worker to Claude Code Action on DeepInfra (2026-11-02 accepted fallback).
+
 ### 2026-11-02 — DeepInfra default worker model and escalation (models.yaml)
 - **Status:** Proposed, pending Michael.
 - **Decision:** GitHub Actions factory workers default to `deepseek-ai/DeepSeek-V4-Flash-0731` (standard tier). Escalate to `deepseek-ai/DeepSeek-V4-Pro-0813` for high risk, complex work, `/oc spec` runs, and one retry after Flash fails on standard work. On DeepSeek tool-call or reasoning-format errors, fall back to `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` and open an issue. Prices, priors, and rules live in `.factory/models.yaml`; `MODEL_ROUTING.md` explains them for humans.

@@ -4,39 +4,61 @@ Copy this whole folder into a repo as `.factory/`. Works with any model or chat 
 
 ## 20-second pitch
 
-Work enters as a GitHub issue. Agents triage → (specs if hard) → build → review → verify → ship. Humans only at judgment gates. Skills and decisions live here so the next agent can continue without the chat.
+Work enters as a GitHub issue. Michael **selects** what gets worked (`factory:selected`). The **Factory Manager** writes a spec; a **GitHub Actions** run on **DeepInfra** does the build; humans gate normal/high risk. Skills and decisions live here so the next agent can continue without the chat.
+
+**Words:** **Complexity** is `simple | standard | complex` (picks the model). **Risk class** is `trivial | normal | high` (sets the merge gate). When Michael says "medium or high complexity" that means **standard or complex**; "medium or high risk" means **normal or high**.
 
 ## Triggers
 
 | Trigger | What happens |
 |---|---|
-| **New / open GitHub issue** | Valid factory work item. The repo’s **factory manager** (or any agent with repo access) runs `skills/factory-loop.md`. |
-| **Message to project coordinator** | Valid start of the **production line**. Coordinator = chief of staff, project lead bot, or any designated intake agent — not chat-as-queue. They run `skills/intake-from-coordinator.md`: file/refine a GitHub issue, then **hand off to the factory manager** to start the loop. |
+| **New / open GitHub issue** | **Intake** only — a valid work item with a one-sentence outcome. Most issues stop here. Coordinator handoff: `skills/intake-from-coordinator.md` files/refines the issue, then hands off to the Factory Manager. |
+| **`factory:selected` label** (Michael) or **"select #N"** to Grok Bot | **Selection** — only selected issues get a spec and an Actions run. Not every issue becomes agent work. |
+| **`/oc run`** on a selected issue (owner account only) | **Run** — GitHub Actions spins up a worker (OpenCode + DeepInfra) from the approved spec; see `.factory/VISION.md`. |
+| **Message to project coordinator** | Start of the **production line** (same as a new issue path above). Coordinator = chief of staff, project lead bot, or any designated intake agent — not chat-as-queue. |
 
-Chat alone is never the work item. The issue is. Messaging the coordinator is how a human (or another agent) **kicks the line**: issue + explicit handoff to the manager.
+Chat alone is never the work item. The issue is.
 
-If there is no separate manager yet, the coordinator may run `factory-loop` themselves after filing — still issue-first.
+**Rule:** Only issues with `factory:selected` get a spec or an Actions run. Epic/build work on the factory itself (e.g. Cursor cloud agents on child issues) follows the issue's scope; project issues use selection + spec + `/oc run` by default.
 
 ## Roles
 
-| Role | Who | Does | Never |
+| Role | Who / what | Does | Never |
 |---|---|---|---|
-| **Human owner** | The person | Product judgment, spec and product gates, approvals | — |
-| **Coordinator** (optional) | Chief of staff / intake bot | Turns chat asks into issues, hands off | Builds |
-| **Factory manager** | One bot per repo | Runs the loop, sequences work, launches and reviews worker agents, merges per gates | Decides product questions |
-| **Workers** | Child cloud agents | Build, review, test on a branch/PR | Merge without the manager |
-| **Giver** (recommended) | One bot per repo | Keeps the asks ledger, drafts decisions, challenges claims against the owner's asks — see `skills/giver.md` | Builds, merges, approves, spends |
+| **CEO** | Michael (human owner) | Vision, chooses which issues get worked (`factory:selected`), spec approval for standard/complex work, product gate for **normal** and **high** risk PRs, budgets | Configures the line repeatedly; relays notes between bots by hand |
+| **Factory Manager** | Grok Bot (one bot per repo; Cursor plan) | Michael's single contact: triage, **writes specs**, routes model and predicted cost, starts runs (`/oc`), **Factory review** on PRs, records approvals on the PR body, merges within authority, weekly spend report, watches failed gates — see `skills/factory-loop.md` | Decides product questions; merges normal/high without Michael; turns on on-demand spend |
+| **Compute (CPU + VM)** | GitHub Actions runners (`ubuntu-latest`) | Clean VM per run: hosts the harness, cost capture, **pre-spin-down gate**, then disappears | Holds state between runs; merges |
+| **Inference** | DeepInfra | Low-cost model tokens for worker runs | Sees the repo beyond what the harness sends |
+| **System of record** | This GitHub repo | `.factory/` method, issues, `factory/specs/`, PR template + `pr-check`, security guardrails, `factory/runs/`, financials | — |
+| **Worker** | Harness on Actions (OpenCode + a DeepInfra model) | Executes one approved spec on a branch; fills the PR template; opens or updates the PR | Merges; edits `.github/workflows/`; reads or prints secrets |
+| **Coordinator** (optional) | Intake bot / chief of staff | Chat → issue → hand off to Factory Manager | Builds |
+| **Giver** (optional, recommended) | One bot per repo | Asks ledger, drafts decisions, healthy challenge — `skills/giver.md` | Builds, merges, approves, spends |
+
+Cursor cloud agents stay a **backup harness** and build the factory epic itself; they are not the default worker for selected project issues (Actions + DeepInfra is). Local open-weights on the desktop is an optional fallback — `skills/local-open-weights-run.md`.
 
 ## Loop
 
-1. **Intake** — GitHub issue with a clear outcome (from coordinator handoff or native issue).
-2. **Triage** — easy → build; hard → product + tech specs on the issue. Pick the model per `MODEL_ROUTING.md`.
-3. **Spec gate (human)** — approve, or skip if trivial.
-4. **Build** — sync latest default branch first (agents often have a stale tip), then branch + PR linked to the issue.
-5. **Review** — agent first; human on risk and product (see merge authority below + `skills/liability-gates.md`). A cloud agent's token may not be able to comment; if so, the manager posts that agent's reviews and reports.
-6. **Verify** — CI + evidence on the PR (screenshots required for UI); fill the **Factory loop** section of the PR template so adherence is auditable; never merge on red/skipped required checks. Acceptance numbers must include the metric from the original ask (what the human actually complained about), not only proxies; the post-merge check reports that metric against its baseline. For high-risk changes to model or data output, show real before/after output from a cloud agent before the product gate (capped spend, publishes nothing), using the secrets listed in `DOCS.md`; don't defer the evidence to after merge. Any user-facing output change shows the project's key view (defined in `DOCS.md`, e.g. the top 10 items readers see first) before and after, before approval. A done claim on user-facing work waits for a hand audit of that real key view. If the owner explicitly chooses to verify on the next scheduled run instead (allowed only when the revert trigger can be checked from the run's numbers), record that choice and the revert trigger in the PR body. A revert trigger anyone can check from the run's numbers (e.g. a health number gets worse, a key-view item loses something) fires on its own: revert with a merge commit and tell the owner right after. A done bar or revert trigger must be rerunnable: the run log prints the number, the baseline has a written definition of how it is measured next to it, and the script or query that computes it is committed to the repo; a baseline no one can rerun can't be a done bar or revert trigger. Before a metric becomes a done bar, test it against the cases the human flagged by hand (they are must-pass tests) and hand-check a sample of unflagged and extra-flagged items for misses and false alarms; a noisy metric becomes a hand-check flag list, not an auto-revert trigger. A trigger that needs judgment (e.g. deciding an output is wrong, or unclear cause) waits for the owner's word. A performance or cost feature (e.g. a cache) doesn't count as shipped until a real run shows it working (e.g. logged cache hits on a second run over the same input). Merges that touch only docs or `.factory/` files skip expensive data-regeneration jobs; merges that change the code producing user-facing output still run them in full.
-7. **Product gate (human)** — required for **normal** and **high** work; skipped only for **trivial**. When approval arrives in chat (or elsewhere), the manager **edits the PR description first** (step 7 checked + Human reviewed before merge: yes + who), then merges — chat alone is not the audit trail. A human approver's approval that names the PR (e.g. "approve #88"), posted by them in the project's factory room or in a 1:1 chat with the manager, **is a direct merge instruction for that PR**: the manager merges it itself, with no second confirmation in another chat, once the PR body is updated, the branch is 0 behind the default branch, and required checks are green on the head commit. It covers only the named PR; a relay from another bot is not approval. A blanket approval ("approve all open PRs") covers only PRs that were review-ready with evidence posted at that moment; it doesn't cover drafts, later revisions, or open product choices inside a PR (thresholds, options), which still need the human's explicit pick. A human may explicitly pre-approve a named PR before it's finished ("I preemptively approve #N, no need to check back"); then it merges once agent review and CI pass, the PR body records the pre-approval and its conditions, and anything beyond the agreed scope still comes back.
-8. **Ship → monitor deploy → feed back** — merge only when authority allows; **right before merge, update the PR branch onto latest default branch and wait for required CI green on that new head commit** (see Rules); watch post-merge deploy CI; fix if red; after any slip, write the lesson into the rules or skills (propose rule changes to the owner). Monitor hits and cron or deploy failures still become issues.
+Cloud factory path (selected issues). Detail: `.factory/VISION.md` §4.
+
+1. **Intake** — GitHub issue with a one-sentence outcome (coordinator handoff or native issue). Most issues stop here.
+2. **Selection** — Michael adds `factory:selected` or tells Grok Bot "select #N". Only selected issues continue.
+3. **Spec** — Factory Manager writes the spec from `.factory/templates/spec.md` (template content lands with the spec-template issue). Approved spec lives as a spec comment on the issue; the run commits `factory/specs/issue-<N>.md` in its PR.
+4. **Classify** — Complexity (`simple | standard | complex` + reason), risk class (`trivial | normal | high`), model (`.factory/models.yaml` when present), predicted cost. Split before run if predicted cost exceeds $1.
+5. **Spec approval** — Michael for standard/complex or normal/high risk; Grok Bot may self-approve **simple + trivial** only.
+6. **Run** — `/oc run` on the issue: Actions worker on DeepInfra executes the spec.
+7. **Gate** — Pre-spin-down checklist on the VM (cost tracked, run record, PR template + `pr-check`, gitleaks, budget, no workflow edits). Fails loudly on any miss.
+8. **PR** — Standard PR contents (template v2 when landed); worker + gate fill human sections; run end fills the factory-run block.
+9. **Review** — Grok Bot: one `Factory review` comment (`skills/review-local-pr.md`). Fixes via `/oc` on the PR.
+10. **Approval by risk** — **trivial:** Factory Manager after green CI and passing gate. **Normal / high:** Michael (see merge authority below).
+11. **Merge** — Factory Manager within authority; workers never merge. Update branch onto latest default branch; required CI green on head commit; merge commit only.
+12. **Logging** — Run record JSON in the PR and a copy on the issue.
+13. **Financials** — dbt + dashboard refresh (scheduled workflow); Grok Bot weekly spend report.
+
+**Verify (every PR):** CI + evidence on the PR (screenshots required for UI); fill the **Factory loop** section of the PR template so adherence is auditable; never merge on red/skipped required checks. Acceptance numbers must include the metric from the original ask (what the human actually complained about), not only proxies; the post-merge check reports that metric against its baseline. For high-risk changes to model or data output, show real before/after output from a cloud agent before the product gate (capped spend, publishes nothing), using the secrets listed in `DOCS.md`; don't defer the evidence to after merge. Any user-facing output change shows the project's key view (defined in `DOCS.md`, e.g. the top 10 items readers see first) before and after, before approval. A done claim on user-facing work waits for a hand audit of that real key view. If the owner explicitly chooses to verify on the next scheduled run instead (allowed only when the revert trigger can be checked from the run's numbers), record that choice and the revert trigger in the PR body. A revert trigger anyone can check from the run's numbers (e.g. a health number gets worse, a key-view item loses something) fires on its own: revert with a merge commit and tell the owner right after. A done bar or revert trigger must be rerunnable: the run log prints the number, the baseline has a written definition of how it is measured next to it, and the script or query that computes it is committed to the repo; a baseline no one can rerun can't be a done bar or revert trigger. Before a metric becomes a done bar, test it against the cases the human flagged by hand (they are must-pass tests) and hand-check a sample of unflagged and extra-flagged items for misses and false alarms; a noisy metric becomes a hand-check flag list, not an auto-revert trigger. A trigger that needs judgment (e.g. deciding an output is wrong, or unclear cause) waits for the owner's word. A performance or cost feature (e.g. a cache) doesn't count as shipped until a real run shows it working (e.g. logged cache hits on a second run over the same input). Merges that touch only docs or `.factory/` files skip expensive data-regeneration jobs; merges that change the code producing user-facing output still run them in full.
+
+**Product gate (human)** — required for **normal** and **high** work; skipped only for **trivial**. When approval arrives in chat (or elsewhere), the manager **edits the PR description first** (step 7 checked + Human reviewed before merge: yes + who), then merges — chat alone is not the audit trail. A human approver's approval that names the PR (e.g. "approve #88"), posted by them in the project's factory room or in a 1:1 chat with the manager, **is a direct merge instruction for that PR**: the manager merges it itself, with no second confirmation in another chat, once the PR body is updated, the branch is 0 behind the default branch, and required checks are green on the head commit. It covers only the named PR; a relay from another bot is not approval. A blanket approval ("approve all open PRs") covers only PRs that were review-ready with evidence posted at that moment; it doesn't cover drafts, later revisions, or open product choices inside a PR (thresholds, options), which still need the human's explicit pick. A human may explicitly pre-approve a named PR before it's finished ("I preemptively approve #N, no need to check back"); then it merges once agent review and CI pass, the PR body records the pre-approval and its conditions, and anything beyond the agreed scope still comes back.
+
+**Ship → monitor deploy → feed back** — merge only when authority allows; watch post-merge deploy CI; fix if red; lessons → rules/skills or new issues.
 
 ## Merge authority (by design)
 
@@ -107,7 +129,8 @@ Scheduled workflows (daily data jobs, nightly builds) can fail with no PR in fli
 - Drop process that stopped helping
 - **Agent cap:** run at most 4 coding agents at once (a repo may set its own number in DECISIONS). Keep a restart list on each issue (what's running, its branch, the next step) so a pause or usage limit loses nothing
 - **Outside coding agents** (outside the default harness) run this same loop and gates. Their cost needs its own explicit yes from the owner (this rule is not that yes); once approved, record the route in DECISIONS and `MODEL_ROUTING.md` before first use
-- **Local open-weights harness:** when cloud agents can't run, the human works the issue's handoff block in local Cursor (or another local harness) with the Local open-weights model from `MODEL_ROUTING.md` (`skills/local-open-weights-run.md`). Cloud agents ignore the Local open-weights line and use the model they were launched with. Same loop and gates; the API key is never committed; each issue aims for under $0.10 of provider spend with a hard cap of $1 (complex may scale up; split anything bigger)
+- **Default worker path:** selected issues run on **GitHub Actions + DeepInfra** via `/oc run` (see `.factory/VISION.md`). Only `factory:selected` issues get a spec or that run.
+- **Local open-weights harness (optional fallback):** when Actions can't run, the human works from the approved spec in local Cursor with the Local open-weights model from `MODEL_ROUTING.md` (`skills/local-open-weights-run.md`). Same loop and gates; the API key is never committed; each issue aims for under $0.10 of provider spend with a hard cap of $1 (complex may scale up; split anything bigger)
 - **Local agent safety:** a local agent runs only after the owner has done the one-time setup in `skills/local-agent-safety.md` (gitleaks pre-commit hook, scoped `gh` token, command approvals on)
 - **Local-agent PRs:** pass the PR check (`scripts/pr-check.sh`) and get a `Factory review` comment from the reviewing bot (`skills/review-local-pr.md`) before the human merge gate
 - **Questions to the owner** are one decision each, phrased as (a)/(b) with a recommended pick and its consequence (e.g. cost or done-bar impact), so a short reply can't be read two ways
