@@ -1,0 +1,7 @@
+factory:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: target/factory.duckdb
+      threads: 1

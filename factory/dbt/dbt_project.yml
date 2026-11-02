@@ -1,0 +1,48 @@
+name: factory
+profile: factory
+config-version: 2
+
+seed-paths: ["{{ env_var('FACTORY_SEEDS_DIR', 'seeds') }}"]
+model-paths: ["models"]
+test-paths: ["tests"]
+
+seeds:
+  factory:
+    agent_runs:
+      +column_types:
+        run_id: varchar
+        repo: varchar
+        issue: integer
+        pr: integer
+        trigger: varchar
+        triggered_by: varchar
+        harness: varchar
+        provider: varchar
+        model: varchar
+        escalated_from: varchar
+        complexity: varchar
+        risk: varchar
+        work_type: varchar
+        price_table_version: varchar
+        price_in_per_mtok: double
+        price_cached_per_mtok: double
+        price_out_per_mtok: double
+        requests: bigint
+        tokens_in: bigint
+        tokens_cached: bigint
+        tokens_out: bigint
+        tokens_reasoning: bigint
+        predicted_cost_usd: double
+        actual_cost_usd: double
+        cost_method: varchar
+        key_spend_delta_usd: double
+        cost_check: varchar
+        budget_cap_usd: double
+        issue_spend_to_date_usd: double
+        started_at: varchar
+        ended_at: varchar
+        duration_s: bigint
+        actions_minutes: bigint
+        runner: varchar
+        outcome: varchar
+        gate_passed: boolean
