@@ -17,6 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python for factory spec-check tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install factory Python dependencies
+        run: python -m pip install -r requirements-factory.txt
+
+      - name: Run factory spec-check tests
+        run: bash scripts/test-spec-check.sh
+
       - name: Check the PR body against the factory rules
         env:
           GH_TOKEN: ${{ github.token }}

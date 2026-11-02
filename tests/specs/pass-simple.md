@@ -16,6 +16,7 @@ predicted_cost_usd: 0.001
 budget_cap_usd: 1.00
 price_table_version: 2026-11-01
 approved_by: grok-bot (simple+trivial)
+approved_at: 2026-11-02T12:00:00Z
 drafted_by: grok-bot
 ---
 ## Outcome

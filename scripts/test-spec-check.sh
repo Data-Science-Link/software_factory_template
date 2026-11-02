@@ -5,9 +5,16 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 if ! python3 -c "import yaml" 2>/dev/null; then
-  echo "Installing factory Python deps from requirements-factory.txt"
-  python3 -m pip install -q -r requirements-factory.txt
+  echo "PyYAML is required. Install factory deps in a venv, then re-run:" >&2
+  echo "  python3 -m venv .venv && .venv/bin/pip install -r requirements-factory.txt && .venv/bin/python scripts/factory-spec-check.py ..." >&2
+  echo "Or: pip install --user -r requirements-factory.txt  (if your Python allows it)" >&2
+  exit 2
 fi
+
+read_expect() {
+  local fixture="$1"
+  head -n 1 "$fixture" | sed -n 's/^# spec-check-expect: //p'
+}
 
 passed=0
 failed=0
@@ -36,11 +43,21 @@ for fixture in "$fixtures_dir"/*.md; do
       fi
       ;;
     fail-*)
-      if [ "$rc" -ne 0 ]; then
+      expect="$(read_expect "$fixture")"
+      if [ -z "$expect" ]; then
+        echo "FAIL  $name (missing first-line '# spec-check-expect: ...')"
+        failed=$((failed + 1))
+        continue
+      fi
+      if [ "$rc" -eq 0 ]; then
+        echo "FAIL  $name (expected non-zero exit, got 0)"
+        failed=$((failed + 1))
+      elif printf '%s\n' "$output" | grep -Fq "$expect"; then
         echo "PASS  $name"
         passed=$((passed + 1))
       else
-        echo "FAIL  $name (expected non-zero exit, got 0)"
+        echo "FAIL  $name (expected message containing: $expect)"
+        echo "$output" | head -5
         failed=$((failed + 1))
       fi
       ;;

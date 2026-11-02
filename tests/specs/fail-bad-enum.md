@@ -1,3 +1,4 @@
+# spec-check-expect: front matter complexity must be one of ['complex', 'simple', 'standard'] (got 'normal')
 ---
 spec_version: 1
 issue: 3
@@ -16,6 +17,7 @@ predicted_cost_usd: 0.001
 budget_cap_usd: 1.00
 price_table_version: 2026-11-01
 approved_by: null
+approved_at: null
 drafted_by: grok-bot
 ---
 ## Outcome

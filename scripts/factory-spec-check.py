@@ -64,27 +64,37 @@ REQUIRED_FM_KEYS = [
     "budget_cap_usd",
     "price_table_version",
     "approved_by",
+    "approved_at",
     "drafted_by",
 ]
 
 
+def strip_test_directive(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    while lines and re.match(r"^#\s*spec-check-expect:", lines[0]):
+        lines.pop(0)
+    return "".join(lines)
+
+
 def load_body(path: Path) -> str:
-    text = path.read_text(encoding="utf-8")
+    text = strip_test_directive(path.read_text(encoding="utf-8"))
     return strip_comment_wrapper(text)
 
 
 def strip_comment_wrapper(text: str) -> str:
-    stripped = text.lstrip("\ufeff")
-    if stripped.startswith(SPEC_MARKER):
-        rest = stripped[len(SPEC_MARKER) :].lstrip("\n")
+    no_bom = text.lstrip("\ufeff")
+    leading_stripped = no_bom.lstrip()
+    if leading_stripped.startswith(SPEC_MARKER):
+        rest = leading_stripped[len(SPEC_MARKER) :].lstrip("\n")
         return rest
-    return stripped
+    return no_bom
 
 
 def split_front_matter(text: str) -> tuple[dict[str, Any] | None, str]:
-    if not text.startswith("---"):
+    body_start = text.lstrip()
+    if not body_start.startswith("---"):
         return None, text
-    parts = text.split("---", 2)
+    parts = body_start.split("---", 2)
     if len(parts) < 3:
         return None, text
     raw = parts[1]
@@ -107,9 +117,22 @@ def extract_headings(markdown: str) -> list[str]:
     return headings
 
 
-def heading_index(headings: list[str], needle: str) -> int | None:
+def heading_matches_extended(heading: str, prefix: str) -> bool:
+    if heading == prefix:
+        return True
+    return heading.startswith(prefix + " (")
+
+
+def heading_index_base(headings: list[str], label: str) -> int | None:
     for i, h in enumerate(headings):
-        if needle in h:
+        if h == label:
+            return i
+    return None
+
+
+def heading_index_extended(headings: list[str], prefix: str) -> int | None:
+    for i, h in enumerate(headings):
+        if heading_matches_extended(h, prefix):
             return i
     return None
 
@@ -131,6 +154,11 @@ def check_front_matter(fm: dict[str, Any] | None, errors: list[str]) -> None:
 
     if fm.get("spec_version") != 1:
         errors.append("front matter spec_version must be 1")
+
+    if fm.get("status") == "approved":
+        at = fm.get("approved_at")
+        if at is None or (isinstance(at, str) and not at.strip()):
+            errors.append("front matter approved_at is required when status is approved")
 
     for field, allowed in (
         ("complexity", COMPLEXITY),
@@ -179,7 +207,7 @@ def check_headings(markdown: str, fm: dict[str, Any] | None, errors: list[str]) 
 
     last = -1
     for label in BASE_HEADINGS:
-        idx = heading_index(headings, label)
+        idx = heading_index_base(headings, label)
         if idx is None:
             errors.append(f"missing base section heading: {label}")
             continue
@@ -189,8 +217,8 @@ def check_headings(markdown: str, fm: dict[str, Any] | None, errors: list[str]) 
 
     complexity = fm.get("complexity") if fm else None
     risk = fm.get("risk") if fm else None
-    for label in extended_required(complexity, risk):
-        if heading_index(headings, label) is None:
+    for label in sorted(extended_required(complexity, risk)):
+        if heading_index_extended(headings, label) is None:
             errors.append(f"missing required extended section heading: {label}")
 
 

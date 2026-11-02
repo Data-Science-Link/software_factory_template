@@ -1,3 +1,4 @@
+
 <!-- factory-spec v1 -->
 ---
 spec_version: 1
@@ -17,6 +18,7 @@ predicted_cost_usd: 0.50
 budget_cap_usd: 1.00
 price_table_version: 2026-11-01
 approved_by: null
+approved_at: null
 drafted_by: oc-spec-run
 ---
 ## Outcome
