@@ -115,6 +115,12 @@ if ! bash "$PRISTINE_DIR/pr-check.sh" "$body_file" "$OC_ARTIFACT_DIR/pr-files.tx
   exit 1
 fi
 
+# Push only after scan/apply/commit/pr-check. Credentials come from GH_TOKEN via gh (not checkout persist).
+if [ -z "${GH_TOKEN:-}" ]; then
+  echo "publish: GH_TOKEN is required to push and open the PR" >&2
+  exit 1
+fi
+gh auth setup-git
 git push -u origin "$branch"
 
 gh pr create \
@@ -122,5 +128,9 @@ gh pr create \
   --body-file "$body_file" \
   --base main \
   --head "$branch"
+
+# Drop credential helper from this repo's local config (token must not linger for later steps).
+git config --local --remove-section credential 2>/dev/null || \
+  git config --local --unset-all credential.helper 2>/dev/null || true
 
 echo "publish: pull request opened for branch $branch"
