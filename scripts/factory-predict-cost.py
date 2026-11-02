@@ -2,6 +2,11 @@
 """Route a DeepInfra model and predict run cost from a factory spec + models.yaml.
 
 Reads only the spec file and .factory/models.yaml (or --models). No network.
+
+The model is always routed from models.yaml. A spec's `model` is kept only as an owner
+override, i.e. when `model_override_reason` is non-empty; otherwise it is replaced by the
+routed model (and overwritten with --write). Checks and the cost cap apply either way.
+The split guard uses budget.issue_cap_usd; checks rule 6 is the fallback when it is absent.
 """
 from __future__ import annotations
 
@@ -170,26 +175,41 @@ def compute(
         raise SystemExit("spec front matter missing complexity")
 
     ctx = routing_context(fm)
-    model_id = fm.get("model")
-    model_reason = fm.get("model_reason")
+    rule, route_reason = select_route(routing_rules, ctx)
+    if rule is None:
+        raise SystemExit("no routing rule matched; cannot select a model")
+    routed_model = rule.get("model")
+    routed_rule = rule.get("rule")
+
+    spec_model = fm.get("model")
+    override_reason = fm.get("model_override_reason")
+    is_override = (
+        not is_empty_model(spec_model)
+        and isinstance(override_reason, str)
+        and bool(override_reason.strip())
+    )
     selected_via_rule: int | None = None
 
-    if is_empty_model(model_id):
-        rule, reason = select_route(routing_rules, ctx)
-        if rule is None:
-            raise SystemExit("no routing rule matched; cannot select a model")
-        model_id = rule.get("model")
-        model_reason = reason
-        selected_via_rule = rule.get("rule")
+    if is_override:
+        model_id = str(spec_model).strip()
+        model_reason = f"owner override: {override_reason.strip()}"
+        if model_id in SPECIAL_MODELS:
+            raise SystemExit(f"spec model {model_id!r} is not a concrete DeepInfra model id")
+        if model_id != routed_model:
+            print(
+                f"warning: spec model {model_id} differs from routed model {routed_model} "
+                f"(rule {routed_rule}); kept as owner override",
+                file=sys.stderr,
+            )
+    else:
+        model_id = routed_model
+        model_reason = route_reason
+        selected_via_rule = routed_rule
         if model_id in SPECIAL_MODELS:
             raise SystemExit(
                 f"routing rule {selected_via_rule} requires a human/model choice "
                 f"({model_id!r}); cannot predict cost automatically"
             )
-    else:
-        model_id = str(model_id).strip()
-        if model_id in SPECIAL_MODELS:
-            raise SystemExit(f"spec model {model_id!r} is not a concrete DeepInfra model id")
 
     price_row = model_prices(models_list, model_id)
     tokens_in, tokens_cached, tokens_out = predict_tokens(priors, str(complexity))
@@ -206,7 +226,8 @@ def compute(
     check_ctx["predicted_cost_usd"] = predicted_cost
     check_actions = apply_checks(checks_block, check_ctx)
 
-    issue_cap = float(budget["issue_cap_usd"])
+    cap_raw = budget.get("issue_cap_usd")
+    issue_cap: float | None = float(cap_raw) if cap_raw is not None else None
     issue_target = float(budget["issue_target_usd"])
 
     result: dict[str, Any] = {
@@ -218,6 +239,9 @@ def compute(
         "model": model_id,
         "model_reason": model_reason,
         "selected_via_rule": selected_via_rule,
+        "model_override": is_override,
+        "routed_model": routed_model,
+        "routed_rule": routed_rule,
         "predicted_tokens_in": tokens_in,
         "predicted_tokens_cached": tokens_cached,
         "predicted_tokens_out": tokens_out,
@@ -242,18 +266,28 @@ def compute(
                 "(set owner_approved_priority: true in the spec after Michael asks)"
             )
 
-    if "do_not_run_split_issue" in check_actions:
+    # Split guard: budget.issue_cap_usd is the source of truth; checks rule 6 only as fallback.
+    if issue_cap is not None:
+        if predicted_cost > issue_cap:
+            print(
+                f"predicted cost ${predicted_cost:.4f} exceeds issue cap ${issue_cap:.2f} "
+                "(budget.issue_cap_usd); split this issue",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+    elif "do_not_run_split_issue" in check_actions:
         print(
-            f"predicted cost ${predicted_cost:.4f} exceeds issue cap ${issue_cap:.2f}; "
-            "split this issue",
+            f"predicted cost ${predicted_cost:.4f} exceeds the checks rule 6 cap "
+            "(budget.issue_cap_usd not set); split this issue",
             file=sys.stderr,
         )
         raise SystemExit(2)
 
     if predicted_cost > issue_target:
+        cap_note = f"${issue_cap:.2f}" if issue_cap is not None else "checks rule 6"
         print(
             f"warning: predicted cost ${predicted_cost:.4f} is above target "
-            f"${issue_target:.2f} (cap ${issue_cap:.2f})",
+            f"${issue_target:.2f} (cap {cap_note})",
             file=sys.stderr,
         )
 
