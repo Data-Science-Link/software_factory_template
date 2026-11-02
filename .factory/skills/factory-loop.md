@@ -10,30 +10,33 @@ Also follow `liability-gates.md` on every change.
 2. Read `.factory/FACTORY.md`, `.factory/DOCS.md`, `.factory/skills/liability-gates.md`, and recent `.factory/DECISIONS.md`.
 3. Open the issue. Ensure a one-sentence outcome is visible (comment if needed). If still unclear, ask once on the issue — then stop guessing.
 
-## Triage
+## Selection
 
-- **Easy** — clear, low risk: skip specs; branch and implement.
-- **Hard** — write short product + technical specs on the issue (or linked files); wait for human approval before coding.
-- **High-risk** (license, secrets, auth, crypto, safety, workflows): treat as hard; human review required before merge.
+- **Michael chooses the work.** Not every issue becomes agent work. Only issues Michael selects (`factory:selected` on GitHub, or "select #N" to Grok Bot) get a spec and an Actions run.
+- If the issue is not selected, stop after intake (or help refine the outcome on the issue). Do not write a spec or start `/oc run` without selection.
+- Epic/build issues may be worked by Cursor cloud agents per their issue scope; the default **project** path is still selection → spec → `/oc run`.
+
+## Spec (replaces the old handoff block)
+
+For every **selected** issue ready to work, the Factory Manager writes a **spec** from `.factory/templates/spec.md` (same base sections every time; standard/complex add extended sections — the template file lands in the spec-template issue). Until that file exists in the repo, use the section list in `.factory/VISION.md` §5.
+
+- Post the spec as a comment on the issue (`<!-- factory-spec v1 -->`). The Actions run commits the approved copy into its PR as `factory/specs/issue-<N>.md`.
+- **Classify** in the spec front matter: complexity (`simple | standard | complex` + reason), risk class (`trivial | normal | high`), model, predicted cost, budget cap. When Michael says medium/high **complexity**, use **standard/complex**; medium/high **risk** means **normal/high**. Complexity picks the model; risk class alone decides the merge gate. Never use risk words for complexity.
+- **Spec approval:** Michael for standard/complex or normal/high risk; Grok Bot may self-approve **simple + trivial** only.
+- Scope each spec to hit the budget target (most issues under $0.10; hard cap $1 per issue). Split anything predicted above $1 before a run.
+- **Local open-weights fallback:** the approved spec's **Worker prompt** section is what the local agent runs (`skills/local-open-weights-run.md`); there is no separate handoff block.
+
+## Triage (manager, before spec)
+
+- **High-risk** (license, secrets, auth, crypto, safety, workflows): always standard/complex spec + human spec approval and merge gate.
 - Assign a **risk class** on the PR: `trivial` | `normal` | `high` (see merge authority).
 - **Rate complexity, then pick the model** (required before any launch). Post a one-line triage note on the issue: `Complexity: simple | standard | complex — <reason>; Risk: trivial | normal | high; Model: <pinned model + effort>`. Complexity picks the model; risk class alone decides the merge gate. Never use risk words (trivial/normal/high) for complexity. Judge by what the change touches, not its size (workflows, algorithms, data stores, spend paths, security, multi-file logic are **complex**). Then pick the model from the full `.factory/MODEL_ROUTING.md` table — its writing, review, escalation and stuck rows included — not a two-model shortcut. Pin the model on every cloud-agent launch, including restarts and reviews (never Auto, never Fast). An unpinned or mismatched launch is stopped and relaunched pinned. Copy the triage line into the PR body.
-- **Handoff block** on every ready-to-work issue, so any agent or harness (including a Local open-weights run, `local-open-weights-run.md`) can pick it up:
-  ```
-  Goal: <one sentence>
-  Prompt: Read issue #N with `gh issue view N` and `.factory/FACTORY.md` first. <self-contained prompt: repo, issue #, what to change, constraints; sync latest default branch, branch, open a PR that references the issue, fill the PR template>. Tick the done checks in the PR body as you finish them.
-  Read first: <paths on the current default branch, e.g. FACTORY.md, DOCS.md, relevant docs or style guides>
-  Done checks: <acceptance checks>
-  Complexity: S | M | L (simple | standard | complex); Risk: trivial | normal | high
-  Budget: target < $0.10 (S/M); complex may scale up; hard cap $1 per issue (Local open-weights spend)
-  Model: Cursor `<model>` · Local open-weights `<provider model ID; default Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo>` (MODEL_ROUTING.md)
-  Cloud agents: ignore the Local open-weights line and use the model you were launched with.
-  Local agents (Cursor desktop or another harness on the human's machine using an open-weights provider such as DeepInfra): use the Local open-weights model named above and follow skills/local-open-weights-run.md.
-  ```
-  Triage scopes each issue to hit the budget target and splits any issue likely to cost more than $1 into smaller issues.
+- Triage scopes each issue to hit the budget target and splits any issue likely to cost more than $1 into smaller issues.
 
 ## Build
 
-- Branch from default; open a PR that references the issue.
+- **Default:** `/oc run` on a selected issue with an approved spec — the Actions worker syncs, branches, implements the spec, and opens or updates the PR.
+- **Epic / template build / backup:** Cursor cloud agent (or local open-weights): sync latest default branch, branch from default, open a PR that references the issue.
 - Run at most 4 coding agents at once (or the repo's number in DECISIONS); keep a restart list on the issue (running agent, branch, next step). Outside coding agents follow this same loop and need the owner's cost yes first (see FACTORY.md Rules).
 - Stay inside issue scope. Lasting choices → `.factory/DECISIONS.md`.
 - Follow repo conventions via `.factory/DOCS.md` and any repo-specific skills here.
