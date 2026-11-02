@@ -1,6 +1,6 @@
 # Factory vision: a standardized cloud factory (GitHub Actions + DeepInfra + Grok Bot manager)
 
-- **Status:** Proposed, 2026-11-01. Waiting on Michael (CEO) to review the vision PR. Nothing here is live until the child issues of the epic land.
+- **Status:** Proposed, 2026-11-01; the ten design decisions in [§18](#18-decisions-2026-11-02) were **accepted on 2026-11-02**: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat). The vision PR itself still waits for Michael's review. Nothing here is live until the child issues of the epic land.
 - **Owner:** Michael Link (CEO). **Drafted by:** the Software Factory Builder (Grok Bot) from Michael's notes of 2026-11-01.
 - **Epic:** [#38](https://github.com/Data-Science-Link/software_factory_template/issues/38) · **Lives at:** `.factory/VISION.md` (method docs live in `.factory/`, per the README).
 - **Replaces as the default path:** the Local open-weights harness (desktop Cursor + DeepInfra) described in `MODEL_ROUTING.md` and `skills/local-open-weights-run.md`. See [What's retired](#14-whats-retired-and-whats-kept).
@@ -54,7 +54,7 @@ intake → selection → spec → risk + complexity + model + predicted cost →
 |---|---|---|---|---|
 | 1 | **Intake** | Anyone (Michael, Grok Bot, coordinator) | A GitHub issue with a one-sentence outcome. Most issues stop here. | The issue |
 | 2 | **Selection** | Michael | Michael adds `factory:selected` (GitHub mobile) or tells Grok Bot "select #N". Only selected issues go further. A group of related issues can share one spec. | Label |
-| 3 | **Spec** | Grok Bot | Writes the spec from `.factory/templates/spec.md` (same base sections every time; extended sections for standard/complex). Posted on the issue as a spec comment and committed by the run as `factory/specs/issue-<N>.md`. | Spec comment / file |
+| 3 | **Spec** | Grok Bot | Writes the spec from `.factory/templates/spec.md` (same base sections every time; extended sections for standard/complex). A complex spec may instead be drafted by an `/oc spec` run on V4 Pro, logged like any run. The approved spec lives as a spec comment on the issue (`<!-- factory-spec v1 -->`); the run commits it into its PR as `factory/specs/issue-<N>.md`. No separate spec PR. | Spec comment → file in the run's PR |
 | 4 | **Classify** | Grok Bot | Complexity (`simple / standard / complex` + reason), risk class (`trivial / normal / high`), model from `.factory/models.yaml`, predicted cost from `scripts/factory-predict-cost.py`. Anything predicted above $1 is split first. | Spec front matter |
 | 5 | **Spec approval** | Michael (standard/complex, or normal/high risk); Grok Bot may self-approve simple + trivial | Michael replies "approve spec" (or edits). | Spec `status: approved` |
 | 6 | **Run** | Michael or Grok Bot (on Michael's account) comments `/oc run` on the issue | GitHub Actions spins up a VM, starts the cost clock, runs OpenCode on the routed DeepInfra model with the spec as the prompt, opens a PR. | Workflow run |
@@ -231,7 +231,7 @@ One JSON file per agent run, written by `scripts/factory-run-end.sh`, validated 
 
 A run whose gate fails still has its cost logged; the failure is a finding for Grok Bot to triage, and the PR is not reviewable until a rerun passes.
 
-**GitHub limitation to design around:** PRs and pushes made with the default `GITHUB_TOKEN` don't trigger other workflows, so `pr-check.yml` and `secret-scan.yml` won't start on a PR the harness opened that way. The gate therefore runs `pr-check.sh` and gitleaks **inside the same job**. They re-run normally whenever Michael (a human) edits the PR body or pushes. Alternatives are the OpenCode GitHub App token (OIDC mode, whose PRs do trigger workflows) or a fine-grained token stored as an Actions secret; see open questions.
+**GitHub limitation to design around:** PRs and pushes made with the default `GITHUB_TOKEN` don't trigger other workflows, so `pr-check.yml` and `secret-scan.yml` won't start on a PR the harness opened that way. The gate therefore runs `pr-check.sh` and gitleaks **inside the same job**. They re-run normally whenever Michael (a human) edits the PR body or pushes. **Decided (2026-11-02, §18 decision 3):** runs use the default `GITHUB_TOKEN` with these in-job checks and a `factory-gate` commit status on the head commit. The OpenCode GitHub App (OIDC) and a fine-grained token secret are not used.
 
 ## 10. Model routing
 
@@ -246,7 +246,7 @@ A run whose gate fails still has its cost logged; the failure is a finding for G
 **Rules (first match wins):**
 
 1. `risk: high` or `complexity: complex` → V4 Pro.
-2. `work_type: spec` and the spec is for standard/complex work → V4 Pro (or Grok Bot writes it on its own plan; see open questions).
+2. `work_type: spec` (an `/oc spec` run, used only for complex specs) → V4 Pro. By default Grok Bot writes specs on its own plan with no DeepInfra spend (§18 decision 6).
 3. Everything else → V4 Flash.
 4. One failed attempt on Flash for standard work → rerun once on Pro, recorded as `escalated_from`.
 5. Tool-call or reasoning-format errors on a DeepSeek model → Qwen3-Coder, and file an issue.
@@ -307,7 +307,7 @@ Contents:
 6. **Quality of spend:** % of runs that passed the gate first time, % merged, cost of abandoned runs.
 7. **Data freshness:** last run included, last refresh time (UTC and Central).
 
-Refresh: `factory-financials.yml` (added by Michael by hand) runs weekly at an odd minute and on demand: collect runs, build seeds, `dbt build`, regenerate the page, and open a trivial-risk PR that Grok Bot may merge. GitHub Pages is an option later; on a private repo it needs a paid plan, so markdown is the default.
+Refresh: `factory-financials.yml` (added by Michael by hand) runs weekly at an odd minute and on demand: collect runs, build seeds, `dbt build`, regenerate the page, and open a trivial-risk PR that Grok Bot may merge. **Decided (2026-11-02, §18 decisions 2 and 8):** the dashboard is this generated markdown page, not GitHub Pages (Pages on a private repo needs a paid plan), refreshed weekly and on demand.
 
 ## 13. Security guardrails
 
@@ -318,7 +318,7 @@ New for Actions runs:
 - **Owner-only trigger.** The run job's `if:` requires `github.event.comment.user.login == 'Data-Science-Link'` and `author_association == 'OWNER'`, and the comment must **start with** `/oc` (not merely contain it), so pasted text or bot comments can't start a run.
 - **PR-only.** The harness opens or updates a PR and stops. No merge step exists in any workflow.
 - **Least privilege.** Job permissions are `contents: write`, `pull-requests: write`, `issues: write` and nothing else. The only secret in the job is `DEEPINFRA_API_KEY`. Workflow files can't be changed by the factory's token, and the gate fails a diff that touches `.github/workflows/`.
-- **Key safety.** The key lives only as an Actions repo secret (never in a file, issue, PR or log). It has a DeepInfra spending limit as the hard backstop. `opencode.json` sets tool permissions to deny commands that print the environment or call the network directly (`env`, `printenv`, `curl`, `wget`) where OpenCode allows it.
+- **Key safety.** Actions uses **its own DeepInfra key**, separate from the local factory key (§18 decision 4). It lives only as the `DEEPINFRA_API_KEY` Actions repo secret (never in a file, issue, PR or log) and has its own **$10/month** DeepInfra spending limit as the hard backstop (§18 decision 5). `opencode.json` sets tool permissions to deny commands that print the environment or call the network directly (`env`, `printenv`, `curl`, `wget`) where OpenCode allows it.
 - **Prompt injection.** Issue and PR text is untrusted input for the model. The worker prompt says so, the scope comes from the approved spec, and the gate checks the diff, not the model's claims.
 - **Concurrency.** One run per issue at a time (`concurrency: factory-issue-<N>`); at most 4 runs at once across the repo (existing agent cap).
 - **Timeouts and caps.** `timeout-minutes` on the job (about 20 minutes by default) protects the 2,000-minute monthly allowance; the gate fails any run over the $1 cap; the DeepInfra spending limit stops spend outright.
@@ -326,12 +326,12 @@ New for Actions runs:
 
 ## 14. Phone kickoff
 
-One-time setup by Michael (about 15 minutes, on a laptop once): add the `DEEPINFRA_API_KEY` Actions secret; set a monthly spending limit on that DeepInfra key; paste `factory-run.yml` and `factory-financials.yml` from their issues; allow GitHub Actions to create pull requests (Settings → Actions → General → Workflow permissions); optionally install the OpenCode GitHub App.
+One-time setup by Michael (about 15 minutes, on a laptop once): create a new DeepInfra key used only by Actions and set its spending limit to $10/month; add it as the `DEEPINFRA_API_KEY` Actions secret; paste `factory-run.yml` and `factory-financials.yml` from their issues; allow GitHub Actions to create pull requests (Settings → Actions → General → Workflow permissions). No GitHub App to install: runs use the default `GITHUB_TOKEN`.
 
 After that, from the phone:
 
 1. **Select:** add `factory:selected` in GitHub mobile, or tell Grok Bot "work on #42".
-2. **Spec:** Grok Bot posts the spec on the issue with model and predicted cost. For standard/complex or normal/high work, Michael replies "approve spec".
+2. **Spec:** Grok Bot posts the spec comment on the issue with model and predicted cost (for a complex spec it may run `/oc spec` on V4 Pro first). For standard/complex or normal/high work, Michael replies "approve spec".
 3. **Run:** Michael comments `/oc run` on the issue, or tells Grok Bot "run #42" and it posts the comment from Michael's account.
 4. **Review:** Grok Bot posts a `Factory review` and tells Michael: "PR #57 ready, normal risk, cost $0.03 (predicted $0.03). Approve?"
 5. **Approve:** "approve #57" to Grok Bot, or a GitHub review. Grok Bot records it in the PR body and merges per the risk rules.
@@ -357,32 +357,34 @@ After that, from the phone:
 - **$1 hard cap per issue**, summed over every run for that issue. The run start step refuses when the issue has already spent $1; the gate fails a run that ends over it.
 - **Target under $0.10** for most issues; complex work may go higher but never above $1. An issue predicted above $1 is split before any run.
 - **On-demand spend is never turned on** (Cursor or anywhere else).
-- **DeepInfra spending limit** on the Actions key is the backstop (amount: open question).
+- **DeepInfra spending limit:** $10/month to start, on the Actions-only key (decided 2026-11-02). It's the hard backstop; at about $0.10 per issue that's roughly 100 issues a month.
 - **Actions minutes:** 2,000 per month on GitHub Free private repos; the financials page and Grok Bot's daily check flag at 80%.
 - **Fixed cost:** the Cursor plan for Grok Bot (about $20/month) is tracked in `fixed_costs.csv` so the dashboard shows the full cost of the factory.
 
 ## 17. Risks and unknowns
 
-- **The OpenCode + DeepInfra + Actions combination is untested.** The first child issue is a spike on one trivial issue. Backup harness: the Claude Code Action with `ANTHROPIC_BASE_URL=https://api.deepinfra.com/anthropic`.
+- **The OpenCode + DeepInfra + Actions combination is untested.** The first child issue is a spike on one trivial issue. **Decided fallback (§18 decision 10):** if the spike fails, switch to the Claude Code Action with `ANTHROPIC_BASE_URL=https://api.deepinfra.com/anthropic`.
 - **Where exactly the harness reports token usage** in a CI run (and whether it includes every sub-session) is unknown until the spike.
 - **DeepSeek V4 thinking mode and tool calls:** the Cursor custom-key bug that drops `reasoning_content` doesn't necessarily apply to OpenCode, but it must be tested.
 - **Mid-run cost cap:** the harness may not stop itself at $1 mid-run. Backstops are the job timeout, OpenCode step limits and the DeepInfra spending limit; the gate catches the overrun after.
 - **Key-spend cross-check under parallel runs** can't separate runs that share a key; the record says `skipped_concurrent` rather than guess.
 
-## 18. Open questions for Michael
+## 18. Decisions (2026-11-02)
 
-Each is one decision with a recommended pick.
+These were the open questions in the first draft of this vision. Michael accepted every recommended pick: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat). Each one has a matching dated entry in `.factory/DECISIONS.md`.
 
-1. **Where run records live.** (a) Committed in each PR as `factory/runs/<run_id>.json`, plus a copy posted on the issue so failed or rejected runs still count — *recommended*; (b) a separate `factory-data` branch the workflow writes to directly. (b) means no PR conflicts but a second branch to manage.
-2. **Dashboard format.** (a) Generated markdown at `factory/financials/README.md` with Mermaid charts — *recommended*, works on a private Free repo and on mobile; (b) GitHub Pages, which needs a paid plan or a public repo.
-3. **GitHub identity for runs.** (a) Default `GITHUB_TOKEN`, with `pr-check` and gitleaks run inside the job — *recommended*, no extra app or token; (b) the OpenCode GitHub App (OIDC), so PRs trigger the normal workflows, at the cost of granting a third-party app write access.
-4. **DeepInfra key for Actions.** (a) A new key used only by Actions, with its own spending limit — *recommended*, separates Actions spend and limits the blast radius (this revisits the 2026-10-31 single-key decision); (b) reuse the single factory key.
-5. **Monthly DeepInfra limit.** (a) $10/month on the Actions key to start — *recommended*, about 100 typical issues; (b) another number.
-6. **Who writes specs.** (a) Grok Bot writes every spec on its Cursor plan, no DeepInfra spend — *recommended*; (b) complex specs are drafted by a `/oc spec` run on V4 Pro and logged like any other run.
-7. **Where an approved spec lives before the run.** (a) As a spec comment on the issue that the run commits into its PR as `factory/specs/issue-<N>.md` — *recommended*, no extra PR before each run; (b) a separate spec PR merged to `main` first.
-8. **Financials refresh.** (a) Weekly scheduled plus manual workflow that opens a trivial PR Grok Bot may merge — *recommended*; (b) regenerate inside every run PR (simpler, but parallel PRs conflict).
-9. **Trivial-risk merges.** (a) Keep today's rule: Grok Bot may merge trivial PRs after green checks and a passing gate — *recommended*; (b) Michael approves every PR.
-10. **If the spike fails.** (a) Switch to the Claude Code Action on DeepInfra's Anthropic-compatible endpoint — *recommended*; (b) write a thin custom harness script.
+| # | Question | Decision | What it means for the build |
+|---|---|---|---|
+| 1 | Where run records live | Each run record is committed in the run's PR as `factory/runs/<run_id>.json`, **plus** a copy posted on the issue (`<!-- factory-run-record -->`, trusted only from `github-actions[bot]`). No separate data branch. | Failed, rejected and closed runs still count: `factory-collect-runs.sh` pulls issue copies that aren't in `factory/runs/`. |
+| 2 | Dashboard format | A generated markdown page, `factory/financials/README.md`, with Mermaid charts. **Not** GitHub Pages. | Works on a private GitHub Free repo and on GitHub mobile. |
+| 3 | GitHub identity for runs | The default `GITHUB_TOKEN`, with `pr-check.sh` and gitleaks run **inside the run job**, plus a `factory-gate` commit status. No OpenCode GitHub App, no extra token. | The harness action runs with `use_github_token: true`; the gate is the in-job check of record. |
+| 4 | DeepInfra key for Actions | A **new DeepInfra key used only by Actions**, with its own spending limit. It supersedes the 2026-10-31 single-key decision for Actions runs only; the local key stays as is. | Separates Actions spend and limits the blast radius; the key-spend cross-check reads that key. |
+| 5 | Monthly DeepInfra limit | **$10/month** on the Actions key to start. | About 100 typical issues a month at the $0.10 target. |
+| 6 | Who writes specs | **Grok Bot writes specs** on its Cursor plan (no DeepInfra spend). A **complex** spec may use an `/oc spec` run on DeepSeek-V4-Pro-0813, logged like any other run. | Run start accepts `/oc spec` as well as `/oc run`. |
+| 7 | Where an approved spec lives | As a **spec comment on the issue** (`<!-- factory-spec v1 -->`); the run commits it into its PR as `factory/specs/issue-<N>.md`. No separate spec PR. | Specs reach `main` with the work they describe. |
+| 8 | Financials refresh | **Weekly** (scheduled, odd minute) and **on demand** (`workflow_dispatch`); the workflow opens a trivial-risk refresh PR. | Run PRs don't touch the dashboard, so parallel PRs don't conflict. |
+| 9 | Trivial-risk merges | **Keep today's rule:** Grok Bot may merge trivial-risk PRs after green checks and a passing gate. Normal and high still need Michael. | No change to merge authority in `FACTORY.md`. |
+| 10 | If the spike fails | Fall back to the **Claude Code Action** on DeepInfra's Anthropic-compatible endpoint (`ANTHROPIC_BASE_URL=https://api.deepinfra.com/anthropic`). | No custom harness. |
 
 ## 19. Definition of done (for the epic)
 
