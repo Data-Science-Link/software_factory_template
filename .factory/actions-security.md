@@ -24,6 +24,7 @@ Threat model and controls for the `/oc` spike workflow (`opencode-spike.yml`). *
 7. **Pinned** third-party Actions (full SHA) and pinned OpenCode version with SHA-512.
 8. **Optional:** `step-security/harden-runner` in **audit** mode first (egress visibility before block mode).
 9. **No merge** step; no push to `main`; concurrency per issue; job timeout.
+10. **Bot-opened PRs + `main` ruleset:** PRs from `github-actions[bot]` (publish job) are first-time contributors from GitHub’s workflow perspective. On the protected `main` branch (`pr-check` + gitleaks required, strict), open the PR → **Approve workflows to run** (or org/repo **Actions → General → Fork pull request workflows** / workflow approval settings as configured) so `pr-check` and gitleaks execute on the harness PR before merge.
 
 ## If a secret leaks
 
