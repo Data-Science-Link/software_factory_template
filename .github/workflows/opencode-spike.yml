@@ -54,6 +54,10 @@ jobs:
       - name: Run OpenCode agent
         run: bash scripts/opencode-agent-run.sh
 
+      - name: Usage report (always)
+        if: always()
+        run: bash scripts/opencode-usage-report.sh
+
       - name: Upload agent artifacts
         if: success()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -61,10 +65,6 @@ jobs:
           name: oc-artifacts-${{ github.run_id }}
           path: ${{ env.OC_ARTIFACT_DIR }}/
           if-no-files-found: error
-
-      - name: Usage report (always)
-        if: always()
-        run: bash scripts/opencode-usage-report.sh
 
   publish:
     needs: agent
@@ -105,9 +105,8 @@ jobs:
             echo "### OpenCode spike publish"
             echo "- Issue: #${OC_ISSUE_NUMBER}"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${OC_RUN_ID}"
-            if [ -f "${OC_ARTIFACT_DIR}/summary.md" ]; then
+            if [ -f "${OC_ARTIFACT_DIR}/usage-metrics.md" ]; then
               echo ""
-              echo "#### Token usage (from agent summary)"
-              sed -n '/Token usage/,$p' "${OC_ARTIFACT_DIR}/summary.md" | head -n 20
+              cat "${OC_ARTIFACT_DIR}/usage-metrics.md"
             fi
           } >> "$GITHUB_STEP_SUMMARY"

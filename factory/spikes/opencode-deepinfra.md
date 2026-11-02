@@ -13,33 +13,60 @@ Part of [#38](https://github.com/Data-Science-Link/software_factory_template/iss
 
 | Step | What | Pass? |
 | --- | --- | --- |
-| 1 | Merge phase 1 PR; install workflow if staged under `.factory/workflows-to-install/` | |
-| 2 | Add `DEEPINFRA_API_KEY` + Actions settings (see PR **Michael: what to do next**) | |
-| 3 | Open trivial test issue; comment `/oc …` from `Data-Science-Link` | |
-| 4 | Actions run green; PR opened by `github-actions[bot]` | |
-| 5 | No secrets in logs, PR, or comments | |
-| 6 | DeepInfra spend for run under ~$0.05 | |
+| 1 | Merge phase 1 PR; install workflow if staged under `.factory/workflows-to-install/` | x |
+| 2 | Add `DEEPINFRA_API_KEY` + Actions settings (see PR **Michael: what to do next**) | x |
+| 3 | Open trivial test issue; comment `/oc …` from `Data-Science-Link` | x |
+| 4 | Actions run green; PR opened by `github-actions[bot]` | x |
+| 5 | No secrets in logs, PR, or comments | x |
+| 6 | DeepInfra spend for run under ~$0.05 | x |
 
 ## Results (fill after first real run)
 
+### Run A — publish push fix validation (failed publish)
+
 | Field | Value |
 | --- | --- |
-| Date (UTC) | |
-| Workflow run URL | |
-| Target issue | |
-| PR opened | |
-| Actions billable minutes | |
-| Wall time (approx) | |
-| Tokens in | |
-| Tokens cached | |
-| Tokens out | |
-| Usage source (command / file) | |
-| Sample usage JSON (redacted) | |
-| Cost (tokens × price table) | |
-| Key spend delta (Actions key) | |
-| DeepSeek V4 Flash tool calls OK? | |
-| `pr-check` / `secret-scan` on harness PR? | |
-| **Go / no-go** | |
+| Date (UTC) | 2026-11-02 |
+| Workflow run URL | https://github.com/Data-Science-Link/software_factory_template/actions/runs/41405259087 |
+| Target issue | #42 |
+| PR opened | (none — publish failed at `git push`; fixed in PR #43) |
+| Actions billable minutes | not measured (GitHub UI / billing export not captured in this spike) |
+| Wall time (approx) | agent ~49s (07:16:48–07:17:37 UTC); publish failed ~7s |
+| Tokens in | 17.7K |
+| Tokens cached | 106.5K cache read |
+| Tokens out | 1.2K |
+| Usage source (command / file) | `opencode stats --models` in agent artifact `summary.md` |
+| Sample usage JSON (redacted) | N/A — stats TUI only on runner |
+| Cost (tokens × price table) | **$0.0029** (OpenCode-reported model row) |
+| Key spend delta (Actions key) | not measured |
+| DeepSeek V4 Flash tool calls OK? | yes (read/bash/glob/grep/write in stats) |
+| `pr-check` / `secret-scan` on harness PR? | N/A (no PR) |
+| **Go / no-go** | no-go for ship until publish push fixed |
+
+### Run B — end-to-end success (harness PR #45)
+
+| Field | Value |
+| --- | --- |
+| Date (UTC) | 2026-11-02 |
+| Workflow run URL | https://github.com/Data-Science-Link/software_factory_template/actions/runs/41406322310 |
+| Target issue | #42 |
+| PR opened | #45 (merged e269539; closed #42) |
+| Actions billable minutes | not measured |
+| Wall time (approx) | agent ~41s; publish ~12s (run timestamps) |
+| Tokens in | 17.3K |
+| Tokens cached | 103.2K cache read |
+| Tokens out | 1.2K |
+| Usage source (command / file) | `opencode stats --models` in artifact `summary.md` |
+| Sample usage JSON (redacted) | N/A |
+| Cost (tokens × price table) | **$0.0028** (OpenCode-reported model row) |
+| Key spend delta (Actions key) | not measured |
+| DeepSeek V4 Flash tool calls OK? | yes |
+| `pr-check` / `secret-scan` on harness PR? | required on `main` ruleset; bot PR needed **Approve workflows to run** before CI (see `.factory/actions-security.md`) |
+| **Go / no-go** | **go** for `/oc` spike harness on trivial issues; factory cost metering remains #30 |
+
+### Spike conclusion
+
+Two-job split, pinned CLI, artifact scan, and scoped publish push work on a real `/oc` run. Token totals and OpenCode cost are available from `opencode stats --models` on the agent runner; harness PR bodies and Actions summaries must use parsed markdown (not raw TUI). Close-out PR fixes empty usage sections.
 
 ## Security notes
 

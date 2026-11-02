@@ -49,7 +49,15 @@ fi
 git commit -m "OpenCode: issue #${OC_ISSUE_NUMBER} (run ${OC_RUN_ID})"
 
 body_file="$OC_ARTIFACT_DIR/pr-body.md"
-summary_excerpt="$(sed -n '1,40p' "$summary")"
+usage_metrics="$OC_ARTIFACT_DIR/usage-metrics.md"
+usage_block="$(cat "$usage_metrics" 2>/dev/null || echo '## Token usage (opencode stats)'$'\n\n(not available)')"
+cost_line="Cost: not measured on DeepInfra (opencode stats unavailable)"
+if [ -f "$usage_metrics" ]; then
+  reported="$(grep -F 'OpenCode-reported cost:' "$usage_metrics" | sed 's/^- OpenCode-reported cost: //' || true)"
+  if [ -n "$reported" ] && [ "$reported" != "not available" ]; then
+    cost_line="Cost: ${reported} on DeepInfra (OpenCode stats; factory metering is issue #30)"
+  fi
+fi
 
 cat >"$body_file" <<EOF
 ## Summary
@@ -99,13 +107,9 @@ AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Flash-073
 
 Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${OC_RUN_ID}
 
-Agent summary (excerpt):
+${usage_block}
 
-\`\`\`
-${summary_excerpt}
-\`\`\`
-
-Cost: not measured (OpenCode spike; usage in run summary when available)
+${cost_line}
 
 ## Notes for reviewers
 

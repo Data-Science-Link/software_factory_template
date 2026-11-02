@@ -22,9 +22,10 @@ if [ -n "$status_after_install" ]; then
 fi
 echo "OK: git status --porcelain empty after gitleaks install"
 
-echo "== simulate: worker creates hello.md =="
+echo "== simulate: worker creates spike sim file =="
 mkdir -p factory/spikes
-echo "Hello from OpenCode spike." >factory/spikes/hello.md
+sim_file=factory/spikes/opencode-sim-test.md
+echo "Hello from OpenCode spike sim." >"$sim_file"
 export OC_ARTIFACT_DIR="$work/artifacts"
 export OC_ISSUE_NUMBER=99999
 mkdir -p "$OC_ARTIFACT_DIR"
@@ -37,19 +38,30 @@ git add -A -- . \
 git diff --cached --binary >"$OC_ARTIFACT_DIR/changes.patch"
 printf '# summary\n' >"$OC_ARTIFACT_DIR/summary.md"
 printf 'log\n' >"$OC_ARTIFACT_DIR/opencode.log"
+cat >"$OC_ARTIFACT_DIR/usage-metrics.md" <<'USAGE'
+## Token usage (opencode stats)
+
+- Model: deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731
+- Input tokens: 1
+- Output tokens: 1
+- Cache read: 0
+- OpenCode-reported cost: $0.0000
+- Source: `opencode stats --models`
+USAGE
 
 bash scripts/opencode-artifact-scan.sh \
   "$OC_ARTIFACT_DIR/changes.patch" \
   "$OC_ARTIFACT_DIR/summary.md" \
+  "$OC_ARTIFACT_DIR/usage-metrics.md" \
   "$OC_ARTIFACT_DIR/opencode.log"
 
 files_in_patch="$(grep -E '^diff --git a/' "$OC_ARTIFACT_DIR/changes.patch" | awk '{print $4}' | sed 's|^b/||' | sort -u)"
-if [ "$files_in_patch" != "factory/spikes/hello.md" ]; then
-  echo "FAIL: patch files expected only factory/spikes/hello.md, got:"
+if [ "$files_in_patch" != "$sim_file" ]; then
+  echo "FAIL: patch files expected only $sim_file, got:"
   echo "$files_in_patch"
   exit 1
 fi
-echo "OK: patch contains only factory/spikes/hello.md"
+echo "OK: patch contains only $sim_file"
 
 echo "== simulate: publish apply + commit only (no push, not opencode-publish-pr.sh) =="
 publish="$work/publish"
@@ -66,11 +78,11 @@ git apply --check "$OC_ARTIFACT_DIR/changes.patch"
 git apply "$OC_ARTIFACT_DIR/changes.patch"
 git add -A
 git commit -q -m "sim"
-if [ "$(git diff-tree --no-commit-id --name-only -r HEAD | sort -u)" != "factory/spikes/hello.md" ]; then
+if [ "$(git diff-tree --no-commit-id --name-only -r HEAD | sort -u)" != "$sim_file" ]; then
   echo "FAIL: commit file list unexpected"
   git diff-tree --no-commit-id --name-only -r HEAD
   exit 1
 fi
-echo "OK: publish apply + commit contains only factory/spikes/hello.md"
+echo "OK: publish apply + commit contains only $sim_file"
 echo "NOTE: push path not covered here — run scripts/test-opencode-publish-push.sh"
 echo "PASS: agent + publish-apply simulation"
