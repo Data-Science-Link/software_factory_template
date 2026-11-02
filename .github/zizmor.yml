@@ -1,0 +1,9 @@
+# Suppress findings for workflows outside #44 scope (see PR #51 Follow-ups).
+# opencode-spike.yml: owner-only issue_comment trigger; documented in .factory/actions-security.md
+rules:
+  dangerous-triggers:
+    ignore:
+      - opencode-spike.yml
+  known-vulnerable-actions:
+    ignore:
+      - opencode-spike.yml

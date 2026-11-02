@@ -58,6 +58,10 @@ record() { # name status detail
   ROWS+=("$1|$2|$3")
 }
 
+is_plan_limit() { # $1 = gh error text
+  grep -qiE "Upgrade to GitHub Pro|make this repository public|Advanced Security" <<<"$1"
+}
+
 run_gh() { # description api-args...
   local desc="$1"
   shift
@@ -70,7 +74,7 @@ run_gh() { # description api-args...
     record "$desc" "pass" "ok"
     return 0
   fi
-  if grep -qiE "Upgrade to GitHub Pro|make this repository public|Advanced Security|422|403" <<<"$out"; then
+  if is_plan_limit "$out"; then
     record "$desc" "skip" "$(head -n1 <<<"$out")"
     return 0
   fi
@@ -90,31 +94,50 @@ run_gh "Dependabot security updates" api --method PUT "repos/$REPO/automated-sec
 
 # --- Default GITHUB_TOKEN read-only ---
 if [ "$DRY_RUN" -eq 1 ]; then
-  record "Default workflow token read-only" "dry-run" "would PATCH repos/$REPO default_workflow_permissions=read"
+  record "Default workflow token read-only" "dry-run" "would run: gh api --method PUT repos/$REPO/actions/permissions/workflow -f default_workflow_permissions=read"
 else
-  if gh api --method PATCH "repos/$REPO" \
+  out=""
+  if out="$(gh api --method PUT "repos/$REPO/actions/permissions/workflow" \
     -f default_workflow_permissions=read \
-    -F can_admins_bypass=false >/dev/null 2>&1; then
-    record "Default workflow token read-only" "pass" "read"
+    -F can_approve_pull_request_reviews=false 2>&1)"; then
+    perm="$(gh api "repos/$REPO/actions/permissions/workflow" --jq .default_workflow_permissions 2>/dev/null || echo unknown)"
+    if [ "$perm" = "read" ]; then
+      record "Default workflow token read-only" "pass" "read (verified)"
+    else
+      record "Default workflow token read-only" "fail" "read-back=$perm"
+    fi
+  elif is_plan_limit "$out"; then
+    record "Default workflow token read-only" "skip" "$(head -n1 <<<"$out")"
   else
-    record "Default workflow token read-only" "fail" "PATCH repos/$REPO refused"
+    record "Default workflow token read-only" "fail" "$(head -n1 <<<"$out")"
   fi
 fi
 
 # --- Secret scanning + push protection (plan-dependent) ---
+security_field_status() { # $1 = field name under security_and_analysis
+  gh api "repos/$REPO" --jq ".security_and_analysis.\"$1\".status // \"absent\"" 2>/dev/null || echo unknown
+}
+
 patch_security() {
   local field="$1"
   local label="$2"
   if [ "$DRY_RUN" -eq 1 ]; then
-    record "$label" "dry-run" "would enable via security_and_analysis"
+    record "$label" "dry-run" "would PATCH security_and_analysis.$field=enabled, then read back"
     return 0
   fi
-  local body
+  local body out st
   body="$(jq -n --arg f "$field" '{security_and_analysis: {($f): {status: "enabled"}}}')"
-  if gh api --method PATCH "repos/$REPO" --input - <<<"$body" >/dev/null 2>&1; then
-    record "$label" "pass" "enabled"
+  if out="$(gh api --method PATCH "repos/$REPO" --input - <<<"$body" 2>&1)"; then
+    st="$(security_field_status "$field")"
+    if [ "$st" = "enabled" ]; then
+      record "$label" "pass" "enabled (verified)"
+    else
+      record "$label" "fail" "read-back status=$st"
+    fi
+  elif is_plan_limit "$out"; then
+    record "$label" "skip" "$(head -n1 <<<"$out")"
   else
-    record "$label" "skip" "not available on this plan or visibility"
+    record "$label" "fail" "$(head -n1 <<<"$out")"
   fi
 }
 
@@ -122,7 +145,23 @@ patch_security secret_scanning "Secret scanning"
 patch_security secret_scanning_push_protection "Secret scanning push protection"
 
 if [ "$is_public" -eq 1 ]; then
-  patch_security private_vulnerability_reporting "Private vulnerability reporting"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    record "Private vulnerability reporting" "dry-run" "would run: gh api --method PUT repos/$REPO/private-vulnerability-reporting"
+  else
+    out=""
+    if out="$(gh api --method PUT "repos/$REPO/private-vulnerability-reporting" 2>&1)"; then
+      st="$(security_field_status private_vulnerability_reporting)"
+      if [ "$st" = "enabled" ]; then
+        record "Private vulnerability reporting" "pass" "enabled (verified)"
+      else
+        record "Private vulnerability reporting" "pass" "PUT ok (status=$st)"
+      fi
+    elif is_plan_limit "$out"; then
+      record "Private vulnerability reporting" "skip" "$(head -n1 <<<"$out")"
+    else
+      record "Private vulnerability reporting" "fail" "$(head -n1 <<<"$out")"
+    fi
+  fi
 else
   record "Private vulnerability reporting" "skip" "public repos only"
 fi
@@ -153,7 +192,7 @@ apply_ruleset() {
   fi
   local existing plan_out
   if ! existing="$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$name\") | .id" 2>&1)"; then
-    if grep -qiE "Upgrade to GitHub Pro|make this repository public" <<<"$existing"; then
+    if is_plan_limit "$existing"; then
       record "Ruleset protect-main" "skip" "private GitHub Free — use pre-push hook"
       return 0
     fi
@@ -175,7 +214,7 @@ apply_ruleset() {
   if out="$(gh api --method "$method" "$path" --input "$tmp" --jq .id 2>&1)"; then
     record "Ruleset protect-main (checks: $REQUIRED_CHECKS)" "pass" "$verb id $out"
   else
-    if grep -qiE "Upgrade to GitHub Pro|make this repository public" <<<"$out"; then
+    if is_plan_limit "$out"; then
       record "Ruleset protect-main" "skip" "private GitHub Free — use pre-push hook"
     else
       record "Ruleset protect-main" "fail" "$(head -n1 <<<"$out")"
@@ -197,7 +236,7 @@ history_scan() {
     return 0
   fi
   local here
-  here="$(git -C "$root" remote get-url origin 2>/dev/null | sed -E 's#.*github.com[:/](.+)(\.git)?$#\1#' || true)"
+  here="$(git -C "$root" remote get-url origin 2>/dev/null | sed -E 's#\.git$##; s#.*github.com[:/]##' || true)"
   if [ "$here" != "$REPO" ]; then
     record "Full-history gitleaks" "skip" "run from a clone of $REPO (this checkout is ${here:-unknown})"
     return 0
@@ -206,7 +245,8 @@ history_scan() {
   if log="$(gitleaks git --redact --verbose --exit-code 1 "$root" 2>&1)"; then
     record "Full-history gitleaks" "pass" "clean"
   else
-    findings="$(grep -c '^Finding:' <<<"$log" 2>/dev/null || echo "some")"
+    findings="$(grep -c '^Finding:' <<<"$log" 2>/dev/null || true)"
+    [ -n "$findings" ] || findings="some"
     record "Full-history gitleaks" "fail" "$findings finding(s) — tell owner privately; values not printed"
     echo "harden-repo: gitleaks reported leak(s). Details redacted; contact the owner out of band." >&2
   fi
