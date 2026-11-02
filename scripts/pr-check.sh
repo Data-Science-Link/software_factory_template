@@ -16,6 +16,17 @@
 #        or the PR template's "Tools used: <...>" and "Model(s) used: <...>" lines, both filled in;
 #   3. the body mentions "Local open-weights" or "DeepInfra" and has no "Cost:" line with a "$"
 #      amount or the words "not measured".
+#   4. Factory Actions run PR (see below): missing or empty required factory-run block fields.
+#
+# Factory Actions run PR (rule 4), detected deterministically when either:
+#   - the raw body contains the HTML marker `<!-- factory-run:start -->` (added by factory-run-end.sh when
+#     filling the block — the empty PR template does not include this marker), or
+#   - a plain line matches harness opencode-actions (e.g. AI disclosure: harness opencode-actions; model …).
+# Human PRs, Cursor cloud agent PRs without those markers, and legacy agent PRs do not trigger rule 4.
+# When triggered, the body must include non-empty: Run ID, Tokens in / cached / out, Predicted cost ($),
+# Actual cost ($), Gate, and a spec path `factory/specs/issue-<N>.md` (matches run record fields run_id,
+# tokens_in/tokens_cached/tokens_out, predicted_cost_usd, actual_cost_usd, gate, spec_path).
+#
 # Warns (doesn't fail) when the PR changes .factory/DECISIONS.md, .github/workflows/,
 # or this script, so the human looks closer.
 set -euo pipefail
@@ -34,6 +45,7 @@ errors=0
 fail() { echo "FAIL: $1"; [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=PR check::$1"; errors=$((errors + 1)); }
 warn() { echo "WARN: $1"; [ -n "${GITHUB_ACTIONS:-}" ] && echo "::warning title=PR check::$1"; return 0; }
 has()  { grep -qiE "$1" <<<"$plain"; }
+has_raw() { grep -qF "$1" <<<"$body"; }
 
 # 1. Issue link
 if ! has '(^|[^[:alnum:]])(closes|refs) #[0-9]+'; then
@@ -52,9 +64,35 @@ if [ "$agent" = yes ]; then
   fi
 fi
 
-# 3. Cost line for Local open-weights runs
+# 3. Cost line for Local open-weights runs (and factory runs that mention DeepInfra)
 if has 'local open-weights|deepinfra' && ! has '^Cost:.*[$][0-9]' && ! has '^Cost:.*not measured'; then
   fail 'Local open-weights PR needs a "Cost:" line with a $ amount (e.g. "Cost: $0.04 on DeepInfra") or "not measured".'
+fi
+
+# 4. Factory Actions run block (opencode-actions harness or factory-run HTML markers)
+factory_run=no
+if has_raw '<!-- factory-run:start -->' || has 'harness[[:space:]]+opencode-actions'; then
+  factory_run=yes
+fi
+if [ "$factory_run" = yes ]; then
+  if ! has '^Run ID:[[:space:]]*[^[:space:]]'; then
+    fail 'Factory run PR needs a non-empty "Run ID:" line (run record run_id).'
+  fi
+  if ! has '^Tokens in / cached / out:[[:space:]]*[0-9]'; then
+    fail 'Factory run PR needs "Tokens in / cached / out:" with token counts (run record tokens_in, tokens_cached, tokens_out).'
+  fi
+  if ! has '^Predicted cost:.*[$][0-9]'; then
+    fail 'Factory run PR needs "Predicted cost:" with a $ amount (run record predicted_cost_usd).'
+  fi
+  if ! has '^Actual cost:.*[$][0-9]'; then
+    fail 'Factory run PR needs "Actual cost:" with a $ amount (run record actual_cost_usd).'
+  fi
+  if ! has '^Gate:[[:space:]]*[^[:space:]]'; then
+    fail 'Factory run PR needs a non-empty "Gate:" line (run record gate).'
+  fi
+  if ! has 'factory/specs/issue-[0-9]+\.md'; then
+    fail 'Factory run PR needs a spec link to factory/specs/issue-<N>.md (run record spec_path).'
+  fi
 fi
 
 # Warnings: paths the human should look at closely

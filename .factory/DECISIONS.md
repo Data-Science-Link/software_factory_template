@@ -451,3 +451,11 @@ Append-only. Newest at the bottom.
 - **Why:** One machine-readable table lets routing and cost scripts stay deterministic; Flash is the cheapest capable default for simple/standard work under the $0.10 target.
 - **Alternatives:** Keep Qwen3-Coder as the local default only (2026-10-27) without a separate Actions table; duplicate prices in scripts instead of YAML.
 - **Revisit:** After the OpenCode spike (#22) reports tool-call results; after the first month of forecast vs actual (#36).
+
+### 2026-11-02 — PR template v2 factory-run block and pr-check detection
+- **Status:** Proposed, pending Michael.
+- **Decision:** Live PR template v2 (`.github/pull_request_template.md`) adds Spec, a factory-run field block (labels aligned with run record `run_id`, token fields, `predicted_cost_usd`, `actual_cost_usd`, `gate`, `spec_path`), and a workflows safety line. `scripts/pr-check.sh` applies the extra factory-run rules only when the body contains `<!-- factory-run:start -->` (inserted by `scripts/factory-run-end.sh`, not in the empty template) or `harness opencode-actions` in the AI disclosure. Scripts fill run facts deterministically; the worker model writes only the labeled "What I changed and why" narrative (#28 issue comment).
+- **Decided by:** Proposed by Cursor cloud agent implementing issue #28; Michael decides at merge (high-risk CI check change).
+- **Why:** Same PR shape for every Actions run without breaking human or Cursor-agent PRs that omit the factory marker; empty template placeholders must not fail pr-check.
+- **Alternatives:** Treat any `Run ID:` line in the template as a factory PR (rejected: fails every PR opened from the default template).
+- **Revisit:** After #30 lands and the first real `/oc run` PR body is gate-filled.

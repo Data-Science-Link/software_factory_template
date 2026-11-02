@@ -7,6 +7,10 @@
 
 Closes #   <!-- only the issue this PR finishes. Ledgers, trackers, epics: use "Refs #N" -->
 
+## Spec
+
+<!-- Link to the approved spec file committed in this PR (factory/specs/issue-<N>.md). -->
+
 ## Success metric from the original ask
 
 <!-- Normal/high: the number the requester cares about, its baseline, the target, and the pre-merge or projected value. Checked again after merge. -->
@@ -36,11 +40,37 @@ Closes #   <!-- only the issue this PR finishes. Ledgers, trackers, epics: use "
 
 ## AI disclosure
 
+AI disclosure: harness <!-- opencode-actions | Cursor cloud agent | local Cursor | … -->; model <!-- exact model ID -->
+
+<!-- Optional detail (legacy template lines still accepted by pr-check): -->
 - Tools used (factory manager / Cursor agent / both):
 - Model(s) used (per `.factory/MODEL_ROUTING.md`; note any escalation):
 - Cloud agent run ID(s) (for cost attribution):
 - Approx. share AI-authored: [ ] little [ ] mixed [ ] mostly
 - Human reviewed before merge: [ ] yes [ ] no — who: <!-- manager: set yes + name when chat/issue gate is given, BEFORE merge -->
+
+Cost: <!-- $ amount on DeepInfra, or "not measured" for non-DeepInfra harnesses -->
+
+## Factory run
+
+<!-- The block below is filled by scripts/factory-run-end.sh only — never by hand or by the model.
+     That script wraps the filled lines with <!-- factory-run:start --> and <!-- factory-run:end -->. -->
+
+Run ID:
+Workflow run:
+Model:
+Tokens in / cached / out:
+Predicted cost:
+Actual cost:
+Cost method:
+Key spend check:
+Actions minutes:
+Gate:
+Run record:
+
+## What I changed and why
+
+<!-- Worker narrative only: the run end script pastes this section from your labeled note. -->
 
 ## Safety checklist
 
@@ -49,6 +79,7 @@ Closes #   <!-- only the issue this PR finishes. Ledgers, trackers, epics: use "
 - [ ] New deps: licenses checked / allowlisted (or N/A)
 - [ ] Did not over-claim safety, security, or compliance in docs
 - [ ] Did not auto-merge normal/high work
+- [ ] **No change under `.github/workflows/`** (workflow edits are owner paste-by-hand only)
 - [ ] **UI / frontend / pages:** screenshots embedded or linked in **Evidence** (not only a PR comment)
 - [ ] Evidence saved under the head commit it shows (or N/A)
 - [ ] No test pairs a hardcoded date with the real clock
