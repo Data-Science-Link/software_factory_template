@@ -15,7 +15,9 @@ Live mode uses `gh api` (GH_TOKEN from the workflow step). --from-json reads a f
 
 --print-spec <comment id>: fetch that one comment again, re-run the same checks (owner, marker,
 status approved, factory-spec-check.py, belongs to --issue) and print the canonical spec text to
-stdout. Publish uses it to confirm the committed spec file is that exact text.
+stdout. Publish uses it to confirm the committed spec file is that exact text. Exit 3 (not 1)
+when the token may not read issue comments (HTTP 403), so publish can fall back to
+--check-spec-file <path>: re-validate a saved canonical spec (job A's spec.md) and print it.
 """
 from __future__ import annotations
 
@@ -114,13 +116,36 @@ def print_spec(args: argparse.Namespace) -> int:
     else:
         if not (args.repo and args.issue):
             die("--print-spec needs --repo and --issue")
-        c = json.loads(gh(f"repos/{args.repo}/issues/comments/{cid}"))
+        try:
+            c = json.loads(gh(f"repos/{args.repo}/issues/comments/{cid}"))
+        except subprocess.CalledProcessError as exc:
+            if "HTTP 403" in (exc.stderr or ""):
+                # The job token can't read issue comments (no issues: read). Exit 3 so the caller
+                # can fall back to --check-spec-file on job A's copy and say so in the PR.
+                print(f"opencode-build-context: no permission to read comment {cid} (HTTP 403)", file=sys.stderr)
+                return 3
+            die(f"cannot fetch spec comment {cid}: {(exc.stderr or '').strip()[:200]}")
         if not str(c.get("issue_url", "")).endswith(f"/issues/{args.issue}"):
             die(f"comment {cid} does not belong to issue #{args.issue}")
     body = c.get("body") or ""
     if not is_owner(c) or MARKER not in body or not says_approved(spec_text(body)):
         die(f"comment {cid} is not an owner-approved spec comment")
     text = canonical_spec(body)
+    check_spec(text)
+    sys.stdout.write(text)
+    return 0
+
+
+def check_spec_file(path: str) -> int:
+    """Fallback for --print-spec: validate a saved canonical spec (job A's spec.md) and print it."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        die(f"cannot read spec file {path}: {exc}")
+    if not text.startswith(MARKER) or not says_approved(text):
+        die(f"{path} is not an approved spec (marker on line 1, status approved)")
+    if canonical_spec(text) != text:
+        die(f"{path} is not in canonical form")
     check_spec(text)
     sys.stdout.write(text)
     return 0
@@ -136,9 +161,12 @@ def main() -> int:
     ap.add_argument("--max-comments", type=int, default=5)
     ap.add_argument("--comment-bytes", type=int, default=1500)
     ap.add_argument("--print-spec", metavar="COMMENT_ID", help="print the canonical spec of this comment")
+    ap.add_argument("--check-spec-file", metavar="PATH", help="validate a saved canonical spec and print it")
     args = ap.parse_args()
     if args.issue and not str(args.issue).isdigit():
         die("issue number must be digits")
+    if args.check_spec_file is not None:
+        return check_spec_file(args.check_spec_file)
     if args.print_spec is not None:
         return print_spec(args)
     if not args.out_dir or not (args.from_json or (args.repo and args.issue)):

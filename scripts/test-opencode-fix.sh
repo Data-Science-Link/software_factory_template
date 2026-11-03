@@ -198,6 +198,9 @@ if [ "$1 $2" = "pr comment" ]; then
   while [ $# -gt 0 ]; do if [ "$1" = --body-file ]; then cp "$2" "$FAKE_GH_OUT"; fi; shift; done
   exit 0
 fi
+if [ "$1" = api ] && [ -n "${FAKE_GH_API_403:-}" ]; then
+  echo "gh: Resource not accessible by integration (HTTP 403)" >&2; exit 1
+fi
 echo "fake gh: unexpected call: $*" >&2; exit 1
 GH
 cat >"$work/cred.sh" <<'CRED'
@@ -278,6 +281,25 @@ publish "fix with the exact approved spec file pushed" ok
 if grep -q 'exact copy of spec comment 102, checked by publish' "$work/comment.md" && grep -qx 'Done. PASS=3' "$work/comment.md"; then
   ok "publish-fix: spec checked against the comment; harness evidence pasted"; else bad "publish-fix: spec ok / evidence"; fi
 SPEC_FX=''
+
+# Publish token can't read issue comments (HTTP 403, live run 41553660354): fall back to job A's
+# validated spec copy, matched to its spec_sha256, and say so in the comment.
+setup_remote
+cp "$canon" "$work/art/spec.md"
+printf 'spec_comment_id=102\nspec_sha256=%s\n' "$(sha256sum <"$canon" | cut -d' ' -f1)" >>"$work/art/fix-meta.txt"
+( cd "$work/seed" && echo fixed >>factory/b.md && mkdir -p factory/specs && cp "$canon" factory/specs/issue-33.md \
+  && git add -N factory/specs/issue-33.md && git diff >"$work/art/changes.patch" && git checkout -q -- factory/b.md \
+  && git rm -q --cached factory/specs/issue-33.md && rm -rf factory/specs )
+rm -f "$work/comment.md"
+export FAKE_GH_API_403=1
+publish "spec comment unreadable (HTTP 403) -> job A's validated copy" ok
+if grep -q "checked by publish against job A's copy only" "$work/comment.md"; then
+  ok "publish-fix: 403 fallback labeled in the comment"; else bad "publish-fix: 403 fallback label"; fi
+setup_remote
+cp "$canon" "$work/art/spec.md"; sed -i 's/^title: .*/title: Tampered/' "$work/art/spec.md"
+printf 'spec_comment_id=102\nspec_sha256=%s\n' "$(sha256sum <"$canon" | cut -d' ' -f1)" >>"$work/art/fix-meta.txt"
+publish "403 fallback with a job A copy that doesn't match spec_sha256 refused" fail
+unset FAKE_GH_API_403
 
 # Head moved per API (fixture head differs from job A's SHA): refuse before touching the remote.
 setup_remote
