@@ -8,6 +8,7 @@ complexity_reason: one line
 risk: trivial
 work_type: code
 model: deepseek-ai/DeepSeek-V4-Flash-0731
+model_override_reason:  # leave empty to let factory-predict-cost.py route the model; fill only to keep model as an owner override
 model_reason: default for simple code
 predicted_tokens_in: 300000
 predicted_tokens_cached: 240000
