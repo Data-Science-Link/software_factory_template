@@ -222,9 +222,35 @@ def check_headings(markdown: str, fm: dict[str, Any] | None, errors: list[str]) 
             errors.append(f"missing required extended section heading: {label}")
 
 
+def raw_front_matter(text: str) -> str | None:
+    """The text between the first two --- lines, or None (same split as split_front_matter)."""
+    body_start = text.lstrip()
+    if not body_start.startswith("---"):
+        return None
+    parts = body_start.split("---", 2)
+    return parts[1] if len(parts) >= 3 else None
+
+
+def check_escaped_quotes(raw: str | None, errors: list[str]) -> None:
+    """Reject backslash-escaped quotes in front matter (issue #75).
+
+    A hand copy of a spec comment once turned "..." into \"...\", which broke approved_at while
+    YAML still parsed. Front matter never needs \"; use single quotes or plain scalars.
+    """
+    if raw is None:
+        return
+    for n, line in enumerate(raw.split("\n")[1:], start=1):
+        if '\\"' in line:
+            errors.append(
+                f"front matter line {n} has an escaped quote (\\\"); copy the spec exactly "
+                "and use plain or single-quoted values"
+            )
+
+
 def validate_text(text: str) -> list[str]:
     errors: list[str] = []
     fm, body = split_front_matter(text)
+    check_escaped_quotes(raw_front_matter(text), errors)
     check_front_matter(fm, errors)
     check_headings(body, fm if fm and "__yaml_error__" not in fm else None, errors)
     return errors

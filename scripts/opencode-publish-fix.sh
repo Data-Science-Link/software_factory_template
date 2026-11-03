@@ -24,7 +24,8 @@ note="$OC_ARTIFACT_DIR/worker-note.md"
 
 PRISTINE_DIR="$(mktemp -d)"
 trap 'rm -rf "$PRISTINE_DIR"' EXIT
-for f in opencode-artifact-scan.sh opencode-git-push-lease.sh opencode-run-facts.sh opencode-build-fix-context.py; do
+for f in opencode-artifact-scan.sh opencode-git-push-lease.sh opencode-run-facts.sh opencode-build-fix-context.py \
+  opencode-build-context.py factory-spec-check.py opencode-text-block.sh; do
   git -C "$trusted" show "HEAD:scripts/$f" >"$PRISTINE_DIR/$f"
 done
 scan() { bash "$PRISTINE_DIR/opencode-artifact-scan.sh" "$@"; }
@@ -46,7 +47,8 @@ if [ "$(meta pr_number)" != "$OC_PR_NUMBER" ] || [ "$(meta head_sha)" != "$OC_EX
 fi
 
 # 3. Scan (secrets + path policy on the patch, relative to the PR head).
-scan "$patch" "$OC_ARTIFACT_DIR/summary.md" "$note"
+evidence="$OC_ARTIFACT_DIR/evidence.md"
+scan "$patch" "$OC_ARTIFACT_DIR/summary.md" "$note" "$evidence"
 [ -s "$patch" ] || { echo "publish-fix: empty patch" >&2; exit 1; }
 
 # 4. Apply on the PR head and commit.
@@ -57,6 +59,25 @@ if [ "$(git rev-parse HEAD)" != "$OC_EXPECTED_HEAD_SHA" ]; then
 fi
 git apply --check "$patch"
 git apply "$patch"
+# The spec file on the branch must be the exact approved comment (#75): re-fetch and re-validate
+# it with this job's token (pristine build-context.py), never trusting the artifact copy.
+spec_id="$(meta spec_comment_id)"
+spec_path="factory/specs/issue-${issue}.md"
+spec_file_line="not checked (no approved spec comment)"
+case "$spec_id" in
+  '' | none) ;;
+  *[!0-9]*) echo "publish-fix: invalid spec_comment_id in fix-meta.txt" >&2; exit 1 ;;
+  *)
+    canonical="$PRISTINE_DIR/spec-canonical.md"
+    python3 "$PRISTINE_DIR/opencode-build-context.py" --print-spec "$spec_id" \
+      --repo "$GITHUB_REPOSITORY" --issue "$issue" ${OC_SPEC_FIXTURE:+--from-json "$OC_SPEC_FIXTURE"} >"$canonical"
+    if [ -L "$spec_path" ] || ! cmp -s "$canonical" "$spec_path"; then
+      echo "publish-fix: ${spec_path} after the patch is not the exact approved spec comment ${spec_id}; refusing" >&2
+      exit 1
+    fi
+    spec_file_line="exact copy of spec comment ${spec_id}, checked by publish against the comment"
+    ;;
+esac
 git add -A
 if git diff --cached --quiet; then
   echo "publish-fix: patch applied but nothing staged" >&2
@@ -73,10 +94,11 @@ usage_block="$(cat "$usage_metrics" 2>/dev/null || printf '%s\n\n%s' '## Token u
 cost_line="Cost: not measured on DeepInfra (opencode stats unavailable)"
 reported="$(sed -n 's/^- OpenCode-reported cost: //p' "$usage_metrics" 2>/dev/null | head -n 1 || true)"
 if [[ "$reported" =~ ^\$[0-9] ]]; then cost_line="Cost: ${reported} on DeepInfra (OpenCode stats)"; fi
-run_facts="$(OC_ISSUE_NUMBER="$issue" OC_BRANCH="$branch" bash "$PRISTINE_DIR/opencode-run-facts.sh")"
-# Model text: no fences, mentions or HTML comments can escape the quoted block.
-worker_note="$(head -c 3000 "$note" 2>/dev/null | sed -E 's/```/'"'''"'/g; s/@/(at)/g; s/<!--/<! --/g')"
-[ -n "$worker_note" ] || worker_note="(the worker did not write a labeled note)"
+run_facts="$(OC_RUN_KIND=fix OC_ISSUE_NUMBER="$issue" OC_BRANCH="$branch" bash "$PRISTINE_DIR/opencode-run-facts.sh")"
+# Model text and command output: no fences, mentions or HTML comments can escape the blocks.
+block() { bash "$PRISTINE_DIR/opencode-text-block.sh" fence "$@"; }
+note_block="$(block "$note" 3000 "(the worker did not write a labeled note)")"
+evidence_block="$(block "$evidence" 12000 "(no verification output in this run's artifact)")"
 repo_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}"
 
 {
@@ -96,13 +118,17 @@ repo_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}"
   echo
   echo "$cost_line"
   echo
+  echo "Spec file: ${spec_file_line}."
+  echo
   echo "### What I changed and why (worker note: model-written, unverified)"
   echo
-  echo '```text'
-  echo "$worker_note"
-  echo '```'
+  echo "$note_block"
   echo
-  echo "Checks: a push made with the workflow token does not start \`pull_request\` checks (#74). Close and reopen this PR (or push by hand) so pr-check and gitleaks run on \`${new_sha:0:12}\` before merge."
+  echo "### Evidence: verification output (run by the harness in a sandbox, not by the model; capped)"
+  echo
+  echo "$evidence_block"
+  echo
+  echo "Checks: a push made with the workflow token leaves pr-check and gitleaks waiting for approval (#74). Use **Approve workflows to run** on this PR, or have Grok Bot run \`bash scripts/factory-kick-checks.sh ${OC_PR_NUMBER}\` (close and reopen as the owner), so they run on \`${new_sha:0:12}\` before merge."
   echo
   echo "Run: ${repo_url}/actions/runs/${OC_RUN_ID}"
 } >"$body"

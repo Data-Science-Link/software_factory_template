@@ -8,7 +8,13 @@
 #   OC_SPEC_FILE                 spec path, default factory/specs/issue-<N>.md (read from the
 #                                working tree, i.e. after the patch is applied)
 #   GITHUB_SERVER_URL, GITHUB_REPOSITORY, OC_BRANCH   for links (optional)
+#   OC_RUN_KIND                  "build" (default) or "fix": a fix run is not the run the spec's
+#                                prediction was made for, so it prints "not predicted (fix run)"
 # Missing facts are printed as "not available" so pr-check fails loudly instead of guessing.
+#
+# --risk: print only the spec's risk class (trivial | normal | high), or "unknown" when the spec
+# or its risk is missing. Publish ticks the PR's Risk class box from this, so the box and the
+# Gate line always come from the same front matter (#76).
 set -euo pipefail
 
 : "${OC_ISSUE_NUMBER:?OC_ISSUE_NUMBER is required}"
@@ -25,10 +31,13 @@ front() {
     v = substr($0, length(k) + 2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); gsub(/^["\x27]|["\x27]$/, "", v); print v; exit }' "$spec"
 }
 
+risk="$(front risk)"
+case "$risk" in trivial | normal | high) ;; *) risk=unknown ;; esac
+if [ "${1:-}" = --risk ]; then echo "$risk"; exit 0; fi
+
 t_in="$(metric 'Input tokens')"; t_cached="$(metric 'Cache read')"; t_out="$(metric 'Output tokens')"
 reported="$(metric 'OpenCode-reported cost')"
 predicted="$(front predicted_cost_usd)"
-risk="$(front risk)"
 
 if [ -n "$t_in" ] && [ -n "$t_out" ]; then
   tokens="${t_in} / ${t_cached:-0} / ${t_out} (opencode stats --models, as printed; in excludes cache reads)"
@@ -41,11 +50,13 @@ else
   # Run-record convention for unmetered runs: actual_cost_usd = 0 with cost_method not_measured.
   actual="\$0 (not measured)"; method="not_measured"
 fi
-if [[ "$predicted" =~ ^[0-9.]+$ ]]; then predicted="\$${predicted} (spec front matter)"; else predicted="not available (no spec front matter)"; fi
+if [ "${OC_RUN_KIND:-build}" = fix ]; then
+  predicted="not predicted (fix run; the spec's prediction covers the build run only)"
+elif [[ "$predicted" =~ ^[0-9.]+$ ]]; then predicted="\$${predicted} (spec front matter)"; else predicted="not available (no spec front matter)"; fi
 case "$risk" in
   trivial) gate="risk trivial: manager may merge after green checks and a passing gate" ;;
   normal|high) gate="risk ${risk}: owner product gate required (Michael approves before merge)" ;;
-  *) gate="risk unknown (no spec): treat as high, owner product gate required" ;;
+  *) gate="risk unknown (no spec or no risk in its front matter): treat as high, owner product gate required" ;;
 esac
 
 echo "<!-- factory-run:start -->"

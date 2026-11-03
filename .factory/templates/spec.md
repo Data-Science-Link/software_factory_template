@@ -39,7 +39,10 @@ drafted_by: grok-bot
 <!-- Tick only when diff or command output proves it. -->
 
 ## Verification
-<!-- Commands + evidence for the PR. -->
+<!-- Commands + expected output. Put the commands in ONE ```bash block: the /oc harness runs that block
+     itself after the worker (scripts/opencode-verify.sh: scratch copy of the base + the patch, HEAD~1 is the
+     base, no origin remote, empty environment, network allowed, ~5 min cap) and pastes the output into
+     the PR Evidence. The worker can't run commands. -->
 
 ## Classification
 <!-- Complexity, risk, model + reasons (match front matter). -->
