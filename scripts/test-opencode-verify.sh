@@ -15,7 +15,7 @@ if ! "$py" -c "import yaml" 2>/dev/null; then
   exit 2
 fi
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+trap '[ -n "${KEEP_WORK:-}" ] || rm -rf "$work"' EXIT
 export GIT_CONFIG_GLOBAL="$work/gitconfig"; : >"$GIT_CONFIG_GLOBAL"
 export GIT_CONFIG_NOSYSTEM=1
 git config --global user.name t; git config --global user.email t@t
@@ -117,9 +117,12 @@ if [ "$r" -ne 0 ] && [ ! -e "$work/v6.md" ]; then ok "verify: sandbox=none refus
 if sudo -n true 2>/dev/null; then
   # shellcheck disable=SC2016 # literal spec text
   printf '## Verification\n```bash\nwhoami\nfor p in $(pgrep -u %s); do tr "\\0" "\\n" </proc/$p/environ 2>/dev/null; done | grep -c FAKE_PARENT_SECRET || true\n```\n' "$(id -un)" >"$work/proc.md"
-  FAKE_PARENT_SECRET="$FAKE_KEY" bash scripts/opencode-verify.sh --spec "$work/proc.md" --base "$work/vb" --out "$work/v7.md" --timeout 60 >/dev/null 2>&1
+  # RUNNER_TEMP in a directory the sandbox user can't traverse, like /home/runner/work/_temp on
+  # GitHub runners (live run 41553660354); the scratch copy must not go there.
+  mkdir -p "$work/runner-home/_temp"; chmod 700 "$work/runner-home"
+  RUNNER_TEMP="$work/runner-home/_temp" FAKE_PARENT_SECRET="$FAKE_KEY" bash scripts/opencode-verify.sh --spec "$work/proc.md" --base "$work/vb" --out "$work/v7.md" --timeout 60 >/dev/null 2>&1
   if grep -qx ocverify "$work/v7.md" && grep -qx 0 "$work/v7.md" && ! grep -qF "$FAKE_KEY" "$work/v7.md"; then
-    ok "verify (sudo): separate user, parent processes' environment unreadable"
+    ok "verify (sudo): separate user, parent processes' environment unreadable, RUNNER_TEMP not traversable"
   else bad "verify (sudo): sandbox user"; cat "$work/v7.md"; fi
 else
   echo "SKIP  verify (sudo): separate-user sandbox (no passwordless sudo here)"
@@ -190,7 +193,7 @@ git ls-files -co --exclude-standard | tar -T - -cf - | tar -xf - -C "$pub"
 base_branch="$(git -C "$pub" branch --show-current)"
 publish() { # artifact-dir -> rc; body in <dir>/pr-body.md
   set +e
-  git -C "$pub" checkout -q "$base_branch"; git -C "$pub" branch -D oc/issue-7-555 >/dev/null 2>&1
+  git -C "$pub" checkout -qf "$base_branch"; git -C "$pub" clean -fdq; git -C "$pub" branch -D oc/issue-7-555 >/dev/null 2>&1
   (cd "$pub" && \
     env -u GH_TOKEN OC_ISSUE_NUMBER=7 OC_RUN_ID=555 OC_ARTIFACT_DIR="$1" GITHUB_WORKSPACE="$pub" \
     GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=o/r OC_SPEC_FIXTURE="$work/spec-fixture.json" \
@@ -225,6 +228,45 @@ publish "$art3"
 if [ "$rc" -ne 0 ] && grep -q 'not the exact approved spec comment 102' "$art3.publish.log"; then
   ok "publish: patch with an edited spec file refused"
 else bad "publish: tampered spec refused (rc=$rc)"; tail -5 "$art3.publish.log"; fi
+
+# Live mode where the publish token can't read issue comments (live run 41553660354: the publish
+# job has no issues: read, so `gh api .../issues/comments/<id>` returns HTTP 403).
+mkdir -p "$work/fakegh"
+cat >"$work/fakegh/gh" <<'GH'
+#!/usr/bin/env bash
+case "${FAKE_GH_MODE:-403}" in
+  403) echo "gh: Resource not accessible by integration (HTTP 403)" >&2 ;;
+  *) echo "gh: Not Found (HTTP 404)" >&2 ;;
+esac
+exit 1
+GH
+chmod +x "$work/fakegh/gh"
+publish_live() { # artifact-dir mode -> rc
+  set +e
+  git -C "$pub" checkout -qf "$base_branch"; git -C "$pub" clean -fdq; git -C "$pub" branch -D oc/issue-7-555 >/dev/null 2>&1
+  (cd "$pub" && \
+    env -u GH_TOKEN -u OC_SPEC_FIXTURE PATH="$work/fakegh:$PATH" FAKE_GH_MODE="$2" OC_ISSUE_NUMBER=7 OC_RUN_ID=555 \
+    OC_ARTIFACT_DIR="$1" GITHUB_WORKSPACE="$pub" GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=o/r \
+    bash scripts/opencode-publish-pr.sh) >"$1.publish.log" 2>&1
+  rc=$?
+  set -e
+}
+art4="$work/art4"; cp -R "$art" "$art4"; rm -f "$art4/pr-body.md"
+publish_live "$art4" 403
+if grep -q 'GH_TOKEN is required' "$art4.publish.log" && grep -q "checked by publish against job A's copy only" "$art4/pr-body.md"; then
+  ok "publish: HTTP 403 on the spec comment -> job A's validated copy, labeled in the PR"
+else bad "publish: 403 fallback (rc=$rc)"; tail -8 "$art4.publish.log"; fi
+art5="$work/art5"; cp -R "$art" "$art5"
+sed -i 's/^title: .*/title: Tampered copy/' "$art5/spec.md"
+publish_live "$art5" 403
+if [ "$rc" -ne 0 ] && grep -q 'cannot confirm the approved spec comment 102' "$art5.publish.log"; then
+  ok "publish: 403 fallback refuses a job A spec copy that doesn't match its sha256"
+else bad "publish: 403 fallback with tampered copy (rc=$rc)"; tail -5 "$art5.publish.log"; fi
+art6="$work/art6"; cp -R "$art" "$art6"
+publish_live "$art6" 404
+if [ "$rc" -ne 0 ] && grep -q 'cannot fetch spec comment 102' "$art6.publish.log"; then
+  ok "publish: spec comment gone (HTTP 404) -> refused, no fallback"
+else bad "publish: 404 refused (rc=$rc)"; tail -5 "$art6.publish.log"; fi
 
 # --- fix flow: agent-fix restores the spec on the PR head and verifies the fixed branch
 prdir="$work/prhead"

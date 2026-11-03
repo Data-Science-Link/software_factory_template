@@ -53,7 +53,9 @@ grep -q '[^[:space:]]' <<<"$block" || not_run 'the spec'"'"'s "## Verification" 
 
 block_sha="$(printf '%s\n' "$block" | sha256sum | cut -c1-12)"
 base_sha="$(git -C "$base" rev-parse HEAD)"
-w="$(mktemp -d "${RUNNER_TEMP:-/tmp}/oc-verify.XXXXXX")"
+# Scratch copy under /tmp, never RUNNER_TEMP: that sits in /home/runner (mode 750), which the
+# sandbox user can't traverse (live run 41553660354: "cd: ...: Permission denied").
+w="$(mktemp -d "${OC_VERIFY_TMPDIR:-/tmp}/oc-verify.XXXXXX")"
 log="$(mktemp "${RUNNER_TEMP:-/tmp}/oc-verify-log.XXXXXX")"
 cleanup() {
   if [ "$mode" = user ]; then sudo -n pkill -KILL -u "$vuser" 2>/dev/null || true; sudo -n rm -rf "$w"; else rm -rf "$w"; fi
@@ -78,6 +80,8 @@ run_cmd=(bash -c 'cd "$1" && exec timeout -k 10 "$2" bash -x "$3"' verify "$w/re
 if [ "$mode" = user ]; then
   id -u "$vuser" >/dev/null 2>&1 || sudo -n useradd --system --no-create-home --shell /bin/bash "$vuser"
   sudo -n chown -R "$vuser:" "$w"
+  sudo -n -u "$vuser" -- test -x "$w/repo" -a -w "$w/home" \
+    || not_run "the sandbox user ${vuser} cannot reach the scratch copy under $(dirname "$w")"
   runner=(sudo -n -u "$vuser" -- "${clean_env[@]}" "${run_cmd[@]}")
   sandbox="separate unprivileged user ${vuser}, empty environment (no tokens or keys)"
 else

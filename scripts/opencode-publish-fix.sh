@@ -30,6 +30,29 @@ for f in opencode-artifact-scan.sh opencode-git-push-lease.sh opencode-run-facts
 done
 scan() { bash "$PRISTINE_DIR/opencode-artifact-scan.sh" "$@"; }
 
+# Canonical approved spec text into $1. First choice: re-fetch spec comment $spec_id with this
+# job's token. If the token may not read issue comments (HTTP 403: the publish job has no
+# issues: read), fall back to job A's copy (<artifact>/spec.md), re-validated with the pristine
+# checker and matched to the spec_sha256 job A recorded, and say so in the PR (spec_source).
+canonical_spec_into() {
+  local dest="$1" meta_path="$2" rc=0 want
+  python3 "$PRISTINE_DIR/opencode-build-context.py" --print-spec "$spec_id" \
+    --repo "${GITHUB_REPOSITORY:-}" --issue "$3" ${OC_SPEC_FIXTURE:+--from-json "$OC_SPEC_FIXTURE"} >"$dest" || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    spec_source="checked by publish against the comment"
+    return 0
+  fi
+  [ "$rc" -eq 3 ] || return 1
+  want="$(sed -n 's/^spec_sha256=//p' "$meta_path" 2>/dev/null | head -n 1)"
+  python3 "$PRISTINE_DIR/opencode-build-context.py" --check-spec-file "$OC_ARTIFACT_DIR/spec.md" >"$dest" || return 1
+  if [ -z "$want" ] || [ "$(sha256sum <"$dest" | cut -d' ' -f1)" != "$want" ]; then
+    echo "publish: job A's spec.md does not match its spec_sha256; refusing" >&2
+    return 1
+  fi
+  spec_source="checked by publish against job A's copy only (this job's token can't read issue comments; give the publish job issues: read)"
+  echo "publish: cannot re-fetch spec comment ${spec_id} (HTTP 403); using job A's validated copy" >&2
+}
+
 # 1. Guard again from the API: open, same repo, oc/issue-<N>-<run_id>, head still where job A saw it.
 facts="$(python3 "$PRISTINE_DIR/opencode-build-fix-context.py" --check-pr \
   --repo "$GITHUB_REPOSITORY" --pr "$OC_PR_NUMBER" --expect-head "$OC_EXPECTED_HEAD_SHA" \
@@ -60,7 +83,8 @@ fi
 git apply --check "$patch"
 git apply "$patch"
 # The spec file on the branch must be the exact approved comment (#75): re-fetch and re-validate
-# it with this job's token (pristine build-context.py), never trusting the artifact copy.
+# it with this job's token (pristine build-context.py); job A's copy only when the token can't
+# read issue comments (canonical_spec_into).
 spec_id="$(meta spec_comment_id)"
 spec_path="factory/specs/issue-${issue}.md"
 spec_file_line="not checked (no approved spec comment)"
@@ -69,13 +93,13 @@ case "$spec_id" in
   *[!0-9]*) echo "publish-fix: invalid spec_comment_id in fix-meta.txt" >&2; exit 1 ;;
   *)
     canonical="$PRISTINE_DIR/spec-canonical.md"
-    python3 "$PRISTINE_DIR/opencode-build-context.py" --print-spec "$spec_id" \
-      --repo "$GITHUB_REPOSITORY" --issue "$issue" ${OC_SPEC_FIXTURE:+--from-json "$OC_SPEC_FIXTURE"} >"$canonical"
+    canonical_spec_into "$canonical" "$OC_ARTIFACT_DIR/fix-meta.txt" "$issue" || {
+      echo "publish-fix: cannot confirm the approved spec comment ${spec_id}; refusing" >&2; exit 1; }
     if [ -L "$spec_path" ] || ! cmp -s "$canonical" "$spec_path"; then
       echo "publish-fix: ${spec_path} after the patch is not the exact approved spec comment ${spec_id}; refusing" >&2
       exit 1
     fi
-    spec_file_line="exact copy of spec comment ${spec_id}, checked by publish against the comment"
+    spec_file_line="exact copy of spec comment ${spec_id}, ${spec_source}"
     ;;
 esac
 git add -A
