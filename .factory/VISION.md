@@ -56,7 +56,7 @@ intake → selection → spec → risk + complexity + model + predicted cost →
 | 2 | **Selection** | Michael | Michael adds `factory:selected` (GitHub mobile) or tells Grok Bot "select #N". Only selected issues go further. A group of related issues can share one spec. | Label |
 | 3 | **Spec** | Grok Bot | Writes the spec from `.factory/templates/spec.md` (same base sections every time; extended sections for standard/complex). A complex spec may instead be drafted by an `/oc spec` run on V4 Pro, logged like any run. The approved spec lives as a spec comment on the issue (`<!-- factory-spec v1 -->`); the run commits it into its PR as `factory/specs/issue-<N>.md`. No separate spec PR. | Spec comment → file in the run's PR |
 | 4 | **Classify** | Grok Bot | Complexity (`simple / standard / complex` + reason), risk class (`trivial / normal / high`), model from `.factory/models.yaml`, predicted cost from `scripts/factory-predict-cost.py`. Anything predicted above $1 is split first. | Spec front matter |
-| 5 | **Spec approval** | Michael (standard/complex, or normal/high risk); Grok Bot may self-approve simple + trivial | Michael replies "approve spec" (or edits). | Spec `status: approved` |
+| 5 | **Spec approval** | By risk class (Michael, 2026-11-02; DECISIONS.md): Grok Bot approves trivial and normal risk; Michael approves high risk | Michael replies "approve spec" (or edits). | Spec `status: approved` |
 | 6 | **Run** | Michael or Grok Bot (on Michael's account) comments `/oc run` on the issue | GitHub Actions spins up a VM, starts the cost clock, runs OpenCode on the routed DeepInfra model with the spec as the prompt, opens a PR. | Workflow run |
 | 7 | **Gate** | The VM, before it spins down | Pre-spin-down checklist (section 9): cost tracked, run record written and valid, PR template filled and `pr-check` passing, gitleaks clean, within budget. Fails loudly on any miss. | Gate results in the run record + job summary |
 | 8 | **PR** | The worker + the gate | Standard PR contents (section 7), including the machine-filled `factory-run` block. | PR |
@@ -92,7 +92,7 @@ predicted_tokens_out: 20000
 predicted_cost_usd: 0.011
 budget_cap_usd: 1.00
 price_table_version: 2026-11-01
-approved_by: null         # "michael" or "grok-bot (simple+trivial)"
+approved_by: null         # "grok-bot" (trivial/normal risk) or "michael" (any; required for high)
 approved_at: null         # UTC ISO 8601
 ---
 ```

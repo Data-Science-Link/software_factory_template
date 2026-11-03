@@ -22,7 +22,7 @@ For every **selected** issue ready to work, the Factory Manager writes a **spec*
 
 - Post the spec as a comment on the issue (`<!-- factory-spec v1 -->`). The Actions run commits the approved copy into its PR as `factory/specs/issue-<N>.md`.
 - **Classify** in the spec front matter: complexity (`simple | standard | complex` + reason), risk class (`trivial | normal | high`), model, predicted cost, budget cap. When Michael says medium/high **complexity**, use **standard/complex**; medium/high **risk** means **normal/high**. Complexity picks the model; risk class alone decides the merge gate. Never use risk words for complexity.
-- **Spec approval:** Michael for standard/complex or normal/high risk; Grok Bot may self-approve **simple + trivial** only.
+- **Spec approval:** by risk class (Michael, 2026-11-02): Grok Bot reviews and approves **trivial** and **normal** risk (`approved_by: grok-bot`); **high** risk goes to Michael (`approved_by: michael`).
 - Scope each spec to hit the budget target (most issues under $0.10; hard cap $1 per issue). Split anything predicted above $1 before a run.
 - **Local open-weights fallback:** the approved spec's **Worker prompt** section is what the local agent runs (`skills/local-open-weights-run.md`); there is no separate handoff block.
 

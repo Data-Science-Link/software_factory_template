@@ -9,8 +9,9 @@ Approval keeps the existing convention: /oc uses the latest OWNER comment with t
 `status: approved`. The draft (posted by github-actions, `status: draft`) never counts. This script
 takes the draft's spec (or an edited copy with --from-file), sets status approved, approved_by
 and approved_at, re-runs the spec checks and the cost prediction, and posts it as a new comment.
-WHO must be `michael` unless the spec is simple + trivial (`grok-bot (simple+trivial)`), per
-factory/specs/README.md. Use `michael` only after Michael has approved that spec.
+WHO is `grok-bot` (trivial or normal risk: Grok Bot reviews and approves) or `michael` (required
+for high risk), per factory/specs/README.md (Michael's decision, 2026-11-02). Use `michael` only
+after Michael has approved that spec.
 """
 from __future__ import annotations
 

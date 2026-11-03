@@ -89,7 +89,7 @@ if [ "$rc" -eq 0 ] && [ "$(head -n 1 "$c")" = '<!-- factory-spec-draft v1 -->' ]
   && grep -qx 'predicted_cost_usd: 0.0330' "$c" && ! grep -q 'worker guess' "$c"; then
   ok "build: approved/override fields reset to a draft; model + prediction filled by factory-predict-cost.py"
 else bad "build: normalized draft (rc=$rc)"; cat "$work/good.log"; head -40 "$c" 2>/dev/null; fi
-if grep -q '^- Review: Grok Bot (risk normal)' "$c" && grep -q '^- Approval: Michael (complexity standard, risk normal' "$c" \
+if grep -q '^- Review: Grok Bot (risk normal)' "$c" && grep -q '^- Approval: Grok Bot may approve (risk normal; approved_by: grok-bot)' "$c" \
   && grep -q 'Spec run: deepseek-ai/DeepSeek-V4-Pro-0813 (models.yaml rule 2' "$c" && grep -q 'cost \$0.0712 (OpenCode-reported)' "$c" \
   && grep -q 'actions/runs/4242' "$c" && grep -qx 'reviewer=Grok' "$work/good/spec-meta.txt" && grep -qx 'worktree=unchanged' "$work/good/spec-meta.txt"; then
   ok "build: review/approval lines, spec-run model + cost + run link"
@@ -116,7 +116,7 @@ sed 's/^risk: normal$/risk: high/' tests/oc-spec/good-spec.md >"$work/high.md"
 printf '\n## Alternatives considered\nx\n\n## Test plan detail (broken case shown blocked)\nx\n\n## Security and liability review\nx\n\n## Milestones / split plan\nx\n' >>"$work/high.md"
 wrap "$work/high.md" "$work/out-high.txt"
 specrun high "$work/out-high.txt"
-if grep -q '^- Review: Michael (risk high)' "$work/high/spec-comment.md"; then ok "build: risk high -> Michael reviews"
+if grep -q '^- Review: Michael (risk high)' "$work/high/spec-comment.md" && grep -q '^- Approval: Michael only (risk high' "$work/high/spec-comment.md"; then ok "build: risk high -> Michael reviews and approves"
 else bad "build: high-risk reviewer"; head -8 "$work/high/spec-comment.md"; fi
 
 # Failing drafts: no draft posted, failures listed, the spec marker defanged in the note.
@@ -198,8 +198,19 @@ else bad "publish: tampered draft (rc=$rc)"; fi
 
 # --- approval: the existing convention (owner posts the approved copy), via the helper
 spec_only="$work/good/spec-draft.md"
-if ! draft approve "$spec_only" --approved-by 'grok-bot (simple+trivial)' >/dev/null 2>&1; then
-  ok "approve: Grok Bot can't approve a standard/normal spec"; else bad "approve: grok-bot on normal"; fi
+if draft approve "$spec_only" --approved-by grok-bot --issue 7 | grep -qx 'approved_by: grok-bot'; then
+  ok "approve: Grok Bot may approve a standard/normal spec"; else bad "approve: grok-bot on normal"; fi
+sed 's/^risk: normal$/risk: high/' "$spec_only" >"$work/high-spec.md"
+printf '\n## Alternatives considered\nx\n\n## Test plan detail (broken case shown blocked)\nx\n\n## Security and liability review\nx\n\n## Milestones / split plan\nx\n' >>"$work/high-spec.md"
+set +e
+hout="$(draft approve "$work/high-spec.md" --approved-by grok-bot 2>&1)"; hr=$?
+set -e
+if [ "$hr" -ne 0 ] && grep -q 'only Michael approves high-risk specs' <<<"$hout" \
+  && draft approve "$work/high-spec.md" --approved-by michael | grep -qx 'approved_by: michael'; then
+  ok "approve: high risk -> grok-bot refused, michael accepted"
+else bad "approve: high-risk rule"; echo "$hout"; fi
+if ! draft approve "$spec_only" --approved-by someone-else >/dev/null 2>&1; then ok "approve: unknown approver refused"
+else bad "approve: unknown approver"; fi
 draft approve "$spec_only" --approved-by michael --at '2026-11-02T19:00:00-06:00' --issue 7 >"$work/approved.md"
 if grep -qx 'status: approved' "$work/approved.md" && grep -qx 'approved_by: michael' "$work/approved.md" \
   && grep -qx "approved_at: '2026-11-02T19:00:00-06:00'" "$work/approved.md" && grep -qx 'drafted_by: oc-spec-run' "$work/approved.md" \
@@ -216,8 +227,8 @@ if grep -qx 'spec_comment_id=902' "$work/ctxout2/context-meta.txt" && cmp -s "$w
   ok "approve: /oc's context step takes the posted copy, byte for byte"
 else bad "approve: context step on the approved copy"; fi
 sed -e 's/^complexity: standard$/complexity: simple/' -e 's/^risk: normal$/risk: trivial/' "$spec_only" >"$work/simple.md"
-if draft approve "$work/simple.md" --approved-by 'grok-bot (simple+trivial)' | grep -qx 'model: deepseek-ai/DeepSeek-V4-Flash-0731'; then
-  ok "approve: Grok Bot may approve simple + trivial; prediction re-filled after the edit"
+if draft approve "$work/simple.md" --approved-by grok-bot | grep -qx 'model: deepseek-ai/DeepSeek-V4-Flash-0731'; then
+  ok "approve: Grok Bot approves simple + trivial; prediction re-filled after the edit"
 else bad "approve: simple+trivial"; fi
 
 # factory-approve-spec.py: finds the draft by URL, refuses non-drafts, posts the approved copy.
@@ -233,8 +244,8 @@ PY
 helper() { rm -f "$work/posted.md"; set +e
   env PATH="$work/bin:$PATH" FAKE_GH_OUT="$work/posted.md" FAKE_GH_VIEW="$work/view.json" "$py" scripts/factory-approve-spec.py "$@" >"$work/helper.log" 2>&1
   rc=$?; set -e; }
-helper 7 'https://github.com/o/r/issues/7#issuecomment-900' --approved-by michael
-if [ "$rc" -eq 0 ] && grep -qx 'status: approved' "$work/posted.md" && [ "$(head -n 1 "$work/posted.md")" = '<!-- factory-spec v1 -->' ]; then
+helper 7 'https://github.com/o/r/issues/7#issuecomment-900' --approved-by grok-bot
+if [ "$rc" -eq 0 ] && grep -qx 'status: approved' "$work/posted.md" && grep -qx 'approved_by: grok-bot' "$work/posted.md" && [ "$(head -n 1 "$work/posted.md")" = '<!-- factory-spec v1 -->' ]; then
   ok "approve helper: posts the approved copy (marker on line 1)"
 else bad "approve helper: post (rc=$rc)"; cat "$work/helper.log"; fi
 helper 7 'https://github.com/o/r/issues/7#issuecomment-901' --approved-by michael

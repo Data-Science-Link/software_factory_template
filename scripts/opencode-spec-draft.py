@@ -197,14 +197,16 @@ def checks(spec: str, issue: str) -> list[str]:
     return errors
 
 
+# Who may approve, by the spec's risk class (Michael's decision, 2026-11-02; factory/specs/README.md):
+# trivial or normal -> Grok Bot reviews and may approve (approved_by: grok-bot); high -> Michael only.
+GROK_APPROVES = frozenset({"trivial", "normal"})
+
+
 def reviewer(risk: str, complexity: str) -> tuple[str, str]:
-    """(review, approval) lines. Review per #78; approval per factory/specs/README.md."""
-    review = "Michael (risk high), with Grok Bot's notes" if risk == "high" else f"Grok Bot (risk {risk})"
-    if risk == "trivial" and complexity == "simple":
-        approval = "Grok Bot may approve (simple + trivial; factory/specs/README.md)"
-    else:
-        approval = f"Michael (complexity {complexity}, risk {risk}; factory/specs/README.md)"
-    return review, approval
+    """(review, approval) lines for the draft comment, from the risk class only."""
+    if risk in GROK_APPROVES:
+        return f"Grok Bot (risk {risk})", f"Grok Bot may approve (risk {risk}; approved_by: grok-bot)"
+    return f"Michael (risk {risk}), with Grok Bot's notes", f"Michael only (risk {risk}; approved_by: michael)"
 
 
 def usage(path: str | None) -> tuple[str, float | None]:
@@ -341,9 +343,11 @@ def cmd_approve(a: argparse.Namespace) -> int:
         die(f"the spec is for issue {get_field(fm, 'issue')!r}, not #{a.issue}")
     who = a.approved_by.strip()
     risk, cx = get_field(fm, "risk"), get_field(fm, "complexity")
-    if who != "michael" and not (risk == "trivial" and cx == "simple" and who == "grok-bot (simple+trivial)"):
-        die(f"risk {risk} / complexity {cx}: approved_by must be michael "
-            "(Grok Bot may approve only simple + trivial specs, as 'grok-bot (simple+trivial)')")
+    if who == "grok-bot":
+        if risk not in GROK_APPROVES:
+            die(f"risk {risk}: only Michael approves high-risk specs (approved_by: michael)")
+    elif who != "michael":
+        die("approved_by must be grok-bot (trivial or normal risk) or michael")
     at = a.at or datetime.now().astimezone().isoformat(timespec="seconds")
     for key, val in (("status", "approved"), ("approved_by", who), ("approved_at", yq(at))):
         fm = set_field(fm, key, val)
