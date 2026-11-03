@@ -14,11 +14,13 @@ jobs:
       github.event_name == 'issue_comment' &&
       github.event.action == 'created' &&
       startsWith(github.event.comment.body, '/oc') &&
+      !startsWith(github.event.comment.body, '/oc spec') &&
       github.event.comment.user.login == 'Data-Science-Link' &&
       github.event.comment.author_association == 'OWNER' &&
       github.event.issue.pull_request == null
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 20 min: the worker, then the spec's Verification run by script (#76/#80) inside this budget.
+    timeout-minutes: 20
     concurrency:
       group: oc-agent-issue-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -30,6 +32,9 @@ jobs:
       OC_ISSUE_NUMBER: ${{ github.event.issue.number }}
       OC_ARTIFACT_DIR: /tmp/oc-artifacts
       DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+      # Seconds the agent script may use before it stops starting work (verification is
+      # trimmed or skipped to fit); leaves ~3 minutes of the job for the scan and upload.
+      OC_AGENT_BUDGET_SECONDS: "1020"
     steps:
       - name: Harden runner (audit egress)
         uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
@@ -80,6 +85,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # Read-only: publish re-fetches the approved spec comment to check the committed spec file (#75).
+      issues: read
     env:
       OC_ISSUE_NUMBER: ${{ github.event.issue.number }}
       OC_RUN_ID: ${{ github.run_id }}
