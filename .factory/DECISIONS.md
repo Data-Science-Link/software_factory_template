@@ -522,3 +522,27 @@ Append-only. Newest at the bottom.
 - **Why:** That run's verification failed at `cd` (Permission denied) and its publish failed on the re-fetch (no `issues: read`), so no PR opened. Both were missed offline: the tests used `/tmp` and a fixture instead of `gh api`.
 - **Alternatives:** Refuse on 403 until the paste (rejected: every `/oc` run fails until Michael is back); drop the re-fetch (rejected: job A's copy is the weaker anchor and should stay the fallback only).
 - **Revisit when:** `issues: read` is pasted (the fallback then never fires; keep it or drop it).
+
+### 2026-11-02 — `/oc spec`: a read-only V4 Pro worker drafts specs as draft comments (#78)
+- **Status:** Proposed, pending Michael (scripts take effect when the PR merges; the run needs the owner paste of `.github/workflows/opencode-spec.yml` and the one-line `/oc spec` exclusion in `opencode-spike.yml`).
+- **Decision:** An owner `/oc spec [guidance]` comment on an issue starts a two-job run. Job A has the DeepInfra key and read tokens only. It gets the same issue context as `/oc`, and a read-only OpenCode worker (edit, bash, web and external directories denied for the run) drafts one spec. The worker uses DeepSeek V4 Pro, the models.yaml rule with `when: {work_type: spec}` (rule 2), set by the script. `scripts/opencode-spec-draft.py` extracts the spec between marker lines, sets the harness-owned front matter (status draft, approved_by/at null, drafted_by oc-spec-run, model and predicted cost from `factory-predict-cost.py`), and runs the spec checker plus the #78 checks. Job B has `issues: write` and `contents: read` only. It rescans and re-checks, then posts the draft, or a "no draft" note that lists what failed. If job A fails, it posts a failure note with the run link. Spend: preflight refuses above the $1 cap, the worker stops at 480 s, a run that cost more than $1 posts no draft, and the comment shows cost against the $0.10 target. Review: Grok Bot for trivial and normal risk, Michael for high (#78).
+- **Decided by:** Proposed by Grok Bot (Software Factory Builder) for issue #78; Michael decides at merge.
+- **Why:** Michael wants a high-intelligence spec worker so Grok Bot stays the coordinator (#78). Keeping facts in scripts (#28/#31) and approval with the owner keeps a model from approving or pricing its own spec.
+- **Alternatives:** Flash for simple issues (deferred: spec quality matters most and the prediction is about $0.08 on Pro); letting the worker read the repo with a shell (rejected: key exposure, as for build runs); posting drafts from job A (rejected: job A would need a write token next to the key).
+- **Revisit when:** The first few drafts have been reviewed (#78 says check them closely), or models.yaml gets a `token_priors.spec` row from real spec-run costs.
+
+### 2026-11-02 — Spec approval stays "owner posts the approved copy"; helper script, no `/oc approve-spec` (#78)
+- **Status:** Proposed, pending Michael (takes effect when the PR merges).
+- **Decision:** No new approval command or workflow. `/oc` keeps reading only the latest OWNER comment with the marker and `status: approved` (`opencode-build-context.py`, unchanged). To approve a draft, Grok Bot or Michael runs `python3 scripts/factory-approve-spec.py <issue> <draft URL> --approved-by <who> [--from-file edited.md]` from the owner's gh login. It checks that the draft came from the workflow, sets status, approved_by and approved_at, re-runs the checks and the prediction, and posts the approved copy, which the build run then copies byte for byte. `approved_by` must be `michael` unless the spec is simple + trivial (`grok-bot (simple+trivial)`), as `factory/specs/README.md` already says. Grok Bot passes `michael` only after Michael approves in chat.
+- **Decided by:** Proposed by Grok Bot (Software Factory Builder) for issue #78; Michael decides at merge.
+- **Why:** This is the least new machinery and the current context code needs no change. An `/oc approve-spec` reply would need a workflow that posts as `github-actions`, and the context step rightly ignores non-owner comments.
+- **Alternatives:** `/oc approve-spec <url>` handled by a workflow (rejected: bot-authored approvals, a new write path); approving by editing the draft comment (rejected: the bot authored it, and edits leave no new comment).
+- **Revisit when:** Michael wants to approve from his phone without Grok Bot; a phone reply could then trigger Grok Bot to run the helper.
+
+### 2026-11-02 — factory-predict-cost.py reads specs that start with the marker line (#60, marker part)
+- **Status:** Proposed, pending Michael (takes effect when the PR merges).
+- **Decision:** `factory-predict-cost.py` skips everything up to and including the `<!-- factory-spec v1 -->` line, so it runs on a spec comment body, and `--write` keeps that prefix. The `--write` reformatting part of #60 (YAML dump) is unchanged and stays open. `/oc spec` and the approval helper do their own line edits instead of `--write`.
+- **Decided by:** Proposed by Grok Bot (Software Factory Builder) for issue #60; Michael decides at merge.
+- **Why:** The #58 spec comment had to have its marker stripped by hand before prediction (live run 2026-11-02).
+- **Alternatives:** Strip the marker in every caller (rejected: the same bug in each caller).
+- **Revisit when:** #60's `--write` fix lands.

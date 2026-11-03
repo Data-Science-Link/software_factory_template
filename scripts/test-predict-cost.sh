@@ -137,6 +137,20 @@ run_pass tests/predict/pass-simple-flash.md
 run_pass tests/predict/pass-complex-pro.md
 run_pass tests/predict/pass-high-risk-pro.md
 run_pass tests/predict/pass-work-type-spec.md
+run_pass tests/predict/pass-marker-prefixed.md
+# --write keeps the marker line (and any text above it) in place (#60, marker part).
+tmpm="$tmpdir/marker.md"
+grep -v '^# predict-expect:' tests/predict/pass-marker-prefixed.md >"$tmpm"
+"${PY[@]}" "$tmpm" --write >/dev/null 2>&1
+if [ "$(sed -n 2p "$tmpm")" = '<!-- factory-spec v1 -->' ] && [ "$(sed -n 3p "$tmpm")" = '---' ] \
+  && grep -qx 'model: deepseek-ai/DeepSeek-V4-Flash-0731' "$tmpm" && python3 scripts/factory-predict-cost.py "$tmpm" >/dev/null 2>&1; then
+  echo "PASS  pass-marker-prefixed (--write keeps the marker line)"
+  passed=$((passed + 1))
+else
+  echo "FAIL  pass-marker-prefixed (--write lost the marker or broke the file)"
+  head -4 "$tmpm"
+  failed=$((failed + 1))
+fi
 run_fail tests/predict/fail-over-cap.md "$MODELS_OVER" 2 split
 run_fail tests/predict/fail-priority-tier.md "$MODELS_DEFAULT" 1 priority
 

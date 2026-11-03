@@ -8,7 +8,7 @@ Specs for factory work live at **`factory/specs/issue-<N>.md`**. For a group spe
 
 ## Flow (vision §18 decisions 6 and 7)
 
-1. Grok Bot drafts on its Cursor plan (`drafted_by: grok-bot`). A complex spec may use `/oc spec` on `deepseek-ai/DeepSeek-V4-Pro-0813` (`drafted_by: oc-spec-run`).
+1. Grok Bot drafts on its Cursor plan (`drafted_by: grok-bot`), or posts `/oc spec [guidance]` on the issue (#78): a read-only worker on `deepseek-ai/DeepSeek-V4-Pro-0813` drafts it (`drafted_by: oc-spec-run`) and the workflow posts it as a **draft** comment (`<!-- factory-spec-draft v1 -->` first, `status: draft`) with the reviewer, predicted build cost and spec-run cost. Review: Grok Bot (trivial/normal risk) or Michael (high). To approve, the owner posts the approved copy: `python3 scripts/factory-approve-spec.py <issue> <draft URL> --approved-by michael` (or `'grok-bot (simple+trivial)'` for simple + trivial), adding `--from-file edited.md` after review edits.
 2. Approved spec is posted on the issue as a comment starting with the marker below, then the full spec (front matter + sections).
 3. The run commits it in the run PR as `factory/specs/issue-<N>.md`, written by the harness as an exact copy of the comment (marker line on, LF line ends). The worker never copies or edits it; publish refuses a PR whose copy differs from the comment (#75). No separate spec PR.
 4. Front matter: plain or single-quoted values. `factory-spec-check.py` rejects escaped quotes (`\"`).
