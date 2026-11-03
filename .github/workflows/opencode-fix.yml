@@ -4,7 +4,8 @@
 # one commit pushed to the SAME branch (lease on the head job A saw) + a run-facts PR comment.
 # Same split as opencode-spike.yml: agent holds the DeepInfra key and read tokens only;
 # publish holds the write GITHUB_TOKEN only. Never merges, never opens a new PR.
-# Known gap (#74): a push made with GITHUB_TOKEN does not start pull_request checks.
+# Known gap (#74): pull_request runs from a GITHUB_TOKEN push wait for approval; approve them on the
+# PR or close/reopen it as the owner (scripts/factory-kick-checks.sh).
 name: opencode-fix
 
 on:
@@ -23,7 +24,8 @@ jobs:
       github.event.comment.user.login == 'Data-Science-Link' &&
       github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 20 min: the worker, then the spec's Verification run by script (#76/#80) inside this budget.
+    timeout-minutes: 20
     concurrency:
       group: oc-fix-agent-pr-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -38,6 +40,9 @@ jobs:
       OC_PR_NUMBER: ${{ github.event.issue.number }}
       OC_ARTIFACT_DIR: /tmp/oc-artifacts
       DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+      # Seconds the agent script may use before it stops starting work (verification is
+      # trimmed or skipped to fit); leaves ~3 minutes of the job for the scan and upload.
+      OC_AGENT_BUDGET_SECONDS: "1020"
     steps:
       - name: Harden runner (audit egress)
         uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
@@ -106,6 +111,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # Read-only: publish re-fetches the approved spec comment to check the committed spec file (#75).
+      issues: read
     env:
       OC_PR_NUMBER: ${{ github.event.issue.number }}
       OC_RUN_ID: ${{ github.run_id }}
@@ -151,7 +158,7 @@ jobs:
             echo "### OpenCode fix publish"
             echo "- PR: #${OC_PR_NUMBER}"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${OC_RUN_ID}"
-            echo "- Checks: GITHUB_TOKEN pushes don't start pull_request checks (#74); close/reopen the PR."
+            echo "- Checks: pr-check and gitleaks wait for approval on GITHUB_TOKEN pushes (#74): approve them on the PR, or run scripts/factory-kick-checks.sh ${OC_PR_NUMBER}."
             if [ -f "${OC_ARTIFACT_DIR}/usage-metrics.md" ]; then
               echo ""
               cat "${OC_ARTIFACT_DIR}/usage-metrics.md"
