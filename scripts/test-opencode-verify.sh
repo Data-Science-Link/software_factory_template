@@ -185,6 +185,27 @@ set -e
 if [ "$rc" -ne 0 ] && grep -q 'no changes produced' "$work/agent2.log"; then ok "agent-run: spec-only patch counts as no changes"
 else bad "agent-run: spec-only patch (rc=$rc)"; fi
 
+# Worker that hangs (#89): stopped at the time limit; log and patch are still written.
+cat >"$work/bin/opencode" <<'FAKE'
+#!/usr/bin/env bash
+if [ "$1" = stats ]; then exit 0; fi
+mkdir -p factory/x && echo partial >factory/x/partial.md
+echo "worker started"
+exec sleep 300
+FAKE
+art3="$work/art3"; mkdir -p "$art3"; cp "$work/ctx/"* "$art3/"
+(cd "$repo" && git reset -q --hard && git clean -qfd)
+set +e
+t0=$SECONDS
+(cd "$repo" && PATH="$work/bin:$PATH" OC_INSTRUCTION='/oc run' OC_ISSUE_NUMBER=7 OC_ARTIFACT_DIR="$art3" \
+  DEEPINFRA_API_KEY="$FAKE_KEY" OC_VERIFY_SANDBOX=none OC_WORKER_TIMEOUT=2 bash scripts/opencode-agent-run.sh) >"$work/agent3.log" 2>&1
+rc=$?
+set -e
+if [ $((SECONDS - t0)) -lt 60 ] && grep -q 'worker stopped at the 2s limit' "$work/agent3.log" \
+  && grep -q 'worker started' "$art3/opencode.log" && grep -q '^+++ b/factory/x/partial.md' "$art3/changes.patch"; then
+  ok "agent-run: hung worker stopped at its time limit; log and partial patch kept (rc=$rc)"
+else bad "agent-run: hung worker (rc=$rc)"; tail -5 "$work/agent3.log"; fi
+
 # --- publish-pr on that artifact: exact spec checked against the comment; body sections
 pub="$work/pub"
 mkdir -p "$pub"

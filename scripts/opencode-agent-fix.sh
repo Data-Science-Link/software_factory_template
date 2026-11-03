@@ -137,9 +137,19 @@ fi
 
 log="$OC_ARTIFACT_DIR/opencode.log"
 : >"$log"
-if ! opencode run --pure --format default \
+# Bound the worker (#89): stop it before the job timeout, keeping a reserve for verification, the
+# scan and the upload, so a stuck or looping worker still leaves its log, usage and patch.
+worker_timeout=$(( ${OC_AGENT_BUDGET_SECONDS:-720} - ${OC_VERIFY_RESERVE_SECONDS:-240} - SECONDS ))
+[ "$worker_timeout" -ge 60 ] || worker_timeout=60
+case "${OC_WORKER_TIMEOUT:-}" in '' | *[!0-9]*) ;; *) worker_timeout="$OC_WORKER_TIMEOUT" ;; esac
+oc_rc=0
+timeout -k 15 "$worker_timeout" opencode run --pure --format default \
   --model deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731 \
-  "$prompt" >>"$log" 2>&1; then
+  "$prompt" >>"$log" 2>&1 || oc_rc=$?
+if [ "$oc_rc" -eq 124 ] || [ "$oc_rc" -eq 137 ]; then
+  echo "agent-fix: worker stopped at the ${worker_timeout}s limit (#89); keeping what it produced" >&2
+  printf '\n[harness] worker stopped at the %ss limit\n' "$worker_timeout" >>"$log"
+elif [ "$oc_rc" -ne 0 ]; then
   echo "agent-fix: opencode run exited non-zero; see opencode.log in artifacts" >&2
 fi
 
