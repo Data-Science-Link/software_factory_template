@@ -49,12 +49,16 @@ cat >"$work/bin/opencode" <<'OC'
 printf 'some tool chatter\n'
 cat "$FAKE_OC_OUT"
 if [ -n "${FAKE_OC_TOUCH:-}" ]; then echo x >"$FAKE_OC_TOUCH"; fi
+if [ -n "${FAKE_OC_CFG:-}" ]; then printf '%s' "${OPENCODE_CONFIG_CONTENT:-}" >"$FAKE_OC_CFG"; fi
 OC
 chmod +x "$work/bin/opencode"
 mkstats() { # cost -> stats file
   sed "s/\\\$0.0028/\\\$$1/" tests/opencode-capture-usage/stats-normal.txt | sed 's/V4-Flash-0731/V4-Pro-0813/' >"$work/stats-$1.txt"
 }
 mkstats 0.0712; mkstats 1.5000
+# #88: a session that ended early: every token count 0 and cost $0.0000.
+sed -E 's/(17\.3K|1\.2K|103\.2K)/0/g; s/\$0\.0028/$0.0000/' tests/opencode-capture-usage/stats-normal.txt \
+  | sed 's/V4-Flash-0731/V4-Pro-0813/' >"$work/stats-zero.txt"
 wrap() { { echo "Here is the spec."; cat "$1"; echo "<!-- end factory-spec -->"; } >"$2"; }
 specrun() { # name out-file [cost] [instruction] -> rc; artifacts in $work/<name>
   local art="$work/$1"; rm -rf "$art"; mkdir -p "$art"
@@ -63,7 +67,7 @@ specrun() { # name out-file [cost] [instruction] -> rc; artifacts in $work/<name
   (cd "$repo" && env PATH="$work/bin:$PATH" DEEPINFRA_API_KEY=fake-key-123 GH_TOKEN= GITHUB_TOKEN= \
     OC_INSTRUCTION="${4:-/oc spec keep it tiny}" OC_ISSUE_NUMBER=7 OC_ARTIFACT_DIR="$art" FAKE_OC_OUT="$2" \
     OPENCODE_STATS_FIXTURE="$work/stats-${3:-0.0712}.txt" GITHUB_REPOSITORY=o/r GITHUB_RUN_ID=4242 \
-    bash scripts/opencode-spec-run.sh) >"$art.log" 2>&1
+    FAKE_OC_CFG="$art.cfg" bash scripts/opencode-spec-run.sh) >"$art.log" 2>&1
   rc=$?
   set -e
 }
@@ -78,6 +82,11 @@ set +e
 r=$?
 set -e
 if [ "$r" -ne 0 ]; then ok "spec-run: '/oc specify ...' is not a spec run"; else bad "spec-run: /oc specify accepted"; fi
+
+# #88: tool rules in the prompt (V4 Pro sent file_path and called a missing bash tool).
+if grep -qF '{"filePath": "<path>"}' <<<"$pp" && grep -qF 'never file_path or path' <<<"$pp" \
+  && grep -qF 'there is no shell' <<<"$pp"; then ok "prompt: exact OpenCode tool argument names; no shell (#88)"
+else bad "prompt: tool rules (#88)"; fi
 
 # Good draft: normalized to a draft, prediction filled by script, reviewer from risk.
 wrap tests/oc-spec/good-spec.md "$work/out-good.txt"
@@ -94,6 +103,13 @@ if grep -q '^- Review: Grok Bot (risk normal)' "$c" && grep -q '^- Approval: Gro
   && grep -q 'actions/runs/4242' "$c" && grep -qx 'reviewer=Grok' "$work/good/spec-meta.txt" && grep -qx 'worktree=unchanged' "$work/good/spec-meta.txt"; then
   ok "build: review/approval lines, spec-run model + cost + run link"
 else bad "build: header lines"; head -12 "$c"; cat "$work/good/spec-meta.txt"; fi
+if python3 -c 'import json,sys; p=json.load(open(sys.argv[1]))["permission"]; sys.exit(0 if p["bash"]=={"*":"deny"} and p["doom_loop"]=="deny" and p["edit"]=="deny" else 1)' "$work/good.cfg"; then
+  ok "spec-run config: bash kept as an all-deny map, doom_loop denied, edit denied (#88)"
+else bad "spec-run config (#88)"; cat "$work/good.cfg" 2>/dev/null || true; fi
+specrun zero "$work/out-good.txt" zero
+if grep -q 'cost not measured' "$work/zero/spec-comment.md" && grep -q 'OpenCode stats empty' "$work/zero/spec-comment.md" \
+  && ! grep -q '\$0\.0000' "$work/zero/spec-comment.md"; then ok "build: empty OpenCode stats say 'not measured', never \$0.0000 (#88)"
+else bad "build: zero stats (#88)"; grep -n 'Spec run' "$work/zero/spec-comment.md" || true; fi
 if draft check-comment "$c" --issue 7 >/dev/null 2>&1; then ok "check-comment: the draft passes the publish re-check"
 else bad "check-comment on the good draft"; draft check-comment "$c" --issue 7 || true; fi
 if ! draft check-comment "$c" --issue 8 >/dev/null 2>&1; then ok "check-comment: draft for another issue refused"; else bad "check-comment issue mismatch"; fi
