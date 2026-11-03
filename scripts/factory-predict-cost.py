@@ -24,6 +24,20 @@ DEFAULT_MODELS = ROOT / ".factory" / "models.yaml"
 SPECIAL_MODELS = frozenset({"use_different_model_than_builder"})
 
 
+SPEC_MARKER = "<!-- factory-spec v1 -->"
+
+
+def split_marker(text: str) -> tuple[str, str]:
+    """(prefix, rest): prefix is everything up to and including the spec marker line (empty when
+    there is no marker), so a spec comment body or text before the marker works (#60)."""
+    idx = text.find(SPEC_MARKER)
+    if idx == -1:
+        return "", text
+    end = text.find("\n", idx)
+    end = len(text) if end == -1 else end + 1
+    return text[:end], text[end:]
+
+
 def strip_test_directive(text: str) -> str:
     lines = text.splitlines(keepends=True)
     while lines and lines[0].startswith("# predict-expect:"):
@@ -133,10 +147,10 @@ def dump_front_matter(fm: dict[str, Any]) -> str:
     return yaml.safe_dump(fm, sort_keys=False, default_flow_style=False).rstrip()
 
 
-def write_spec(path: Path, fm: dict[str, Any], body: str) -> None:
+def write_spec(path: Path, fm: dict[str, Any], body: str, prefix: str = "") -> None:
     if body and not body.startswith("\n"):
         body = "\n" + body
-    new_text = f"---\n{dump_front_matter(fm)}\n---{body}"
+    new_text = f"{prefix}---\n{dump_front_matter(fm)}\n---{body}"
     path.write_text(new_text, encoding="utf-8")
 
 
@@ -158,6 +172,7 @@ def compute(
     as_json: bool,
 ) -> dict[str, Any]:
     raw = strip_test_directive(spec_path.read_text(encoding="utf-8"))
+    marker_prefix, raw = split_marker(raw)
     fm, body = split_front_matter(raw)
     if fm is None:
         raise SystemExit(f"{spec_path}: missing YAML front matter")
@@ -300,7 +315,7 @@ def compute(
         fm["predicted_cost_usd"] = predicted_cost
         fm["budget_cap_usd"] = issue_cap
         fm["price_table_version"] = price_table_version
-        write_spec(spec_path, fm, body)
+        write_spec(spec_path, fm, body, prefix=marker_prefix)
 
     if as_json:
         print(json.dumps(result, indent=2, sort_keys=True))

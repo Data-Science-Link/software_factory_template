@@ -22,6 +22,11 @@ if [ -z "$instruction" ]; then
   echo "agent-run: empty instruction after /oc prefix" >&2
   exit 1
 fi
+# "/oc spec" belongs to opencode-spec.yml (#78): never start a build worker for it.
+if [[ "$instruction" =~ ^spec([[:space:]]|$) ]]; then
+  echo "agent-run: '/oc spec' is handled by the opencode-spec workflow; no build run" >&2
+  exit 1
+fi
 
 unset GITHUB_TOKEN GH_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL || true
 if [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
