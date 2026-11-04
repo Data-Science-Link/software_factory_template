@@ -72,8 +72,10 @@ PY
 
 # Idempotency: a marker with this run id + attempt already posted by github-actions[bot] -> stop.
 # Pipe the (possibly multi-page, possibly several concatenated JSON arrays on one line) output
-# into python3 on stdin; a large payload never becomes a command-line argument.
-if gh api --paginate "repos/$repo/issues/${OC_TARGET_NUMBER}/comments" | python3 - "$marker" <<'PY'
+# into python3 on stdin; a large payload never becomes a command-line argument. The Python
+# program lives in a shell variable (read -r -d '' from a heredoc) so the heredoc does NOT
+# replace stdin: the gh output is still what Python reads on stdin.
+read -r -d '' dup_py <<'PY' || true
 import json, sys
 marker = sys.argv[1]
 decoder = json.JSONDecoder()
@@ -96,6 +98,7 @@ while i < n:
         break
 sys.exit(0 if seen else 1)
 PY
+if gh api --paginate "repos/$repo/issues/${OC_TARGET_NUMBER}/comments" | python3 -c "$dup_py" "$marker"
 then
   echo "notify-failure: already posted for this run attempt"
   exit 0
