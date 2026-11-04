@@ -102,7 +102,21 @@ case "$spec_id" in
     spec_file_line="exact copy of spec comment ${spec_id}, ${spec_source}"
     ;;
 esac
+# #101: new scripts/*.sh|*.py that start with "#!" are staged executable (100755), because the
+# worker's git-only shell cannot chmod. Reads the index only (never runs or trusts worker files);
+# only files ADDED relative to $1, directly under scripts/, that are plain 100644 blobs.
+mark_new_scripts_executable() { # $1 = base commit
+  local p
+  git diff --cached --name-only --diff-filter=A -z "$1" -- 'scripts/' | while IFS= read -r -d '' p; do
+    case "$p" in scripts/*/*) continue ;; scripts/*.sh | scripts/*.py) ;; *) continue ;; esac
+    [ "$(git ls-files -s -- "$p" | cut -d' ' -f1)" = 100644 ] || continue
+    [ "$(git cat-file blob ":$p" 2>/dev/null | head -c 2)" = '#!' ] || continue
+    git update-index --chmod=+x -- "$p"
+    echo "harness: staged new script $p as executable (#101)"
+  done
+}
 git add -A
+mark_new_scripts_executable HEAD
 if git diff --cached --quiet; then
   echo "publish-fix: patch applied but nothing staged" >&2
   exit 1
