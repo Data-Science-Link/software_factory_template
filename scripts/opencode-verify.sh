@@ -14,7 +14,8 @@
 # default ocverify) with an EMPTY environment, so no token or API key is in reach, not even via
 # /proc of the parent processes (other uid). "none" runs as the current user with an empty
 # environment and is refused under GitHub Actions (tests only). Network is not blocked.
-# Always exits 0 once the evidence file is written; the evidence carries the exit code.
+# Always exits 0 once the evidence file is written; the evidence carries PASS/FAIL and every
+# command that exited non-zero (#100), not just the last command's status.
 set -euo pipefail
 
 spec='' base='' patch='' out='' timeout_s="${OC_VERIFY_TIMEOUT:-300}"
@@ -72,11 +73,22 @@ if [ -n "$patch" ] && [ -s "$patch" ]; then
   g apply --index "$patch" 2>/dev/null || not_run "the patch does not apply to ${base_sha:0:12}"
   g commit -q -m "this run's patch"
 fi
-printf '%s\n' "$block" >"$w/verify.sh"
+# #100: judge EVERY command, not just the last one. The wrapper keeps the block in one shell (cd and
+# variables carry over) and runs all of it, but an ERR trap records each command that exits
+# non-zero (line, status, command) in status.txt; pipefail makes a failing stage of a pipeline
+# count. Commands tested by if/while/&&/|| are not failures (normal bash ERR rules).
+# Line 1 of verify.sh is this quiet preamble (stderr, so its xtrace, goes nowhere); the block
+# starts on line 2, hence LINENO-1. xtrace is turned on at the end of the preamble.
+{
+  # shellcheck disable=SC2016 # expanded by the sandboxed bash, on purpose
+  printf '%s\n' '{ __oc_status="$1"; __oc_err() { printf "line %s: exit %s: %s\n" "$(($2 - 1))" "$1" "$3" >>"$__oc_status"; }; set -E -o pipefail; trap '"'"'{ __oc_err "$?" "$LINENO" "$BASH_COMMAND"; } 2>/dev/null'"'"' ERR; set -x; } 2>/dev/null'
+  printf '%s\n' "$block"
+} >"$w/verify.sh"
+: >"$w/status.txt"
 
 clean_env=(env -i "PATH=/usr/local/bin:/usr/bin:/bin" "HOME=$w/home" "LANG=C.UTF-8" "TERM=dumb" "CI=true")
 # shellcheck disable=SC2016 # $1..$3 are expanded by the inner bash, on purpose
-run_cmd=(bash -c 'cd "$1" && exec timeout -k 10 "$2" bash -x "$3"' verify "$w/repo" "$timeout_s" "$w/verify.sh")
+run_cmd=(bash -c 'cd "$1" && exec timeout -k 10 "$2" bash "$3" "$4"' verify "$w/repo" "$timeout_s" "$w/verify.sh" "$w/status.txt")
 if [ "$mode" = user ]; then
   id -u "$vuser" >/dev/null 2>&1 || sudo -n useradd --system --no-create-home --shell /bin/bash "$vuser"
   sudo -n chown -R "$vuser:" "$w"
@@ -95,10 +107,16 @@ set +e
 rc=$?
 set -e
 dur=$((SECONDS - start))
+failed_cmds="$(head -c 4000 "$w/status.txt" 2>/dev/null || true)"
+nfail="$(grep -c . <<<"$failed_cmds" || true)"
 case "$rc" in
-  0) status="last command exited 0" ;;
-  124 | 137) status="timed out after ${timeout_s}s" ;;
-  *) status="last command exited ${rc}" ;;
+  124 | 137) status="FAIL: timed out after ${timeout_s}s" ;;
+  *)
+    if [ "$nfail" -gt 0 ]; then status="FAIL: ${nfail} command(s) exited non-zero (block exit ${rc})"
+    elif [ "$rc" -ne 0 ]; then status="FAIL: block exited ${rc}"
+    else status="PASS: every command exited 0"
+    fi
+    ;;
 esac
 
 {
@@ -107,6 +125,8 @@ esac
   echo "Tree: ${base_sha:0:12} plus this run's patch, committed in a scratch copy (HEAD~1 is the base; no origin remote)."
   echo "Sandbox: ${sandbox}; network not blocked; ${timeout_s}s limit."
   echo "Result: ${status}; ${dur}s. Each \"+ \" line is a command as run; read the outputs below it."
+  echo "Per-command status: every command ran; any that exited non-zero is listed here (line in the block, exit code, command)."
+  if [ "$nfail" -gt 0 ]; then printf '%s\n' "$failed_cmds" | sed 's/^/  FAILED /'; else echo "  (none failed)"; fi
   echo "--- output ---"
   cat "$log"
 } >"$out"

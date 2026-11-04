@@ -89,10 +89,30 @@ vrun() { # name spec [extra env...]
 }
 vrun v1 "$work/ctx/spec.md"
 if grep -q '^+ cat factory/x/hello.md' "$work/v1.md" && grep -qx hello "$work/v1.md" && grep -qx 'key=unset gh=unset' "$work/v1.md" \
-  && grep -qx 'factory/x/hello.md' "$work/v1.md" && grep -q 'not by the model' "$work/v1.md" && grep -q 'last command exited 0' "$work/v1.md" \
+  && grep -qx 'factory/x/hello.md' "$work/v1.md" && grep -q 'not by the model' "$work/v1.md" && grep -q 'PASS: every command exited 0' "$work/v1.md" && grep -q '(none failed)' "$work/v1.md" \
   && ! grep -qF "$FAKE_KEY" "$work/v1.md"; then
   ok "verify: runs the spec block on base + patch, empty environment (key and token unset)"
 else bad "verify: basic run"; cat "$work/v1.md"; fi
+# #100: a failing command in the middle is a FAIL even if the last command exits 0.
+mkspec() { printf '## Verification\n```bash\n%s\n```\n' "$1" >"$work/$2"; }
+mkspec $'false\necho after' mid.md; vrun v100a "$work/mid.md"
+if grep -q 'FAIL: 1 command(s) exited non-zero' "$work/v100a.md" && grep -q 'FAILED line 1: exit 1: false' "$work/v100a.md" && grep -qx after "$work/v100a.md"; then
+  ok "verify: middle command fails, last passes -> FAIL, the failing command listed, later commands still ran"
+else bad "verify: middle failure"; cat "$work/v100a.md"; fi
+mkspec $'ls no-such-file\ntrue\nsh -c "exit 3"\necho done' two.md; vrun v100b "$work/two.md"
+if grep -q 'FAIL: 2 command(s)' "$work/v100b.md" && grep -q 'FAILED line 1: exit 2: ls no-such-file' "$work/v100b.md" && grep -q 'FAILED line 3: exit 3' "$work/v100b.md"; then
+  ok "verify: every failing command reported with its line and exit code"
+else bad "verify: two failures"; cat "$work/v100b.md"; fi
+mkspec $'false | cat\necho ok' pipe.md; vrun v100c "$work/pipe.md"
+if grep -q 'FAIL: 1 command' "$work/v100c.md"; then ok "verify: a failing pipeline stage counts (pipefail)"; else bad "verify: pipefail"; cat "$work/v100c.md"; fi
+mkspec $'if false; then echo no; fi\ntest -f nope || echo fallback\ncd factory/x\nls base.md' cond.md; vrun v100d "$work/cond.md"
+if grep -q 'PASS: every command exited 0' "$work/v100d.md" && grep -qx base.md "$work/v100d.md"; then
+  ok "verify: tested conditions are not failures; cd carries over between commands"
+else bad "verify: conditions"; cat "$work/v100d.md"; fi
+mkspec $'f() { false; echo in-f; }\nf\nexit 0' func.md; vrun v100e "$work/func.md"
+if grep -q 'FAIL: 1 command' "$work/v100e.md"; then ok "verify: failure inside a function counts; exit 0 cannot hide it"; else bad "verify: function/exit 0"; cat "$work/v100e.md"; fi
+mkspec $'echo x\nexit 4' ex.md; vrun v100f "$work/ex.md"
+if grep -q 'FAIL: block exited 4' "$work/v100f.md"; then ok "verify: explicit non-zero exit is a FAIL"; else bad "verify: exit 4"; cat "$work/v100f.md"; fi
 printf '## Verification\nNo commands.\n## Classification\n' >"$work/nob.md"
 vrun v2 "$work/nob.md"
 if grep -q 'not run (the spec' "$work/v2.md"; then ok "verify: no bash block -> 'not run' evidence"; else bad "verify: no block"; fi
