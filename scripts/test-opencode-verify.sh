@@ -145,6 +145,17 @@ if sudo -n true 2>/dev/null; then
   if grep -qx ocverify "$work/v7.md" && grep -qx 0 "$work/v7.md" && ! grep -qF "$FAKE_KEY" "$work/v7.md"; then
     ok "verify (sudo): separate user, parent processes' environment unreadable, RUNNER_TEMP not traversable"
   else bad "verify (sudo): sandbox user"; cat "$work/v7.md"; fi
+  # #108: per-command status must be read back from the sandbox user's scratch copy.
+  # shellcheck disable=SC2016 # literal markdown backticks
+  printf '## Verification\n```bash\nfalse\necho after\n```\n' >"$work/mid-sudo.md"
+  bash scripts/opencode-verify.sh --spec "$work/mid-sudo.md" --base "$work/vb" --out "$work/v108.md" --timeout 60 >/dev/null 2>&1
+  if grep -q 'FAIL: 1 command(s) exited non-zero' "$work/v108.md" && grep -q 'FAILED line 1: exit 1: false' "$work/v108.md"; then
+    ok "verify (sudo): a failing command in the sandbox user's run is reported FAIL (#108)"
+  else bad "verify (sudo): status readback"; cat "$work/v108.md"; fi
+  # shellcheck disable=SC2016 # literal markdown backticks
+  printf '## Verification\n```bash\necho ok\n```\n' >"$work/ok-sudo.md"
+  bash scripts/opencode-verify.sh --spec "$work/ok-sudo.md" --base "$work/vb" --out "$work/v108b.md" --timeout 60 >/dev/null 2>&1
+  if grep -q 'PASS: every command exited 0' "$work/v108b.md"; then ok "verify (sudo): clean block still PASS"; else bad "verify (sudo): clean PASS"; cat "$work/v108b.md"; fi
 else
   echo "SKIP  verify (sudo): separate-user sandbox (no passwordless sudo here)"
 fi

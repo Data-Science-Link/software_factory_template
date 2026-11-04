@@ -107,12 +107,22 @@ set +e
 rc=$?
 set -e
 dur=$((SECONDS - start))
-failed_cmds="$(head -c 4000 "$w/status.txt" 2>/dev/null || true)"
+# status.txt sits in the scratch copy, which belongs to the sandbox user in "user" mode (mode 700),
+# so read it as that user. Unreadable -> FAIL, never a silent PASS (#108: live run 41769227853
+# reported PASS while the block's test exited 1).
+status_ok=yes
+if [ "$mode" = user ]; then
+  failed_cmds="$(sudo -n -u "$vuser" -- cat "$w/status.txt" 2>/dev/null)" || status_ok=no
+else
+  failed_cmds="$(cat "$w/status.txt" 2>/dev/null)" || status_ok=no
+fi
+failed_cmds="$(head -c 4000 <<<"$failed_cmds")"
 nfail="$(grep -c . <<<"$failed_cmds" || true)"
 case "$rc" in
   124 | 137) status="FAIL: timed out after ${timeout_s}s" ;;
   *)
-    if [ "$nfail" -gt 0 ]; then status="FAIL: ${nfail} command(s) exited non-zero (block exit ${rc})"
+    if [ "$status_ok" = no ]; then status="FAIL: could not read the per-command status (block exit ${rc})"
+    elif [ "$nfail" -gt 0 ]; then status="FAIL: ${nfail} command(s) exited non-zero (block exit ${rc})"
     elif [ "$rc" -ne 0 ]; then status="FAIL: block exited ${rc}"
     else status="PASS: every command exited 0"
     fi
