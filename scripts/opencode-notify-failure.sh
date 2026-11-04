@@ -71,21 +71,29 @@ json.dump({"body": sys.argv[2]}, open(sys.argv[1], "w"))
 PY
 
 # Idempotency: a marker with this run id + attempt already posted by github-actions[bot] -> stop.
-comments="$(gh api --paginate "repos/$repo/issues/${OC_TARGET_NUMBER}/comments")"
-if python3 - "$comments" "$marker" <<'PY'
+# Pipe the (possibly multi-page, possibly several concatenated JSON arrays on one line) output
+# into python3 on stdin; a large payload never becomes a command-line argument.
+if gh api --paginate "repos/$repo/issues/${OC_TARGET_NUMBER}/comments" | python3 - "$marker" <<'PY'
 import json, sys
-text = sys.argv[1]
-marker = sys.argv[2]
+marker = sys.argv[1]
+decoder = json.JSONDecoder()
 seen = False
-# The output may be several concatenated JSON arrays.
-for line in text.splitlines():
-    line = line.strip()
-    if not line:
-        continue
-    for c in json.loads(line):
+buf = sys.stdin.read()
+i = 0
+n = len(buf)
+while i < n:
+    while i < n and buf[i] in " \t\r\n":
+        i += 1
+    if i >= n:
+        break
+    obj, j = decoder.raw_decode(buf, i)
+    i = j
+    for c in obj:
         if (c.get("user") or {}).get("login") == "github-actions[bot]" and marker in (c.get("body") or ""):
             seen = True
             break
+    if seen:
+        break
 sys.exit(0 if seen else 1)
 PY
 then

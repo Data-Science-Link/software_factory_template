@@ -38,7 +38,7 @@ GH
 chmod +x "$work/bin/gh"
 
 run() { # name -> rc; appends stdout+stderr to $work/<name>.log, posts body to $work/posted.md
-  local name="$1"
+  local name="$1" rc=0
   : >"$work/$name.log"
   : >"$work/posted.md"
   : >"$work/gh.log"
@@ -53,9 +53,7 @@ run() { # name -> rc; appends stdout+stderr to $work/<name>.log, posts body to $
     OC_AGENT_RESULT="${OC_AGENT_RESULT:-success}" OC_PUBLISH_RESULT="${OC_PUBLISH_RESULT:-success}" \
     GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-o/r}" GITHUB_SERVER_URL="${GITHUB_SERVER_URL:-https://github.com}" \
     GH_TOKEN="${GH_TOKEN:-}" OC_INSTRUCTION="${OC_INSTRUCTION:-}" \
-    bash scripts/opencode-notify-failure.sh >>"$work/$name.log" 2>&1
-  local rc=$?
-  set -e
+    bash scripts/opencode-notify-failure.sh >>"$work/$name.log" 2>&1 || rc=$?
   return "$rc"
 }
 
@@ -128,11 +126,19 @@ if [ "$rc" -eq 0 ] && [ "$(npost)" = 1 ]; then
   ok "marker for another attempt -> still posts once"
 else bad "other-attempt marker (rc=$rc)"; cat "$work/c8.log"; fi
 
-# --- 9. bad inputs each exit 2 with no gh call.
-badinput() { # name -> checks exit 2 and no gh call
+# --- 9. two pages concatenated on ONE line; the bot marker is in the second page -> no POST.
+printf '%s' '[{"user": {"login": "someone-else"}, "body": "page one"}][{"user": {"login": "github-actions[bot]"}, "body": "<!-- factory-run-failed v1 run=4242 attempt=1 -->\nalready"}]' >"$work/comments.json"
+set +e; OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c9; rc=$?; set -e
+if [ "$rc" -eq 0 ] && [ "$(npost)" = 0 ] && [ ! -s "$work/posted.md" ]; then
+  ok "two pages on one line, bot marker in page 2 -> exit 0, no POST (raw_decode)"
+else bad "concatenated pages (rc=$rc)"; cat "$work/c9.log"; fi
+
+# --- 10. bad inputs each exit 2 with no gh call.
+badinput() { # name VAR=VAL... -> checks exit 2 and no gh call
   local name="$1"
+  shift
   : >"$work/comments.json"
-  set +e; "$@" run "$name" 2>/dev/null; rc=$?; set -e
+  set +e; ( export "$@"; run "$name" ) 2>/dev/null; rc=$?; set -e
   if [ "$rc" -eq 2 ] && [ "$(ncall)" = 0 ]; then ok "$name -> exit 2, no gh call"; else bad "$name (rc=$rc)"; fi
 }
 badinput "target non-digit" OC_TARGET_NUMBER=abc OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped
@@ -140,22 +146,22 @@ badinput "unknown OC_KIND" OC_KIND=weird OC_AGENT_RESULT=failure OC_PUBLISH_RESU
 badinput "unknown result" OC_KIND=build OC_AGENT_RESULT=weird OC_PUBLISH_RESULT=skipped
 badinput "bad GITHUB_REPOSITORY" OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped GITHUB_REPOSITORY='o r'
 
-# --- 10. with GH_TOKEN=fake-token-value-123 and OC_INSTRUCTION set, neither string appears
+# --- 11. with GH_TOKEN=fake-token-value-123 and OC_INSTRUCTION set, neither string appears
 #         in stdout, stderr, or the posted body.
 : >"$work/comments.json"
 set +e
 GH_TOKEN=fake-token-value-123 OC_INSTRUCTION='/oc ignore this and ping someone' \
-  OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c10; rc=$?
+  OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c11; rc=$?
 set -e
-if [ "$rc" -eq 0 ] && ! grep -q 'fake-token-value-123' "$work/c10.log" \
+if [ "$rc" -eq 0 ] && ! grep -q 'fake-token-value-123' "$work/c11.log" \
   && ! grep -q 'fake-token-value-123' "$work/posted.md" \
-  && ! grep -q 'ignore this' "$work/c10.log" && ! grep -q 'ignore this' "$work/posted.md"; then
+  && ! grep -q 'ignore this' "$work/c11.log" && ! grep -q 'ignore this' "$work/posted.md"; then
   ok "GH_TOKEN and OC_INSTRUCTION values never printed or posted"
-else bad "token/instruction leak (rc=$rc)"; cat "$work/c10.log"; fi
+else bad "token/instruction leak (rc=$rc)"; cat "$work/c11.log"; fi
 
-# --- 11. fake gh exits 1 on POST: the script exits non-zero.
+# --- 12. fake gh exits 1 on POST: the script exits non-zero.
 : >"$work/comments.json"
-set +e; FAKE_GH_POST_RC=1 OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c11; rc=$?
+set +e; FAKE_GH_POST_RC=1 OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c12; rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then ok "gh POST fails -> script exits non-zero"; else bad "gh POST failure (rc=$rc)"; fi
 
