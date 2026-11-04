@@ -77,7 +77,7 @@ git_state() { { cat .git/config; cat .git/info/attributes 2>/dev/null || true; }
 git_before="$(git_state)"
 
 context="$(cat "$OC_ARTIFACT_DIR/fix-context.md")"
-path_rules="$(bash "$scan" --list-rules)"
+path_rules="$(bash "$scan" --list-rules fix)"
 if [ -n "$spec_copy" ]; then
   spec_rule="${spec_path} is the harness's exact copy of the owner's approved spec comment. Do not
 edit, copy or delete it, even if a review comment points at it: after you finish, the harness
@@ -174,6 +174,20 @@ fi
 g() { git -c core.hooksPath=/dev/null --no-pager "$@"; }
 rm -f gitleaks_*.tar.gz opencode-linux-*.tar.gz 2>/dev/null || true
 g add -A -- . ":(exclude)*.tar.gz" ":(exclude)*.tgz" ":(exclude)*.zip" ":(exclude)gitleaks_*"
+# #101: new scripts/*.sh|*.py that start with "#!" are staged executable (100755), because the
+# worker's git-only shell cannot chmod. Reads the index only (never runs or trusts worker files);
+# only files ADDED relative to $1, directly under scripts/, that are plain 100644 blobs.
+mark_new_scripts_executable() { # $1 = base commit
+  local p
+  git diff --cached --name-only --diff-filter=A -z "$1" -- 'scripts/' | while IFS= read -r -d '' p; do
+    case "$p" in scripts/*/*) continue ;; scripts/*.sh | scripts/*.py) ;; *) continue ;; esac
+    [ "$(git ls-files -s -- "$p" | cut -d' ' -f1)" = 100644 ] || continue
+    [ "$(git cat-file blob ":$p" 2>/dev/null | head -c 2)" = '#!' ] || continue
+    git update-index --chmod=+x -- "$p"
+    echo "harness: staged new script $p as executable (#101)"
+  done
+}
+mark_new_scripts_executable "$head_sha"
 g diff --cached --binary --no-ext-diff --no-textconv "$head_sha" >"$OC_ARTIFACT_DIR/changes.patch" || true
 
 usage_metrics="$OC_ARTIFACT_DIR/usage-metrics.md"
@@ -203,7 +217,12 @@ printf 'pr_number=%s\nissue_number=%s\nhead_ref=%s\nhead_sha=%s\nspec_comment_id
   "$pr_number" "$issue_number" "$head_ref" "$head_sha" "$spec_id" "${spec_sha:-none}" "$owner_comments" >"$meta_file"
 if [ -n "$spec_copy" ]; then cp "$spec_copy" "$OC_ARTIFACT_DIR/spec.md"; fi
 
-bash "$scan" \
+# #102: scripts on the default branch (the trusted checkout), so the scan lets the fix edit only
+# scripts this PR added. Written by the harness from its own checkout, never from the PR head.
+base_scripts="$(mktemp)"
+git -C "$trusted" ls-tree -r --name-only HEAD -- scripts/ >"$base_scripts"
+[ -s "$base_scripts" ] || { echo "agent-fix: could not list the default branch scripts" >&2; exit 1; }
+bash "$scan" --base-scripts "$base_scripts" \
   "$OC_ARTIFACT_DIR/changes.patch" \
   "$OC_ARTIFACT_DIR/summary.md" \
   "$OC_ARTIFACT_DIR/worker-note.md" \

@@ -89,10 +89,31 @@ vrun() { # name spec [extra env...]
 }
 vrun v1 "$work/ctx/spec.md"
 if grep -q '^+ cat factory/x/hello.md' "$work/v1.md" && grep -qx hello "$work/v1.md" && grep -qx 'key=unset gh=unset' "$work/v1.md" \
-  && grep -qx 'factory/x/hello.md' "$work/v1.md" && grep -q 'not by the model' "$work/v1.md" && grep -q 'last command exited 0' "$work/v1.md" \
+  && grep -qx 'factory/x/hello.md' "$work/v1.md" && grep -q 'not by the model' "$work/v1.md" && grep -q 'PASS: every command exited 0' "$work/v1.md" && grep -q '(none failed)' "$work/v1.md" \
   && ! grep -qF "$FAKE_KEY" "$work/v1.md"; then
   ok "verify: runs the spec block on base + patch, empty environment (key and token unset)"
 else bad "verify: basic run"; cat "$work/v1.md"; fi
+# #100: a failing command in the middle is a FAIL even if the last command exits 0.
+# shellcheck disable=SC2016 # backticks are literal markdown
+mkspec() { printf '## Verification\n```bash\n%s\n```\n' "$1" >"$work/$2"; }
+mkspec $'false\necho after' mid.md; vrun v100a "$work/mid.md"
+if grep -q 'FAIL: 1 command(s) exited non-zero' "$work/v100a.md" && grep -q 'FAILED line 1: exit 1: false' "$work/v100a.md" && grep -qx after "$work/v100a.md"; then
+  ok "verify: middle command fails, last passes -> FAIL, the failing command listed, later commands still ran"
+else bad "verify: middle failure"; cat "$work/v100a.md"; fi
+mkspec $'ls no-such-file\ntrue\nsh -c "exit 3"\necho done' two.md; vrun v100b "$work/two.md"
+if grep -q 'FAIL: 2 command(s)' "$work/v100b.md" && grep -q 'FAILED line 1: exit 2: ls no-such-file' "$work/v100b.md" && grep -q 'FAILED line 3: exit 3' "$work/v100b.md"; then
+  ok "verify: every failing command reported with its line and exit code"
+else bad "verify: two failures"; cat "$work/v100b.md"; fi
+mkspec $'false | cat\necho ok' pipe.md; vrun v100c "$work/pipe.md"
+if grep -q 'FAIL: 1 command' "$work/v100c.md"; then ok "verify: a failing pipeline stage counts (pipefail)"; else bad "verify: pipefail"; cat "$work/v100c.md"; fi
+mkspec $'if false; then echo no; fi\ntest -f nope || echo fallback\ncd factory/x\nls base.md' cond.md; vrun v100d "$work/cond.md"
+if grep -q 'PASS: every command exited 0' "$work/v100d.md" && grep -qx base.md "$work/v100d.md"; then
+  ok "verify: tested conditions are not failures; cd carries over between commands"
+else bad "verify: conditions"; cat "$work/v100d.md"; fi
+mkspec $'f() { false; echo in-f; }\nf\nexit 0' func.md; vrun v100e "$work/func.md"
+if grep -q 'FAIL: 1 command' "$work/v100e.md"; then ok "verify: failure inside a function counts; exit 0 cannot hide it"; else bad "verify: function/exit 0"; cat "$work/v100e.md"; fi
+mkspec $'echo x\nexit 4' ex.md; vrun v100f "$work/ex.md"
+if grep -q 'FAIL: block exited 4' "$work/v100f.md"; then ok "verify: explicit non-zero exit is a FAIL"; else bad "verify: exit 4"; cat "$work/v100f.md"; fi
 printf '## Verification\nNo commands.\n## Classification\n' >"$work/nob.md"
 vrun v2 "$work/nob.md"
 if grep -q 'not run (the spec' "$work/v2.md"; then ok "verify: no bash block -> 'not run' evidence"; else bad "verify: no block"; fi
@@ -206,6 +227,28 @@ if [ $((SECONDS - t0)) -lt 60 ] && grep -q 'worker stopped at the 2s limit' "$wo
   ok "agent-run: hung worker stopped at its time limit; log and partial patch kept (rc=$rc)"
 else bad "agent-run: hung worker (rc=$rc)"; tail -5 "$work/agent3.log"; fi
 
+# #101: new scripts with a shebang are staged 100755 in the patch; others stay 100644.
+cat >"$work/bin/opencode" <<'FAKE'
+#!/usr/bin/env bash
+if [ "$1" = stats ]; then exit 0; fi
+printf '#!/usr/bin/env bash\necho tool\n' >scripts/new-tool-check.sh
+printf '#!/usr/bin/env python3\nprint(1)\n' >scripts/new-tool-report.py
+printf 'echo sourced only\n' >scripts/new-tool-lib.sh
+mkdir -p factory/x && printf '#!/bin/sh\n' >factory/x/not-a-script.sh
+FAKE
+art101a="$work/art101a"; mkdir -p "$art101a"; cp "$work/ctx/"* "$art101a/"
+(cd "$repo" && git reset -q --hard && git clean -qfd)
+set +e
+(cd "$repo" && PATH="$work/bin:$PATH" OC_INSTRUCTION='/oc run' OC_ISSUE_NUMBER=7 OC_ARTIFACT_DIR="$art101a" \
+  DEEPINFRA_API_KEY="$FAKE_KEY" OC_VERIFY_SANDBOX=none bash scripts/opencode-agent-run.sh) >"$work/agent101.log" 2>&1
+rc=$?
+set -e
+modes="$(cd "$work" && rm -rf chk101 && git init -q chk101 && cd chk101 && git apply --index "$art101a/changes.patch" && git ls-files -s scripts factory/x)" || true
+if [ "$rc" -eq 0 ] && grep -q '^100755 .*scripts/new-tool-check.sh$' <<<"$modes" && grep -q '^100755 .*scripts/new-tool-report.py$' <<<"$modes" \
+  && grep -q '^100644 .*scripts/new-tool-lib.sh$' <<<"$modes" && grep -q '^100644 .*factory/x/not-a-script.sh$' <<<"$modes"; then
+  ok "agent-run: new scripts/ files with a shebang are 100755 in the patch; no-shebang and non-scripts/ stay 100644 (#101)"
+else bad "agent-run: new script modes (rc=$rc)"; echo "$modes"; tail -5 "$work/agent101.log"; fi
+
 # --- publish-pr on that artifact: exact spec checked against the comment; body sections
 pub="$work/pub"
 mkdir -p "$pub"
@@ -222,6 +265,14 @@ publish() { # artifact-dir -> rc; body in <dir>/pr-body.md
   rc=$?
   set -e
 }
+publish "$art"
+# #101 belt: an older artifact whose patch adds a shebang script as 100644 is committed as 100755.
+art101b="$work/art101b"; rm -rf "$art101b"; cp -r "$art" "$art101b"
+printf 'diff --git a/scripts/late-tool-check.sh b/scripts/late-tool-check.sh\nnew file mode 100644\n--- /dev/null\n+++ b/scripts/late-tool-check.sh\n@@ -0,0 +1,2 @@\n+#!/usr/bin/env bash\n+echo late\n' >>"$art101b/changes.patch"
+publish "$art101b"
+if [ "$(git -C "$pub" ls-files -s scripts/late-tool-check.sh | cut -d' ' -f1)" = 100755 ] && grep -q 'staged new script scripts/late-tool-check.sh as executable' "$art101b.publish.log"; then
+  ok "publish: new shebang script from a 100644 patch is committed executable (#101)"
+else bad "publish: #101 belt"; tail -8 "$art101b.publish.log"; fi
 publish "$art"
 body="$art/pr-body.md"
 if grep -q 'GH_TOKEN is required' "$art.publish.log" && grep -q 'PR check: passed' "$art.publish.log"; then
