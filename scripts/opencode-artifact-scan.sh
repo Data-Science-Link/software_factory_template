@@ -39,6 +39,7 @@ scan_one() {
 FORBIDDEN_PATTERNS=(
   '.github' '.github/*'
   'opencode.json'
+  'AGENTS.md' '*/AGENTS.md'
   '.factory/actions-security.md'
   '.factory/models.yaml'
   'requirements-factory.txt'
