@@ -94,6 +94,7 @@ if grep -q '^+ cat factory/x/hello.md' "$work/v1.md" && grep -qx hello "$work/v1
   ok "verify: runs the spec block on base + patch, empty environment (key and token unset)"
 else bad "verify: basic run"; cat "$work/v1.md"; fi
 # #100: a failing command in the middle is a FAIL even if the last command exits 0.
+# shellcheck disable=SC2016 # backticks are literal markdown
 mkspec() { printf '## Verification\n```bash\n%s\n```\n' "$1" >"$work/$2"; }
 mkspec $'false\necho after' mid.md; vrun v100a "$work/mid.md"
 if grep -q 'FAIL: 1 command(s) exited non-zero' "$work/v100a.md" && grep -q 'FAILED line 1: exit 1: false' "$work/v100a.md" && grep -qx after "$work/v100a.md"; then
