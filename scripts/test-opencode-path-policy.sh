@@ -93,6 +93,12 @@ new_repo; printf 'x: 1\n' >>.factory/models.yaml; capture
 expect fail ".factory/models.yaml is owner-only" ".factory/models.yaml"
 new_repo; printf 'x\n' >>.factory/actions-security.md; capture
 expect fail ".factory/actions-security.md is owner-only" ".factory/actions-security.md"
+
+# --- AGENTS.md: owner-only, root and nested (#97) ---
+new_repo; printf 'x\n' >>AGENTS.md; capture
+expect fail "AGENTS.md is owner-only" "AGENTS.md"
+new_repo; mkdir -p docs; printf '# Rules\n' >docs/AGENTS.md; capture
+expect fail "nested AGENTS.md is owner-only" "AGENTS.md"
 new_repo; g mv .factory/models.yaml .factory/models-old.yaml; capture
 expect fail ".factory/: rename an owner-only file away" "forbidden path: .factory/models.yaml"
 
@@ -182,6 +188,52 @@ sys.exit(1 if bad or need else 0)
 PY2
 then ok "opencode.json: new scripts editable (scan judges them); .github, opencode.json, protect-main.sh denied"
 else bad "opencode.json edit rules vs path policy"; fi
+
+# --- fix runs (#102): --base-scripts lists the default branch scripts; PR-added ones are editable ---
+# new_pr_repo: base commit = "main"; a second commit (the PR head) adds scripts/pr-added-check.sh.
+new_pr_repo() {
+  new_repo
+  g ls-tree -r --name-only HEAD -- scripts/ >"$work/base-scripts.txt"
+  printf '#!/usr/bin/env bash\necho pr\n' >scripts/pr-added-check.sh
+  g add -A; g commit -qm pr
+}
+expect_fix() { # like expect, but scans in fix mode with the base scripts list
+  local rc=0 out
+  out="$(bash "$scan" --base-scripts "$work/base-scripts.txt" "$work/changes.patch" 2>&1)" || rc=$?
+  if [ "$1" = pass ] && [ "$rc" -eq 0 ]; then ok "$2"
+  elif [ "$1" = fail ] && [ "$rc" -ne 0 ] && { [ -z "${3:-}" ] || grep -qF -- "$3" <<<"$out"; }; then ok "$2"
+  else bad "$2 (want $1, rc=$rc: $out)"; fi
+}
+new_pr_repo; printf 'echo fixed\n' >>scripts/pr-added-check.sh; capture
+expect_fix pass "fix: edit a script the PR added"
+expect fail "build (no --base-scripts): same edit still rejected" "modifies an existing script"
+new_pr_repo; chmod +x scripts/pr-added-check.sh; capture
+expect_fix pass "fix: chmod +x a script the PR added"
+new_pr_repo; printf 'echo more\n' >>scripts/pr-check.sh; capture
+expect_fix fail "fix: edit a script that exists on main" "modifies an existing script"
+new_pr_repo; chmod -x scripts/pr-check.sh; capture
+expect_fix fail "fix: chmod a script that exists on main" "modifies an existing script"
+new_pr_repo; g rm -q scripts/pr-check.sh; printf '#!/usr/bin/env bash\necho evil\n' >scripts/pr-check.sh; capture
+expect_fix fail "fix: delete + re-add a main script (one section)" "modifies an existing script"
+new_pr_repo; g rm -q scripts/pr-check.sh; capture
+expect_fix fail "fix: delete a main script" "deletes an existing script"
+new_pr_repo; g rm -q scripts/pr-check.sh; g commit -qm sneaky; printf '#!/usr/bin/env bash\necho evil\n' >scripts/pr-check.sh; capture
+expect_fix fail "fix: re-create a main script missing from the PR head" "exists on the default branch"
+new_pr_repo; g mv scripts/pr-check.sh scripts/pr-check-old.sh; printf '#!/usr/bin/env bash\necho evil\n' >scripts/pr-check.sh; capture
+expect_fix fail "fix: rename a main script away and re-create it" "existing script"
+new_pr_repo; g mv scripts/pr-added-check.sh scripts/pr-added-two.sh; capture
+expect_fix fail "fix: rename a script the PR added (edit only)" "renames an existing script"
+new_pr_repo; g rm -q scripts/pr-added-check.sh; capture
+expect_fix fail "fix: delete a script the PR added (edit only)" "deletes an existing script"
+new_pr_repo; g mv scripts/pr-added-check.sh scripts/pr-check-x.sh; g rm -q scripts/pr-check.sh; g mv scripts/pr-check-x.sh scripts/pr-check.sh; capture
+expect_fix fail "fix: move a PR-added script onto a main script's name" "existing script"
+new_pr_repo; printf 'x\n' >opencode.json; capture
+expect_fix fail "fix: forbidden paths stay forbidden" "forbidden path"
+new_pr_repo; printf '#!/usr/bin/env bash\necho new\n' >scripts/dbt-seed-check.sh; capture
+expect_fix pass "fix: add a new script still allowed"
+if bash "$scan" --list-rules fix | grep -qF 'Fix runs only'; then ok "--list-rules fix explains the fix-run exception"; else bad "--list-rules fix text"; fi
+if ! bash "$scan" --list-rules | grep -qF 'Fix runs only'; then ok "--list-rules (build) unchanged"; else bad "--list-rules build text"; fi
+if ! bash "$scan" --base-scripts "$work/missing.txt" "$work/changes.patch" >/dev/null 2>&1; then ok "--base-scripts with a missing file fails closed"; else bad "--base-scripts missing file"; fi
 
 echo "path-policy tests: $passed passed, $failed failed"
 [ "$failed" -eq 0 ]

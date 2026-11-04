@@ -39,6 +39,7 @@ scan_one() {
 FORBIDDEN_PATTERNS=(
   '.github' '.github/*'
   'opencode.json'
+  'AGENTS.md' '*/AGENTS.md'
   '.factory/actions-security.md'
   '.factory/models.yaml'
   'requirements-factory.txt'
@@ -49,6 +50,14 @@ FORBIDDEN_PATTERNS=(
 )
 ADD_ONLY_DIR='scripts/'
 EDITABLE_DOT_DIR='.factory/'
+# Fix runs only (#102): --base-scripts FILE lists the scripts/ paths that exist on the base branch
+# (the trusted default-branch checkout, written by the harness, never by the worker). A scripts/
+# file NOT in that list was added by the PR being fixed, so a fix patch may edit its content.
+# Without the flag (build runs) every existing script stays locked, as before.
+BASE_SCRIPTS_FILE=''
+in_base_scripts() { # $1 = path; true when it exists on the base branch
+  [ -n "$BASE_SCRIPTS_FILE" ] && grep -qxF -- "$1" "$BASE_SCRIPTS_FILE"
+}
 
 list_rules() {
   cat <<'RULES'
@@ -83,6 +92,15 @@ say so in your final message.
 requirements-factory.txt (the pinned factory Python dependencies) is owner-only: never add,
 remove or re-pin a package. If the spec needs a new dependency, stop and say so instead.
 RULES
+  if [ "${1:-}" = fix ]; then
+    cat <<'RULES'
+
+Fix runs only: a script under scripts/ that this PR added (it is not on the default branch)
+may be EDITED in place (content changes; a mode change only between 100644 and 100755). You
+still may not delete or rename it, and every script that exists on the default branch stays
+locked: never edit, delete, rename, re-create or chmod it.
+RULES
+  fi
 }
 
 path_has_dot_component() {
@@ -197,7 +215,9 @@ finish_section() {
   # Old side: an existing file that is modified, deleted or renamed away.
   if [ -n "$old" ]; then
     cls="$(path_class "$old")"
-    if [ "$cls" = scripts ]; then
+    if [ "$cls" = scripts ] && [ -n "$BASE_SCRIPTS_FILE" ] && [ "$status" = modified ] && ! in_base_scripts "$old"; then
+      : # fix run: content edit of a script the PR added (#102); delete/rename/main scripts fall through
+    elif [ "$cls" = scripts ]; then
       case "$status" in
         deleted) fail "patch deletes an existing script (only new files are allowed under scripts/): $old" ;;
         renamed) fail "patch renames an existing script (only new files are allowed under scripts/): $old" ;;
@@ -212,6 +232,9 @@ finish_section() {
   # New side: an added, copied or renamed-in file.
   if [ -n "$new" ] && [ "$status" != modified ]; then
     cls="$(path_class "$new")"
+    if [ "$cls" = scripts ] && in_base_scripts "$new"; then
+      fail "patch re-creates a script that exists on the default branch: $new"
+    fi
     if [ "$cls" = scripts ]; then check_new_script_name "$new"; fi
     if [ "$cls" = gitignore ] && [ "$status" != added ]; then fail "patch renames or copies onto .gitignore: $new"; fi
   fi
@@ -294,8 +317,14 @@ forbidden_paths() {
 }
 
 if [ "${1:-}" = "--list-rules" ]; then
-  list_rules
+  list_rules "${2:-}"
   exit 0
+fi
+
+if [ "${1:-}" = "--base-scripts" ]; then
+  BASE_SCRIPTS_FILE="${2:-}"
+  [ -f "$BASE_SCRIPTS_FILE" ] || { echo "artifact-scan: --base-scripts needs a readable file" >&2; exit 2; }
+  shift 2
 fi
 
 if [ "${1:-}" = "--list-forbidden" ]; then

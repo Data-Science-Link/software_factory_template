@@ -28,7 +28,11 @@ for f in opencode-artifact-scan.sh opencode-git-push-lease.sh opencode-run-facts
   opencode-build-context.py factory-spec-check.py opencode-text-block.sh; do
   git -C "$trusted" show "HEAD:scripts/$f" >"$PRISTINE_DIR/$f"
 done
+# #102: the default branch's scripts, from this job's trusted checkout (not the PR head or job A).
+git -C "$trusted" ls-tree -r --name-only HEAD -- scripts/ >"$PRISTINE_DIR/base-scripts.txt"
+[ -s "$PRISTINE_DIR/base-scripts.txt" ] || { echo "publish-fix: could not list the default branch scripts" >&2; exit 1; }
 scan() { bash "$PRISTINE_DIR/opencode-artifact-scan.sh" "$@"; }
+scan_patch() { bash "$PRISTINE_DIR/opencode-artifact-scan.sh" --base-scripts "$PRISTINE_DIR/base-scripts.txt" "$@"; }
 
 # Canonical approved spec text into $1. First choice: re-fetch spec comment $spec_id with this
 # job's token. If the token may not read issue comments (HTTP 403: the publish job has no
@@ -71,7 +75,7 @@ fi
 
 # 3. Scan (secrets + path policy on the patch, relative to the PR head).
 evidence="$OC_ARTIFACT_DIR/evidence.md"
-scan "$patch" "$OC_ARTIFACT_DIR/summary.md" "$note" "$evidence"
+scan_patch "$patch" "$OC_ARTIFACT_DIR/summary.md" "$note" "$evidence"
 [ -s "$patch" ] || { echo "publish-fix: empty patch" >&2; exit 1; }
 
 # 4. Apply on the PR head and commit.
@@ -102,7 +106,21 @@ case "$spec_id" in
     spec_file_line="exact copy of spec comment ${spec_id}, ${spec_source}"
     ;;
 esac
+# #101: new scripts/*.sh|*.py that start with "#!" are staged executable (100755), because the
+# worker's git-only shell cannot chmod. Reads the index only (never runs or trusts worker files);
+# only files ADDED relative to $1, directly under scripts/, that are plain 100644 blobs.
+mark_new_scripts_executable() { # $1 = base commit
+  local p
+  git diff --cached --name-only --diff-filter=A -z "$1" -- 'scripts/' | while IFS= read -r -d '' p; do
+    case "$p" in scripts/*/*) continue ;; scripts/*.sh | scripts/*.py) ;; *) continue ;; esac
+    [ "$(git ls-files -s -- "$p" | cut -d' ' -f1)" = 100644 ] || continue
+    [ "$(git cat-file blob ":$p" 2>/dev/null | head -c 2)" = '#!' ] || continue
+    git update-index --chmod=+x -- "$p"
+    echo "harness: staged new script $p as executable (#101)"
+  done
+}
 git add -A
+mark_new_scripts_executable HEAD
 if git diff --cached --quiet; then
   echo "publish-fix: patch applied but nothing staged" >&2
   exit 1
