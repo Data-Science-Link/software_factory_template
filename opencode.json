@@ -30,7 +30,9 @@
       ".github/**": "deny",
       "opencode.json": "deny",
       ".factory/actions-security.md": "deny",
-      "scripts/protect-main.sh": "deny"
+      "scripts/protect-main.sh": "deny",
+      "AGENTS.md": "deny",
+      "**/AGENTS.md": "deny"
     }
   },
   "provider": {

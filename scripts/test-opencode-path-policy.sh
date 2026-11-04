@@ -93,6 +93,12 @@ new_repo; printf 'x: 1\n' >>.factory/models.yaml; capture
 expect fail ".factory/models.yaml is owner-only" ".factory/models.yaml"
 new_repo; printf 'x\n' >>.factory/actions-security.md; capture
 expect fail ".factory/actions-security.md is owner-only" ".factory/actions-security.md"
+
+# --- AGENTS.md: owner-only, root and nested (#97) ---
+new_repo; printf 'x\n' >>AGENTS.md; capture
+expect fail "AGENTS.md is owner-only" "AGENTS.md"
+new_repo; mkdir -p docs; printf '# Rules\n' >docs/AGENTS.md; capture
+expect fail "nested AGENTS.md is owner-only" "AGENTS.md"
 new_repo; g mv .factory/models.yaml .factory/models-old.yaml; capture
 expect fail ".factory/: rename an owner-only file away" "forbidden path: .factory/models.yaml"
 
