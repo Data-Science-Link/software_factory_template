@@ -1,0 +1,6 @@
+[
+  {
+    "user": { "login": "github-actions[bot]" },
+    "body": "<!-- factory-run-record -->\n```json\n{\n  \"schema_version\": 1,\n  \"run_id\": \"gha-dup-1\",\n  \"issue\": 91,\n  \"actual_cost_usd\": 0.30\n}\n```\n"
+  }
+]
