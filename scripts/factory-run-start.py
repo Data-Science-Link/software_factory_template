@@ -101,6 +101,18 @@ def extract_json_block(body: str) -> dict[str, Any] | None:
     return None
 
 
+def valid_cost(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        cost = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not cost == cost or cost in (float("inf"), float("-inf")) or cost < 0:
+        return None
+    return cost
+
+
 def load_runs_dir_spend(
     runs_dir: Path, issue: int, spend: dict[str, float], warned: list[str]
 ) -> None:
@@ -122,8 +134,12 @@ def load_runs_dir_spend(
         if not run_id or actual is None:
             warned.append(f"skipped run file {f.name} without run_id/actual_cost_usd")
             continue
+        cost = valid_cost(actual)
+        if cost is None:
+            warned.append(f"skipped run file {f.name} with invalid actual_cost_usd")
+            continue
         if run_id not in spend:
-            spend[run_id] = float(actual)
+            spend[run_id] = cost
 
 
 def load_comments_spend(
@@ -155,8 +171,12 @@ def load_comments_spend(
         if not run_id or actual is None:
             warned.append("skipped run record comment without run_id/actual_cost_usd")
             continue
+        cost = valid_cost(actual)
+        if cost is None:
+            warned.append("skipped run record comment with invalid actual_cost_usd")
+            continue
         if run_id not in spend:
-            spend[run_id] = float(actual)
+            spend[run_id] = cost
 
 
 def is_deepinfra_model(model_id: str, models_data: dict[str, Any]) -> bool:

@@ -187,6 +187,38 @@ else
   note "case12 no environment values in output or files"
 fi
 
+# --- Case 13: negative actual_cost_usd next to 0.995 -> still refused (over cap) ---
+mkdir -p "$tmpdir/runs13"
+cp tests/run-start/run-995.json "$tmpdir/runs13/"
+cp tests/run-start/run-negative.json "$tmpdir/runs13/"
+set +e
+"${PY[@]}" --spec tests/run-start/spec-approved-simple-normal.md --issue 91 \
+  --runs-dir "$tmpdir/runs13" >/dev/null 2>"$tmpdir/case13-stderr.txt"
+rc13=$?
+set -e
+if [ "$rc13" -eq 3 ] && grep -q "run-start: refused:" "$tmpdir/case13-stderr.txt"; then
+  note "case13 negative cost not trusted, 0.995 still over cap refused"
+else
+  fail "case13 negative cost over cap (exit $rc13)"
+fi
+
+# --- Case 14: non-numeric actual_cost_usd \"abc\" -> skipped, prior 0.0000, warning, exit 0 ---
+mkdir -p "$tmpdir/runs14"
+cp tests/run-start/run-abc.json "$tmpdir/runs14/"
+set +e
+"${PY[@]}" --spec tests/run-start/spec-approved-simple-normal.md --issue 91 \
+  --runs-dir "$tmpdir/runs14" >"$tmpdir/case14-stdout.txt" 2>"$tmpdir/case14-stderr.txt"
+rc14=$?
+set -e
+if [ "$rc14" -eq 0 ] \
+  && grep -Fq "prior_spend_usd=0.0000" "$tmpdir/case14-stdout.txt" \
+  && grep -q "warning: skipped run file" "$tmpdir/case14-stderr.txt" \
+  && ! grep -q "Traceback" "$tmpdir/case14-stderr.txt"; then
+  note "case14 non-numeric cost skipped cleanly, prior 0.0000"
+else
+  fail "case14 non-numeric cost (exit $rc14)"
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
