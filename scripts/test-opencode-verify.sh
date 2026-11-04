@@ -227,6 +227,28 @@ if [ $((SECONDS - t0)) -lt 60 ] && grep -q 'worker stopped at the 2s limit' "$wo
   ok "agent-run: hung worker stopped at its time limit; log and partial patch kept (rc=$rc)"
 else bad "agent-run: hung worker (rc=$rc)"; tail -5 "$work/agent3.log"; fi
 
+# #101: new scripts with a shebang are staged 100755 in the patch; others stay 100644.
+cat >"$work/bin/opencode" <<'FAKE'
+#!/usr/bin/env bash
+if [ "$1" = stats ]; then exit 0; fi
+printf '#!/usr/bin/env bash\necho tool\n' >scripts/new-tool-check.sh
+printf '#!/usr/bin/env python3\nprint(1)\n' >scripts/new-tool-report.py
+printf 'echo sourced only\n' >scripts/new-tool-lib.sh
+mkdir -p factory/x && printf '#!/bin/sh\n' >factory/x/not-a-script.sh
+FAKE
+art101a="$work/art101a"; mkdir -p "$art101a"; cp "$work/ctx/"* "$art101a/"
+(cd "$repo" && git reset -q --hard && git clean -qfd)
+set +e
+(cd "$repo" && PATH="$work/bin:$PATH" OC_INSTRUCTION='/oc run' OC_ISSUE_NUMBER=7 OC_ARTIFACT_DIR="$art101a" \
+  DEEPINFRA_API_KEY="$FAKE_KEY" OC_VERIFY_SANDBOX=none bash scripts/opencode-agent-run.sh) >"$work/agent101.log" 2>&1
+rc=$?
+set -e
+modes="$(cd "$work" && rm -rf chk101 && git init -q chk101 && cd chk101 && git apply --index "$art101a/changes.patch" && git ls-files -s scripts factory/x)" || true
+if [ "$rc" -eq 0 ] && grep -q '^100755 .*scripts/new-tool-check.sh$' <<<"$modes" && grep -q '^100755 .*scripts/new-tool-report.py$' <<<"$modes" \
+  && grep -q '^100644 .*scripts/new-tool-lib.sh$' <<<"$modes" && grep -q '^100644 .*factory/x/not-a-script.sh$' <<<"$modes"; then
+  ok "agent-run: new scripts/ files with a shebang are 100755 in the patch; no-shebang and non-scripts/ stay 100644 (#101)"
+else bad "agent-run: new script modes (rc=$rc)"; echo "$modes"; tail -5 "$work/agent101.log"; fi
+
 # --- publish-pr on that artifact: exact spec checked against the comment; body sections
 pub="$work/pub"
 mkdir -p "$pub"
@@ -243,6 +265,14 @@ publish() { # artifact-dir -> rc; body in <dir>/pr-body.md
   rc=$?
   set -e
 }
+publish "$art"
+# #101 belt: an older artifact whose patch adds a shebang script as 100644 is committed as 100755.
+art101b="$work/art101b"; rm -rf "$art101b"; cp -r "$art" "$art101b"
+printf 'diff --git a/scripts/late-tool-check.sh b/scripts/late-tool-check.sh\nnew file mode 100644\n--- /dev/null\n+++ b/scripts/late-tool-check.sh\n@@ -0,0 +1,2 @@\n+#!/usr/bin/env bash\n+echo late\n' >>"$art101b/changes.patch"
+publish "$art101b"
+if [ "$(git -C "$pub" ls-files -s scripts/late-tool-check.sh | cut -d' ' -f1)" = 100755 ] && grep -q 'staged new script scripts/late-tool-check.sh as executable' "$art101b.publish.log"; then
+  ok "publish: new shebang script from a 100644 patch is committed executable (#101)"
+else bad "publish: #101 belt"; tail -8 "$art101b.publish.log"; fi
 publish "$art"
 body="$art/pr-body.md"
 if grep -q 'GH_TOKEN is required' "$art.publish.log" && grep -q 'PR check: passed' "$art.publish.log"; then
