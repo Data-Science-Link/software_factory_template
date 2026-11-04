@@ -172,5 +172,16 @@ while IFS= read -r pat; do
 done < <(bash "$scan" --list-forbidden)
 if [ -z "$missing" ]; then ok "--list-rules includes every --list-forbidden pattern"; else bad "--list-rules lacks:$missing"; fi
 
+# opencode.json must not block what the scan allows (new scripts, #63), but keeps the hard denies.
+if python3 - "$root/opencode.json" <<'PY2'
+import json, sys
+edit = json.load(open(sys.argv[1]))["permission"]["edit"]
+bad = [k for k, v in edit.items() if v == "deny" and k in ("scripts/**", "scripts/*", "*")]
+need = [k for k in (".github/**", "opencode.json", "scripts/protect-main.sh") if edit.get(k) != "deny"]
+sys.exit(1 if bad or need else 0)
+PY2
+then ok "opencode.json: new scripts editable (scan judges them); .github, opencode.json, protect-main.sh denied"
+else bad "opencode.json edit rules vs path policy"; fi
+
 echo "path-policy tests: $passed passed, $failed failed"
 [ "$failed" -eq 0 ]
