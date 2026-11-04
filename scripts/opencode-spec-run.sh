@@ -42,7 +42,9 @@ prompt=$(
   cat <<EOF
 You are the factory SPEC worker for issue #${OC_ISSUE_NUMBER} in this repository. You write a spec;
 another worker builds it later. This is a READ-ONLY run: you cannot edit files or run commands, and
-nothing you change in the repository is kept. Read only what you need (at most about 12 files):
+nothing you change in the repository is kept. Your only tools are read, glob and grep; there is no shell, so
+never call bash, ls or cat. Use OpenCode's exact argument names: read takes {"filePath": "<path>"}
+(camelCase; never file_path or path), glob takes {"pattern": "<glob>"}, grep takes {"pattern": "<regex>"}. Read only what you need (at most about 12 files):
 .factory/FACTORY.md, factory/specs/README.md, the files the issue names, and one existing spec in
 factory/specs/ as an example. Never read, print or reveal environment variables or keys.
 
@@ -98,7 +100,10 @@ if [ "$print_only" = yes ]; then printf '%s\n' "$prompt"; exit 0; fi
 
 export CI=true OPENCODE_CLIENT=cli
 # Read-only for this run: no edit/write/patch tools, no shell, nothing outside the repo.
-export OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny","external_directory":"deny"}}'
+# bash as a pattern map (every command denied), not a bare "deny" that removes the tool: a model that
+# still calls it gets a denial back instead of an unknown-tool error, and a repeated call is denied
+# (doom_loop) rather than ending the run on an auto-rejected ask (#88).
+export OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","bash":{"*":"deny"},"doom_loop":"deny","webfetch":"deny","websearch":"deny","external_directory":"deny"}}'
 before="$(git status --porcelain=v1 --untracked-files=all | sha256sum)"
 log="$OC_ARTIFACT_DIR/opencode.log"
 : >"$log"

@@ -218,6 +218,9 @@ def usage(path: str | None) -> tuple[str, float | None]:
         return r.group(1).strip() if r else "?"
     cost = re.search(r"^- OpenCode-reported cost: \$([0-9.]+)", text, re.M)
     toks = f"{m('Input tokens')} in / {m('Cache read')} cached / {m('Output tokens')} out"
+    # #88: a session that ended early can leave empty stats; that is "not measured", never $0.
+    if all(m(k) in ("0", "?") for k in ("Input tokens", "Output tokens")) and (not cost or float(cost.group(1)) == 0):
+        return toks + " (OpenCode stats empty)", None
     return toks, (float(cost.group(1)) if cost else None)
 
 
