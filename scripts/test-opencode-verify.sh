@@ -20,6 +20,8 @@ export GIT_CONFIG_GLOBAL="$work/gitconfig"; : >"$GIT_CONFIG_GLOBAL"
 export GIT_CONFIG_NOSYSTEM=1
 git config --global user.name t; git config --global user.email t@t
 unset GITHUB_OUTPUT GITHUB_STEP_SUMMARY GH_TOKEN GITHUB_TOKEN GITHUB_ACTIONS || true
+# #92: the agent scripts require the routed model (run-start output); model tests: test-opencode-model.sh.
+export OC_MODEL=deepseek-ai/DeepSeek-V4-Flash-0731
 passed=0
 failed=0
 ok() { echo "PASS  $1"; passed=$((passed + 1)); }

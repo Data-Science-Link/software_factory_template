@@ -17,9 +17,10 @@ make_repo() {
   git init -q "$dir"
   mkdir -p "$dir/scripts"
   for s in opencode-publish-pr.sh opencode-artifact-scan.sh opencode-git-push-scoped.sh pr-check.sh opencode-run-facts.sh \
-    opencode-text-block.sh opencode-build-context.py factory-spec-check.py; do
+    opencode-text-block.sh opencode-build-context.py factory-spec-check.py factory-check-model.py; do
     cp "$root/scripts/$s" "$dir/scripts/$s"
   done
+  mkdir -p "$dir/.factory" && cp "$root/.factory/models.yaml" "$dir/.factory/models.yaml"
   echo base >"$dir/README.md"
   git -C "$dir" add -A
   git -C "$dir" -c user.name=test -c user.email=test@test commit -q -m base
@@ -50,6 +51,9 @@ run_publish() {
     export OC_ISSUE_NUMBER=99 OC_RUN_ID=12345678901 OC_ARTIFACT_DIR="$dir.artifacts" GITHUB_WORKSPACE="$dir"
     export GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=org/repo
     git config user.name test && git config user.email test@test
+    # #92: job A's meta names the routed model (Pro here, to prove the body is not hard-coded).
+    grep -q '^model_id=' "$OC_ARTIFACT_DIR/context-meta.txt" 2>/dev/null \
+      || echo "model_id=${PUB_MODEL-deepseek-ai/DeepSeek-V4-Pro-0813}" >>"$OC_ARTIFACT_DIR/context-meta.txt"
     bash scripts/opencode-publish-pr.sh
   ) >"$dir.out" 2>&1 || true
 }
@@ -64,6 +68,8 @@ printf '## Token usage (opencode stats)\n\n- Model: deepinfra/deepseek-ai/DeepSe
 run_publish "$r1"
 body="$r1.artifacts/pr-body.md"
 check "$r1.out" "PR check: passed." "generated body passes pr-check"
+check "$r1.artifacts/pr-body.md" "AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Pro-0813" "#92 AI disclosure names the routed model from job A's meta"
+check "$r1.artifacts/pr-body.md" 'OpenCode (DeepInfra `deepseek-ai/DeepSeek-V4-Pro-0813`, routed by run start)' "#92 summary names the routed model"
 check "$r1.out" "GH_TOKEN is required" "publish stopped only at the push step"
 check "$body" "Run ID: 12345678901" "Run ID from OC_RUN_ID"
 check "$body" "Tokens in / cached / out: 108.8K / 1.1M / 17.9K" "tokens from usage-metrics"
@@ -92,6 +98,16 @@ check "$body" "Gate: risk unknown (no spec" "unknown risk gated like high"
 check "$body" "- [x] **high**" "unknown risk ticks the high box"
 check "$r2.out" "needs a spec link" "pr-check fails without spec"
 check "$r2.out" "pr-check failed on generated body" "publish refuses to open the PR"
+
+echo "== case 2b (#92): model_id missing or not in models.yaml -> publish refuses before the PR =="
+for m in "" "openai/gpt-5"; do
+  rb="$work/r2b-${m//\//_}"; mkdir -p "$rb.artifacts"
+  make_repo "$rb"; make_patch "$rb" with-spec normal
+  echo "# OpenCode agent summary" >"$rb.artifacts/summary.md"
+  PUB_MODEL="$m" run_publish "$rb"
+  check "$rb.out" "model_id in context-meta.txt is missing or not a deepinfra model" "publish refuses model_id='${m}'"
+  if [ -e "$rb.artifacts/pr-body.md" ]; then echo "FAIL  no PR body for model_id='${m}'"; fails=$((fails + 1)); else echo "OK    no PR body for model_id='${m}'"; fi
+done
 
 echo "== case 3: trivial risk gate wording (helper only) =="
 r3="$work/r3"; mkdir -p "$r3/factory/specs"

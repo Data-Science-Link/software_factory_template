@@ -69,6 +69,13 @@ fi
 spec_id="$(sed -n 's/^spec_comment_id=//p' "$OC_ARTIFACT_DIR/context-meta.txt" 2>/dev/null | head -n 1 || true)"
 case "$spec_id" in '' | none | *[!0-9]*) ;; *) spec_id_ok=yes ;; esac
 case "$spec_id" in '' | none) ;; *[!0-9]*) echo "publish: invalid spec_comment_id in context-meta.txt" >&2; exit 1 ;; esac
+# #92: the model job A ran (meta rewritten by the harness after the worker), re-checked against
+# the default branch's models.yaml (pristine HEAD copies) before the PR body names it.
+git show HEAD:scripts/factory-check-model.py >"$PRISTINE_DIR/factory-check-model.py"
+git show HEAD:.factory/models.yaml >"$PRISTINE_DIR/models.yaml"
+model_id="$(sed -n 's/^model_id=//p' "$OC_ARTIFACT_DIR/context-meta.txt" 2>/dev/null | head -n 1 || true)"
+python3 "$PRISTINE_DIR/factory-check-model.py" --models "$PRISTINE_DIR/models.yaml" "$model_id" 2>/dev/null \
+  || { echo "publish: model_id in context-meta.txt is missing or not a deepinfra model in models.yaml; refusing" >&2; exit 1; }
 
 branch="oc/issue-${OC_ISSUE_NUMBER}-${OC_RUN_ID}"
 git checkout -b "$branch"
@@ -152,7 +159,7 @@ evidence_block="$(block "$evidence" 12000 "(no verification output in this run's
 cat >"$body_file" <<EOF
 ## Summary
 
-OpenCode (DeepInfra \`deepseek-ai/DeepSeek-V4-Flash-0731\`) applied the owner \`/oc\` instruction on issue #${OC_ISSUE_NUMBER}. This PR was opened by GitHub Actions job **publish**; it is not merged automatically.
+OpenCode (DeepInfra \`${model_id}\`, routed by run start) applied the owner \`/oc\` instruction on issue #${OC_ISSUE_NUMBER}. This PR was opened by GitHub Actions job **publish**; it is not merged automatically.
 
 Closes #${OC_ISSUE_NUMBER}
 Refs #38
@@ -190,7 +197,7 @@ Only the files in this PR diff. No workflow or secret changes.
 
 ## AI disclosure
 
-AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Flash-0731
+AI disclosure: harness opencode-actions; model ${model_id}
 
 ## What I changed and why
 

@@ -14,6 +14,15 @@ if [ "${1:-}" = "--print-prompt" ]; then print_only=yes; fi
 if [ "$print_only" = no ]; then : "${DEEPINFRA_API_KEY:?DEEPINFRA_API_KEY is required}"; fi
 
 trusted="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# #92: the model is exactly what run start routed for the linked issue's spec, passed by the
+# workflow as OC_MODEL. Checked against the default branch's models.yaml (never the PR head's).
+oc_model=''
+if [ "$print_only" = no ]; then
+  : "${OC_MODEL:?OC_MODEL is required (model_id output of the run-start step)}"
+  python3 "$trusted/scripts/factory-check-model.py" --models "$trusted/.factory/models.yaml" "$OC_MODEL" \
+    || { echo "agent-fix: OC_MODEL is not a deepinfra model listed in .factory/models.yaml; refusing" >&2; exit 1; }
+  oc_model="$OC_MODEL"
+fi
 scan="$trusted/scripts/opencode-artifact-scan.sh"
 mkdir -p "$OC_ARTIFACT_DIR"
 OC_ARTIFACT_DIR="$(cd "$OC_ARTIFACT_DIR" && pwd)"
@@ -144,7 +153,7 @@ worker_timeout=$(( ${OC_AGENT_BUDGET_SECONDS:-720} - ${OC_VERIFY_RESERVE_SECONDS
 case "${OC_WORKER_TIMEOUT:-}" in '' | *[!0-9]*) ;; *) worker_timeout="$OC_WORKER_TIMEOUT" ;; esac
 oc_rc=0
 timeout -k 15 "$worker_timeout" opencode run --pure --format default \
-  --model deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731 \
+  --model "deepinfra/${oc_model}" \
   "$prompt" >>"$log" 2>&1 || oc_rc=$?
 if [ "$oc_rc" -eq 124 ] || [ "$oc_rc" -eq 137 ]; then
   echo "agent-fix: worker stopped at the ${worker_timeout}s limit (#89); keeping what it produced" >&2
@@ -213,8 +222,8 @@ bash "$trusted/scripts/opencode-text-block.sh" note "$log" >"$note" || true
 } >"$OC_ARTIFACT_DIR/summary.md"
 
 # Rewrite meta from the values read before the model ran (publish reads it).
-printf 'pr_number=%s\nissue_number=%s\nhead_ref=%s\nhead_sha=%s\nspec_comment_id=%s\nspec_sha256=%s\nowner_comments=%s\n' \
-  "$pr_number" "$issue_number" "$head_ref" "$head_sha" "$spec_id" "${spec_sha:-none}" "$owner_comments" >"$meta_file"
+printf 'pr_number=%s\nissue_number=%s\nhead_ref=%s\nhead_sha=%s\nspec_comment_id=%s\nspec_sha256=%s\nowner_comments=%s\nmodel_id=%s\n' \
+  "$pr_number" "$issue_number" "$head_ref" "$head_sha" "$spec_id" "${spec_sha:-none}" "$owner_comments" "$oc_model" >"$meta_file"
 if [ -n "$spec_copy" ]; then cp "$spec_copy" "$OC_ARTIFACT_DIR/spec.md"; fi
 
 # #102: scripts on the default branch (the trusted checkout), so the scan lets the fix edit only

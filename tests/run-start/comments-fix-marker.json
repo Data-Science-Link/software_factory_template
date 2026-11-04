@@ -1,0 +1,26 @@
+[
+ {
+  "user": {
+   "login": "Data-Science-Link"
+  },
+  "author_association": "OWNER",
+  "created_at": "2026-11-03T01:00:00Z",
+  "body": "/oc fix tidy"
+ },
+ {
+  "user": {
+   "login": "github-actions[bot]"
+  },
+  "author_association": "NONE",
+  "created_at": "2026-11-03T02:00:00Z",
+  "body": "<!-- factory-run-failed v1 run=500 attempt=1 kind=fix job=agent result=failure model=deepseek-ai/DeepSeek-V4-Flash-0731 rule=3 error=other -->\n**`/oc` run failed** ..."
+ },
+ {
+  "user": {
+   "login": "Data-Science-Link"
+  },
+  "author_association": "OWNER",
+  "created_at": "2026-11-03T03:00:00Z",
+  "body": "/oc fix again"
+ }
+]
