@@ -240,12 +240,12 @@ A run whose gate fails still has its cost logged; the failure is a finding for G
 | Model (DeepInfra ID) | In | Cached in | Out | Role |
 |---|---|---|---|---|
 | `deepseek-ai/DeepSeek-V4-Flash-0731` | $0.06 | $0.015 | $0.18 | **Default** for simple and standard work |
-| `deepseek-ai/DeepSeek-V4-Pro-0813` | $1.30 | $0.10 | $2.60 | Escalation: complex work, high-risk work, specs written by a run |
-| `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` | $0.30 | — | $1.00 | Fallback if a DeepSeek model fails on tool calls (today's Local open-weights default; price as of 2026-10-27, re-check) |
+| `deepseek-ai/DeepSeek-V4-Pro-0813` | $1.30 | $0.10 | $2.60 | Architect: specs written by a run; one retry after Flash fails |
+| `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` | $0.30 | $0.10 | $1.00 | Complex/high-risk builds and fixes (#128); fallback if a DeepSeek model fails on tool calls |
 
-**Rules (first match wins):**
+**Rules (first match wins; `models.yaml` checks 5, 4, 7, 2, 1, 3 in that order):**
 
-1. `risk: high` or `complexity: complex` → V4 Pro.
+1. `risk: high` or `complexity: complex` → Qwen3-Coder (#128; was V4 Pro, whose ~35 s thinking per tool turn timed out the #30 build).
 2. `work_type: spec` (an `/oc spec` run, used only for complex specs) → V4 Pro. By default Grok Bot writes specs on its own plan with no DeepInfra spend (§18 decision 6).
 3. Everything else → V4 Flash.
 4. One failed attempt on Flash for standard work → rerun once on Pro, recorded as `escalated_from`.

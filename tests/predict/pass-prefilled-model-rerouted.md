@@ -1,4 +1,4 @@
-# predict-expect: model=deepseek-ai/DeepSeek-V4-Pro-0813 cost=0.4980 rule=1
+# predict-expect: model=Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo cost=0.1780 rule=1
 ---
 spec_version: 1
 issue: 9008

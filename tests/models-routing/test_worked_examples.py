@@ -55,7 +55,7 @@ class RoutingWorkedExamplesTest(unittest.TestCase):
     def test_yaml_parses_and_has_checks_block(self) -> None:
         self.assertIn("checks", yaml.safe_load(MODELS.read_text()))
         rule_nums = [r["rule"] for r in self.routing_rules]
-        self.assertEqual(rule_nums, [5, 4, 7, 1, 2, 3])
+        self.assertEqual(rule_nums, [5, 4, 7, 2, 1, 3])
 
     def test_worked_examples(self) -> None:
         for ex in self.examples:
