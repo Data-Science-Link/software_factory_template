@@ -87,6 +87,11 @@ if [ "$r" -ne 0 ]; then ok "spec-run: '/oc specify ...' is not a spec run"; else
 if grep -qF '{"filePath": "<path>"}' <<<"$pp" && grep -qF 'never file_path or path' <<<"$pp" \
   && grep -qF 'there is no shell' <<<"$pp"; then ok "prompt: exact OpenCode tool argument names; no shell (#88)"
 else bad "prompt: tool rules (#88)"; fi
+# #125: template already embedded; glob/grep skip .factory/; prefer ≤8 reads when comments have a map.
+if grep -qF 'already embedded below in <template>' <<<"$pp" && grep -qF 'do not read or glob it' <<<"$pp" \
+  && grep -qF 'ignore hidden dot-directories like .factory/' <<<"$pp" \
+  && grep -qF 'read at most 8 files' <<<"$pp"; then ok "prompt: embedded template + no .factory glob (#125)"
+else bad "prompt: embedded template / dot-dir rules (#125)"; fi
 
 # Good draft: normalized to a draft, prediction filled by script, reviewer from risk.
 wrap tests/oc-spec/good-spec.md "$work/out-good.txt"
