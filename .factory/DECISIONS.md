@@ -554,3 +554,11 @@ Append-only. Newest at the bottom.
 - **Why:** Keeps Grok Bot as the coordinator for routine specs (#78) and keeps Michael's attention on high-risk work.
 - **Alternatives:** The earlier rule (Michael for normal risk too); complexity-based approval (dropped: risk is what needs a human).
 - **Revisit when:** A Grok Bot-approved normal-risk spec leads to a bad merge, or the first `/oc spec` drafts show review gaps.
+
+### 2026-11-06 — Rule 1 builds go to Qwen3-Coder; V4 Pro stays the spec architect (#128)
+- **Status:** Accepted (Michael, 2026-11-06). Takes effect when the PR merges.
+- **Decision:** In `.factory/models.yaml`, rule 1 (`risk: high` or `complexity: complex`) now routes `/oc` builds and `/oc fix` runs to `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` instead of `deepseek-ai/DeepSeek-V4-Pro-0813`. Rule 2 (`work_type: spec` → V4 Pro) now sits above rule 1, so a spec run always stays on Pro. The build worker prompt (`scripts/opencode-agent-run.sh`) also says: no `bash` for `ls`, `find` or reading files; `glob` and `grep` skip dot-directories, so use `read` with an exact path under `.factory/`; and with an approved spec, read only the files it names and start editing promptly.
+- **Decided by:** Michael, 2026-11-06 in chat: "This all sounds good" (Grok Bot's recommendation to keep V4 Pro as the `/oc spec` architect, move rule 1 builds to Qwen3-Coder-480B-Turbo, and tighten the worker prompt).
+- **Why:** The #30 build (run 42282682618) hit the 780 s worker limit before writing a file. V4 Pro spent about 35 s thinking per tool turn across about 25 reads, including a denied `ls` and empty globs over `.factory/`. The spec run had already done the deep thinking. Qwen3-Coder takes about 2–4 s per tool turn and predicts $0.178 (complex) or $0.19 (standard, high risk), vs $0.498 / $0.47 on Pro.
+- **Alternatives:** A longer worker timeout on Pro (rejected: slower and pricier per run); `thinking: off` on V4 Pro (unproven); routing builds to Cursor or Grok models (deferred to #127 under #117, because DeepInfra open weights stay the primary backbone).
+- **Revisit when:** Qwen3-Coder builds fail review noticeably more often than Pro builds, or a high-risk build needs deeper reasoning than the spec gives.

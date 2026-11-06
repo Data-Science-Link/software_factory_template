@@ -26,13 +26,13 @@ yaml.safe_dump(d, open(out, "w", encoding="utf-8"), sort_keys=False)
 PYEOF
 }
 MODELS_OVER="$tmpdir/models-over-cap.yaml"          # complex priors inflated past the $1.00 cap
-make_models "$MODELS_OVER" 'd["token_priors"]["complex"]["tokens_in"] = 3000000'
-MODELS_LOW_CAP="$tmpdir/models-low-cap.yaml"        # only budget.issue_cap_usd lowered to 0.40
-make_models "$MODELS_LOW_CAP" 'd["budget"]["issue_cap_usd"] = 0.40'
+make_models "$MODELS_OVER" 'd["token_priors"]["complex"]["tokens_in"] = 8000000'
+MODELS_LOW_CAP="$tmpdir/models-low-cap.yaml"        # only budget.issue_cap_usd lowered to 0.15
+make_models "$MODELS_LOW_CAP" 'd["budget"]["issue_cap_usd"] = 0.15'
 MODELS_TINY_CAP="$tmpdir/models-tiny-cap.yaml"      # only budget.issue_cap_usd lowered to 0.02
 make_models "$MODELS_TINY_CAP" 'd["budget"]["issue_cap_usd"] = 0.02'
 MODELS_NO_CAP="$tmpdir/models-no-cap.yaml"          # no budget.issue_cap_usd: checks rule 6 is the fallback
-make_models "$MODELS_NO_CAP" 'd["token_priors"]["complex"]["tokens_in"] = 3000000; del d["budget"]["issue_cap_usd"]'
+make_models "$MODELS_NO_CAP" 'd["token_priors"]["complex"]["tokens_in"] = 8000000; del d["budget"]["issue_cap_usd"]'
 passed=0
 failed=0
 
@@ -134,8 +134,8 @@ run_fail() {
 }
 
 run_pass tests/predict/pass-simple-flash.md
-run_pass tests/predict/pass-complex-pro.md
-run_pass tests/predict/pass-high-risk-pro.md
+run_pass tests/predict/pass-complex-qwen.md
+run_pass tests/predict/pass-high-risk-qwen.md
 run_pass tests/predict/pass-work-type-spec.md
 run_pass tests/predict/pass-marker-prefixed.md
 # --write keeps the marker line (and any text above it) in place (#60, marker part).
@@ -162,9 +162,9 @@ run_fail tests/predict/fail-override-priority-tier.md "$MODELS_DEFAULT" 1 priori
 echo -n "[override, issue_cap_usd=0.02] "
 run_fail tests/predict/pass-override-kept.md "$MODELS_TINY_CAP" 2 split
 
-# Split guard reads budget.issue_cap_usd: lowering only the cap makes complex/Pro exit 2.
-echo -n "[issue_cap_usd=0.40] "
-run_fail tests/predict/pass-complex-pro.md "$MODELS_LOW_CAP" 2 split
+# Split guard reads budget.issue_cap_usd: lowering only the cap makes complex/Qwen3-Coder exit 2.
+echo -n "[issue_cap_usd=0.15] "
+run_fail tests/predict/pass-complex-qwen.md "$MODELS_LOW_CAP" 2 split
 # Fallback: no budget.issue_cap_usd -> checks rule 6 still splits.
 echo -n "[no issue_cap_usd, rule 6 fallback] "
 run_fail tests/predict/fail-over-cap.md "$MODELS_NO_CAP" 2 split
@@ -173,7 +173,7 @@ run_fail tests/predict/fail-over-cap.md "$MODELS_NO_CAP" 2 split
 tmpw="$tmpdir/rerouted.md"
 cp tests/predict/pass-prefilled-model-rerouted.md "$tmpw"
 "${PY[@]}" "$tmpw" --write >/dev/null 2>&1
-if grep -qx 'model: deepseek-ai/DeepSeek-V4-Pro-0813' "$tmpw" \
+if grep -qx 'model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo' "$tmpw" \
   && grep -q '^model_reason: .*High risk or complex work' "$tmpw"; then
   echo "PASS  pass-prefilled-model-rerouted (--write overwrites model + model_reason)"
   passed=$((passed + 1))
@@ -183,14 +183,14 @@ else
   failed=$((failed + 1))
 fi
 
-# --write after editing simple -> complex re-routes Flash -> Pro.
+# --write after editing simple -> complex re-routes Flash -> Qwen3-Coder (rule 1, #128).
 tmpe="$tmpdir/edited.md"
 cp tests/predict/pass-simple-flash.md "$tmpe"
 "${PY[@]}" "$tmpe" --write >/dev/null 2>&1
 sed -i 's/^complexity: simple$/complexity: complex/' "$tmpe"
 "${PY[@]}" "$tmpe" --write >/dev/null 2>&1
-if grep -qx 'model: deepseek-ai/DeepSeek-V4-Pro-0813' "$tmpe"; then
-  echo "PASS  pass-simple-flash edited to complex (--write re-routes to Pro)"
+if grep -qx 'model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo' "$tmpe"; then
+  echo "PASS  pass-simple-flash edited to complex (--write re-routes to Qwen3-Coder)"
   passed=$((passed + 1))
 else
   echo "FAIL  pass-simple-flash edited to complex (still $(grep '^model:' "$tmpe"))"

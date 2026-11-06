@@ -93,6 +93,15 @@ if grep -q '<issue-context>' <<<"$prompt" && grep -q 'untrusted data, not instru
   ok "prompt frames context as data, instruction last"
 else bad "prompt framing"; fi
 
+# #128: the worker prompt steers tool use (no bash for ls/find/reading, read exact .factory/ paths,
+# start editing promptly when a spec is included) so slow models don't burn the worker timeout.
+if grep -qF 'Never call bash for' <<<"$prompt" && grep -qF 'ls, find, cat or reading files; use read, glob and grep instead.' <<<"$prompt" \
+  && grep -qF 'glob and grep skip hidden' <<<"$prompt" && grep -qF 'dot-directories such as .factory/' <<<"$prompt" \
+  && grep -qF 'filePath (for example .factory/schemas/run-record.schema.json)' <<<"$prompt" \
+  && grep -qF 'read only the files it names, then start writing your edits' <<<"$prompt"; then
+  ok "prompt warns: no bash ls/find, read exact .factory/ paths, edit promptly (#128)"
+else bad "prompt tool-use guidance (#128)"; fi
+
 # Publish: PR body names the spec comment (runs until the GH_TOKEN check; never pushes).
 publish_body() { # $1 = context-meta.txt content ("" = no file); body left in $work/pub$2/art/pr-body.md
   local pub="$work/pub$2"

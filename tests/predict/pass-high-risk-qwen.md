@@ -1,12 +1,12 @@
-# predict-expect: model=deepseek-ai/DeepSeek-V4-Pro-0813 cost=0.4980 rule=1
+# predict-expect: model=Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo cost=0.1900 rule=1
 ---
 spec_version: 1
-issue: 9002
-title: Complex pro routing
+issue: 9003
+title: High risk Qwen3-Coder routing
 status: draft
-complexity: complex
+complexity: standard
 complexity_reason: fixture
-risk: normal
+risk: high
 work_type: code
 model:
 model_reason:

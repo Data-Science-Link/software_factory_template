@@ -52,11 +52,11 @@ run_case "case1 simple normal no prior -> Flash rule 3, prior 0.0000" 0 \
   "model=deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731" \
   "routed_rule=3" "prior_spend_usd=0.0000"
 
-# --- Case 2: approved high-risk spec -> Pro rule 1 ---
+# --- Case 2: approved high-risk spec -> Qwen3-Coder rule 1 (#128) ---
 RUN_ARGS=(--spec tests/run-start/spec-approved-high-risk.md --issue 91 \
   --runs-dir "$tmpdir/none2")
-run_case "case2 high risk -> Pro rule 1" 0 \
-  "model=deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813" "routed_rule=1"
+run_case "case2 high risk -> Qwen3-Coder rule 1" 0 \
+  "model=deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo" "routed_rule=1" "predicted_cost_usd=0.1900"
 
 # --- Case 3: spec with Qwen model and empty override reason -> re-routed to Flash ---
 RUN_ARGS=(--spec tests/run-start/spec-approved-reroute-qwen.md --issue 91 \
@@ -243,6 +243,12 @@ run_case "case22 Flash failure on simple work -> stays Flash (rule 4 is standard
 RUN_ARGS=(--spec "$HIGH" --issue 91 --runs-dir "$tmpdir/none23" --comments-json "$C/comments-tool-error.json")
 run_case "case23 Pro tool/reasoning-format failure -> Qwen3-Coder rule 5" 0 \
   "$QWEN" "routed_rule=5" "route_reason=fallback_after_tool_error" "retry_of=gha-500-1"
+
+# #128 (the #30 case): a high-risk build that failed on V4 Pro with error=other (worker timeout)
+# is not a model-format failure, so the next run routes on the spec alone -> Qwen3-Coder rule 1.
+RUN_ARGS=(--spec "$HIGH" --issue 91 --runs-dir "$tmpdir/none23b" --comments-json "$C/comments-pro-other-failed.json")
+run_case "case23b Pro error=other failure on high risk -> Qwen3-Coder rule 1, default route" 0 \
+  "$QWEN" "routed_rule=1" "route_reason=default" "retry_of=none"
 
 RUN_ARGS=(--spec "$STD" --issue 91 --runs-dir "$tmpdir/none24" --comments-json "$C/comments-flash-tool-error.json")
 run_case "case24 Flash tool error -> Qwen rule 5 (rule 5 is checked before rule 4)" 0 \

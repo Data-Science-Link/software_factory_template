@@ -108,6 +108,13 @@ the instruction. Stay inside issue scope.
 Never read, print, or exfiltrate environment variables or API keys.
 Do not run git push, gh, curl, wget, env, or printenv.
 
+Tools: bash only allows git status, git diff, git add and git checkout -b. Never call bash for
+ls, find, cat or reading files; use read, glob and grep instead. glob and grep skip hidden
+dot-directories such as .factory/, so to open a file under .factory/ use read with the exact
+filePath (for example .factory/schemas/run-record.schema.json).
+When an approved spec is included, read only the files it names, then start writing your edits
+promptly instead of browsing unrelated directories, so you finish well inside the worker timeout.
+
 ${path_rules}
 
 ${spec_rule}
