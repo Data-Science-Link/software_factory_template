@@ -10,6 +10,17 @@ if [ "${1:-}" = "--print-prompt" ]; then print_only=yes; fi
 : "${OC_ISSUE_NUMBER:?OC_ISSUE_NUMBER is required}"
 : "${OC_ARTIFACT_DIR:?OC_ARTIFACT_DIR is required}"
 if [ "$print_only" = no ]; then : "${DEEPINFRA_API_KEY:?DEEPINFRA_API_KEY is required}"; fi
+# #92: the model is exactly what run start routed (scripts/factory-run-start.py), passed by the
+# workflow as OC_MODEL from the run-start step. Checked against .factory/models.yaml on this
+# trusted checkout before the worker starts; nothing in the prompt, the spec or the worker's
+# files can change it (it is a fixed --model argument).
+oc_model=''
+if [ "$print_only" = no ]; then
+  : "${OC_MODEL:?OC_MODEL is required (model_id output of the run-start step)}"
+  python3 scripts/factory-check-model.py "$OC_MODEL" \
+    || { echo "agent-run: OC_MODEL is not a deepinfra model listed in .factory/models.yaml; refusing" >&2; exit 1; }
+  oc_model="$OC_MODEL"
+fi
 
 mkdir -p "$OC_ARTIFACT_DIR"
 
@@ -138,7 +149,7 @@ worker_timeout=$(( ${OC_AGENT_BUDGET_SECONDS:-720} - ${OC_VERIFY_RESERVE_SECONDS
 case "${OC_WORKER_TIMEOUT:-}" in '' | *[!0-9]*) ;; *) worker_timeout="$OC_WORKER_TIMEOUT" ;; esac
 oc_rc=0
 timeout -k 15 "$worker_timeout" opencode run --pure --format default \
-  --model deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731 \
+  --model "deepinfra/${oc_model}" \
   "$prompt" >>"$log" 2>&1 || oc_rc=$?
 if [ "$oc_rc" -eq 124 ] || [ "$oc_rc" -eq 137 ]; then
   echo "agent-run: worker stopped at the ${worker_timeout}s limit (#89); keeping what it produced" >&2
@@ -197,7 +208,7 @@ bash scripts/opencode-capture-usage.sh "$usage_metrics" >/dev/null || true
 } >"$OC_ARTIFACT_DIR/summary.md"
 
 # Rewrite the meta file from the value read before the model ran (publish reads it).
-printf 'spec_comment_id=%s\nspec_sha256=%s\n' "$spec_id" "${spec_sha:-none}" >"$meta_file"
+printf 'spec_comment_id=%s\nspec_sha256=%s\nmodel_id=%s\n' "$spec_id" "${spec_sha:-none}" "$oc_model" >"$meta_file"
 if [ -n "$spec_copy" ]; then cp "$spec_copy" "$OC_ARTIFACT_DIR/spec.md"; fi
 
 # Worker narrative (model-written; publish labels it so) from the last labeled section of the log.

@@ -72,6 +72,13 @@ if [ "$(meta pr_number)" != "$OC_PR_NUMBER" ] || [ "$(meta head_sha)" != "$OC_EX
   echo "publish-fix: artifact fix-meta.txt does not match this PR/head; refusing" >&2
   exit 1
 fi
+# #92: the model job A ran (meta rewritten by the harness after the worker), re-checked against
+# the default branch's models.yaml before the PR comment names it.
+git -C "$trusted" show HEAD:scripts/factory-check-model.py >"$PRISTINE_DIR/factory-check-model.py"
+git -C "$trusted" show HEAD:.factory/models.yaml >"$PRISTINE_DIR/models.yaml"
+model_id="$(meta model_id)"
+python3 "$PRISTINE_DIR/factory-check-model.py" --models "$PRISTINE_DIR/models.yaml" "$model_id" 2>/dev/null \
+  || { echo "publish-fix: model_id in fix-meta.txt is missing or not a deepinfra model in models.yaml; refusing" >&2; exit 1; }
 
 # 3. Scan (secrets + path policy on the patch, relative to the PR head).
 evidence="$OC_ARTIFACT_DIR/evidence.md"
@@ -152,7 +159,7 @@ repo_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}"
   bt='`'
   while IFS= read -r f; do printf -- '- %s%s%s\n' "$bt" "$f" "$bt"; done <<<"$files"
   echo
-  echo "AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Flash-0731"
+  echo "AI disclosure: harness opencode-actions; model ${model_id}"
   echo
   echo "$run_facts"
   echo

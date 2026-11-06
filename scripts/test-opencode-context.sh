@@ -107,11 +107,12 @@ publish_body() { # $1 = context-meta.txt content ("" = no file); body left in $w
     GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
     GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t bash scripts/opencode-publish-pr.sh >/dev/null 2>&1) || true
 }
-publish_body 'spec_comment_id=102' 1
+publish_body $'spec_comment_id=102\nmodel_id=deepseek-ai/DeepSeek-V4-Flash-0731' 1
 if grep -qF 'Spec: approved owner spec comment 102 (https://github.com/o/r/issues/7#issuecomment-102)' "$work/pub1/art/pr-body.md" 2>/dev/null; then
   ok "publish PR body names the spec comment URL"
 else bad "publish PR body names the spec comment URL"; fi
-publish_body '' 2
+# #92: job A's agent script always rewrites the meta with model_id, even without a context step.
+publish_body 'model_id=deepseek-ai/DeepSeek-V4-Flash-0731' 2
 old_prompt="$(env -u DEEPINFRA_API_KEY OC_INSTRUCTION='/oc x' OC_ISSUE_NUMBER=7 OC_ARTIFACT_DIR="$work/none" \
   bash scripts/opencode-agent-run.sh --print-prompt 2>&1)" || true
 if grep -qF 'Spec: not fetched' "$work/pub2/art/pr-body.md" 2>/dev/null && grep -q 'context step did not run' <<<"$old_prompt"; then

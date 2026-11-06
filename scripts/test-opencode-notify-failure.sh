@@ -53,6 +53,9 @@ run() { # name -> rc; appends stdout+stderr to $work/<name>.log, posts body to $
     OC_AGENT_RESULT="${OC_AGENT_RESULT:-success}" OC_PUBLISH_RESULT="${OC_PUBLISH_RESULT:-success}" \
     GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-o/r}" GITHUB_SERVER_URL="${GITHUB_SERVER_URL:-https://github.com}" \
     GH_TOKEN="${GH_TOKEN:-}" OC_INSTRUCTION="${OC_INSTRUCTION:-}" \
+    OC_REFUSED="${OC_REFUSED:-}" OC_MODEL_ID="${OC_MODEL_ID:-}" OC_ROUTED_RULE="${OC_ROUTED_RULE:-}" \
+    OC_ERROR_CLASS="${OC_ERROR_CLASS:-}" OC_PRIOR_USD="${OC_PRIOR_USD:-}" \
+    OC_PREDICTED_USD="${OC_PREDICTED_USD:-}" OC_CAP_USD="${OC_CAP_USD:-}" \
     bash scripts/opencode-notify-failure.sh >>"$work/$name.log" 2>&1 || rc=$?
   return "$rc"
 }
@@ -60,6 +63,7 @@ run() { # name -> rc; appends stdout+stderr to $work/<name>.log, posts body to $
 npost() { grep -c -- "--method POST repos/o/r/issues/[0-9]*/comments" "$work/gh.log" || true; }
 ncall() { wc -l <"$work/gh.log"; }
 posts() { [ -s "$work/posted.md" ] && cat "$work/posted.md"; }
+pbody() { [ -s "$work/posted.md" ] && python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["body"])' "$work/posted.md"; }
 
 empty_comments='[]'
 bot_marker='[{"user": {"login": "github-actions[bot]"}, "body": "<!-- factory-run-failed v1 run=4242 attempt=1 -->\nalready"}]'
@@ -164,6 +168,67 @@ else bad "token/instruction leak (rc=$rc)"; cat "$work/c11.log"; fi
 set +e; FAKE_GH_POST_RC=1 OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c12; rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then ok "gh POST fails -> script exits non-zero"; else bad "gh POST failure (rc=$rc)"; fi
+
+# ===== #92: run-start refusals and the routing fields on the marker =====
+# --- 13. agent failure with model facts: marker carries kind/job/result/model/rule/error.
+: >"$work/comments.json"
+set +e
+OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped OC_MODEL_ID=deepseek-ai/DeepSeek-V4-Flash-0731 \
+  OC_ROUTED_RULE=3 OC_ERROR_CLASS=tool_or_reasoning_format run c13; rc=$?
+set -e
+if [ "$rc" -eq 0 ] && pbody | head -1 | grep -qxF '<!-- factory-run-failed v1 run=4242 attempt=1 kind=build job=agent result=failure model=deepseek-ai/DeepSeek-V4-Flash-0731 rule=3 error=tool_or_reasoning_format -->' \
+  && posts | grep -q 'Model: `deepseek-ai/DeepSeek-V4-Flash-0731` (routed by run start, models.yaml rule 3)'; then
+  ok "#92 failure marker carries kind/job/result/model/rule/error; body names the routed model"
+else bad "#92 marker fields (rc=$rc)"; posts | head -3; fi
+
+# --- 14. bad model / rule / error values -> none (never echoed).
+: >"$work/comments.json"
+set +e
+OC_KIND=fix OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped OC_MODEL_ID='evil -->x' OC_ROUTED_RULE='3;x' \
+  OC_ERROR_CLASS='pwn' run c14; rc=$?
+set -e
+if [ "$rc" -eq 0 ] && pbody | head -1 | grep -qxF '<!-- factory-run-failed v1 run=4242 attempt=1 kind=fix job=agent result=failure model=none rule=none error=none -->' \
+  && ! posts | grep -q 'evil' && ! posts | grep -q pwn; then
+  ok "#92 invalid model/rule/error values become none and are not posted"
+else bad "#92 invalid facts (rc=$rc)"; posts | head -3; fi
+
+# --- 15. over_cap refusal: stop wording, numbers, no-spend line, model=none on the marker.
+: >"$work/comments.json"
+set +e
+OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped OC_REFUSED=over_cap OC_MODEL_ID=deepseek-ai/DeepSeek-V4-Pro-0813 \
+  OC_PRIOR_USD=0.9950 OC_PREDICTED_USD=0.4700 OC_CAP_USD=1.00 run c15; rc=$?
+set -e
+if [ "$rc" -eq 0 ] && posts | grep -qF '**`/oc` run stopped at run start** (refused: `over_cap`). No PR was opened.' \
+  && posts | grep -qF 'Issue spend so far: $0.9950; this run'"'"'s prediction: $0.4700; cap: $1.00.' \
+  && posts | grep -q 'No DeepInfra spend' && ! posts | grep -q 'spend may still have happened' \
+  && pbody | head -1 | grep -q 'model=none rule=none error=none -->'; then
+  ok "#92 over_cap refusal: stop wording, spend/prediction/cap, no-spend line, model=none marker"
+else bad "#92 over_cap refusal (rc=$rc)"; posts; fi
+
+# --- 16. no_approved_spec refusal on a fix run; bad numbers print as '?'.
+: >"$work/comments.json"
+set +e; OC_KIND=fix OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped OC_REFUSED=no_approved_spec run c16; rc=$?; set -e
+if [ "$rc" -eq 0 ] && posts | grep -qF '**`/oc fix` run stopped at run start** (refused: `no_approved_spec`). No commit was pushed to this PR.' \
+  && posts | grep -q 'no approved spec comment'; then
+  ok "#92 no_approved_spec refusal on a fix run: fix title, reason text"
+else bad "#92 no_approved_spec (rc=$rc)"; posts; fi
+
+# --- 17. unknown refusal code -> generic text, code not echoed.
+: >"$work/comments.json"
+set +e; OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped OC_REFUSED='<script>' run c17; rc=$?; set -e
+if [ "$rc" -eq 0 ] && posts | grep -q 'refused: `invalid`' && ! posts | grep -q '<script>'; then
+  ok "#92 unknown refusal code -> 'invalid', never echoed"
+else bad "#92 unknown refusal (rc=$rc)"; posts; fi
+
+# --- 18. idempotency: a new-format marker for this attempt -> no POST; attempt=10 -> still posts.
+printf '%s' '[{"user": {"login": "github-actions[bot]"}, "body": "<!-- factory-run-failed v1 run=4242 attempt=1 kind=build job=agent result=failure model=none rule=none error=none -->\nx"}]' >"$work/comments.json"
+set +e; OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c18; rc=$?; set -e
+n18="$(npost)"
+printf '%s' '[{"user": {"login": "github-actions[bot]"}, "body": "<!-- factory-run-failed v1 run=4242 attempt=10 kind=build job=agent result=failure model=none rule=none error=none -->\nx"}]' >"$work/comments.json"
+set +e; OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped run c18b; rc2=$?; set -e
+if [ "$rc" -eq 0 ] && [ "$n18" = 0 ] && [ "$rc2" -eq 0 ] && [ "$(npost)" = 1 ]; then
+  ok "#92 idempotency matches new-format markers; attempt=10 does not match attempt=1"
+else bad "#92 idempotency new format (n18=$n18)"; fi
 
 echo "Results: ${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]

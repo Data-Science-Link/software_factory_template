@@ -7,6 +7,13 @@
 #   OC_KIND build|fix, OC_TARGET_NUMBER, OC_RUN_ID, OC_RUN_ATTEMPT (default 1),
 #   OC_AGENT_RESULT, OC_PUBLISH_RESULT (success|failure|cancelled|skipped),
 #   GITHUB_REPOSITORY, optional GITHUB_SERVER_URL, GH_TOKEN (used only by gh, never printed).
+# Optional (#92, from the agent job's run-start and classify steps; each validated, else "none"):
+#   OC_REFUSED      run-start refusal code (scripts/factory-run-start.py): the run never started
+#   OC_MODEL_ID     the routed model, OC_ROUTED_RULE its models.yaml rule
+#   OC_ERROR_CLASS  tool_or_reasoning_format|other (scripts/factory-classify-failure.py)
+#   OC_PRIOR_USD, OC_PREDICTED_USD, OC_CAP_USD  numbers for an over_cap refusal
+# The marker line carries kind/job/result/model/rule/error so the next run start can route the
+# retry (rule 4) or the fallback (rule 5) without trusting anything the worker wrote.
 set -euo pipefail
 
 case "${OC_KIND:-}" in
@@ -50,17 +57,61 @@ else
   job=publish; result="$OC_PUBLISH_RESULT"
 fi
 
+# #92 optional facts: anything that fails validation becomes "none" (never echoed back).
+model="${OC_MODEL_ID:-}"
+[[ "$model" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || model=none
+rule="${OC_ROUTED_RULE:-}"
+case "$rule" in '' | *[!0-9]*) rule=none ;; esac
+error="${OC_ERROR_CLASS:-}"
+case "$error" in tool_or_reasoning_format | other) ;; *) error=none ;; esac
+refused="${OC_REFUSED:-}"
+case "$refused" in
+  '') refused=none ;;
+  no_approved_spec) why="This issue has no approved spec comment. Post one (\`/oc spec\`, then approve it with scripts/factory-approve-spec.py) and run \`/oc\` again." ;;
+  spec_not_approved) why="The spec found is not \`status: approved\`." ;;
+  spec_issue_mismatch) why="The approved spec names a different issue." ;;
+  spec_check_failed) why="The approved spec fails scripts/factory-spec-check.py." ;;
+  router_failed) why="The model router (scripts/factory-predict-cost.py) could not route this spec." ;;
+  router_guard) why="A models.yaml guard fired (rule 6: predicted cost over the cap, or rule 8: priority tier). Split the issue." ;;
+  model_not_allowed) why="The routed model is not a DeepInfra model listed in .factory/models.yaml." ;;
+  cap_unset) why="\`budget.issue_cap_usd\` is not set in .factory/models.yaml." ;;
+  over_cap) why="Prior spend on this issue plus this run's predicted cost is over the per-issue cap. Split the issue or raise the cap in .factory/models.yaml." ;;
+  *) refused=invalid; why="Run start refused the run (unrecognized reason code)." ;;
+esac
+num() { [[ "${1:-}" =~ ^[0-9]{1,6}\.[0-9]{1,6}$ ]] && printf '%s' "$1" || printf '?'; }
+
 server="${GITHUB_SERVER_URL:-https://github.com}"
-marker="<!-- factory-run-failed v1 run=${OC_RUN_ID} attempt=${attempt} -->"
+marker_key="<!-- factory-run-failed v1 run=${OC_RUN_ID} attempt=${attempt}"
+if [ "$refused" != none ]; then model=none; rule=none; error=none; fi
+marker="$marker_key kind=${OC_KIND} job=${job} result=${result} model=${model} rule=${rule} error=${error} -->"
 if [ "$OC_KIND" = fix ]; then
   second="No commit was pushed to this PR."
 else
   second="No PR was opened."
 fi
-body="$marker
+if [ "$refused" != none ]; then
+  stop_title="${title% failed\*\*} stopped at run start**"
+  body="$marker
+$stop_title (refused: \`$refused\`). $second
+- Why: $why"
+  if [ "$refused" = over_cap ]; then
+    body="$body
+- Issue spend so far: \$$(num "${OC_PRIOR_USD:-}"); this run's prediction: \$$(num "${OC_PREDICTED_USD:-}"); cap: \$$(num "${OC_CAP_USD:-}")."
+  fi
+  body="$body
+- No DeepInfra spend: run start stops the job before OpenCode is installed or the key is used.
+- Run: $server/$repo/actions/runs/${OC_RUN_ID}"
+else
+  body="$marker
 $title in the \`$job\` job (result: \`$result\`). $second
-- Run: $server/$repo/actions/runs/${OC_RUN_ID}
+- Run: $server/$repo/actions/runs/${OC_RUN_ID}"
+  if [ "$model" != none ]; then
+    body="$body
+- Model: \`$model\` (routed by run start, models.yaml rule $rule); failure class: \`$error\`."
+  fi
+  body="$body
 - DeepInfra spend may still have happened; the run's usage report is in the job log."
+fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -77,7 +128,9 @@ PY
 # replace stdin: the gh output is still what Python reads on stdin.
 read -r -d '' dup_py <<'PY' || true
 import json, sys
-marker = sys.argv[1]
+# Match the run+attempt key followed by a space, so old (v1, no fields) and new markers both count
+# and attempt=1 never matches attempt=10.
+marker = sys.argv[1] + " "
 decoder = json.JSONDecoder()
 seen = False
 buf = sys.stdin.read()
@@ -98,11 +151,11 @@ while i < n:
         break
 sys.exit(0 if seen else 1)
 PY
-if gh api --paginate "repos/$repo/issues/${OC_TARGET_NUMBER}/comments" | python3 -c "$dup_py" "$marker"
+if gh api --paginate "repos/$repo/issues/${OC_TARGET_NUMBER}/comments" | python3 -c "$dup_py" "$marker_key"
 then
   echo "notify-failure: already posted for this run attempt"
   exit 0
 fi
 
 gh api --method POST "repos/$repo/issues/${OC_TARGET_NUMBER}/comments" --input "$tmp/body.json"
-echo "notify-failure: posted a failure comment (job $job, result $result)"
+echo "notify-failure: posted a failure comment (job $job, result $result, refused $refused)"

@@ -11,7 +11,14 @@ GitHub Actions workers (OpenCode + DeepInfra) pick models from **`.factory/model
 
 **Default worker model:** `deepseek-ai/DeepSeek-V4-Flash-0731` for most runs. **Escalation:** `deepseek-ai/DeepSeek-V4-Pro-0813` for high risk, complex work, `/oc spec` runs, and one retry after Flash fails on standard work. **Fallback:** `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` when DeepSeek hits tool-call or reasoning-format errors.
 
-The routing and cost-prediction scripts (issue **#27**) will read `models.yaml` directly once they land; do not duplicate prices in this file.
+Scripts read `models.yaml` directly; do not duplicate prices in this file.
+
+**How a run gets its model (run start, #91/#92).** `/oc` and `/oc fix` never let the worker pick. Before OpenCode is installed, the workflow's run start step (`scripts/factory-run-start.sh` → `scripts/factory-run-start.py`) routes the model and checks the cap, and the agent step passes that exact id to OpenCode as a fixed `--model` (`OC_MODEL`; the agent scripts refuse a missing id or one not listed here). The DeepInfra key is only in the agent step.
+
+- **Inputs:** the approved spec (for `/oc fix`, the linked issue's spec), so risk and complexity pick rules 1–3. A run with no approved spec is refused.
+- **Retry and fallback:** read from the #84 failure comments (`github-actions[bot]` only) posted since the owner's previous trigger of the same kind. If the worker step failed on DeepSeek with a tool-call or reasoning-format error (`scripts/factory-classify-failure.py` on the log), the next run uses Qwen3-Coder (rule 5). If it failed on Flash on standard work, the next run uses Pro once (rule 4). If that Pro retry fails too, routing goes back to the spec's own rule. Retry keys in a spec are ignored; an owner who wants a model sets `model` + `model_override_reason`.
+- **Cap:** prior spend on the issue (run records) plus the predicted cost must stay under `budget.issue_cap_usd`. A refusal stops the job and the notify job posts the reason, with "no DeepInfra spend".
+- `/oc spec` keeps its own preflight in `scripts/opencode-spec-run.sh` (rule 2, V4 Pro, predicted cost under the cap).
 
 **Spend rules (unchanged):** never enable on-demand spend (Cursor or elsewhere). Workers and the manager stay within the issue cap ($1 hard, $0.10 target) and the Actions-only DeepInfra key limit ($10/month per `.factory/DECISIONS.md`).
 

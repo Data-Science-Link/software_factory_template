@@ -188,6 +188,7 @@ cp "$work/meta.bak" "$work/pa/fix-meta.txt"
 trusted="$work/trusted"
 mkdir -p "$trusted"
 cp -R scripts opencode.json "$trusted/"
+mkdir -p "$trusted/.factory" && cp .factory/models.yaml "$trusted/.factory/"
 git -C "$trusted" init -q
 git -C "$trusted" add -A
 git -C "$trusted" -c user.name=t -c user.email=t@t commit -q -m trusted
@@ -224,7 +225,7 @@ setup_remote() { # -> sets head_sha; fresh bare remote + PR checkout + patch
   git -C "$work/pr" config user.name bot; git -C "$work/pr" config user.email bot@bot
   mkdir -p "$work/art"
   ( cd "$work/seed" && echo fixed >>factory/b.md && git diff >"$work/art/changes.patch" && git checkout -q -- factory/b.md )
-  printf 'pr_number=72\nissue_number=33\nhead_ref=%s\nhead_sha=%s\n' "$branch" "$head_sha" >"$work/art/fix-meta.txt"
+  printf 'pr_number=72\nissue_number=33\nhead_ref=%s\nhead_sha=%s\nmodel_id=%s\n' "$branch" "$head_sha" "${FIX_MODEL-deepseek-ai/DeepSeek-V4-Pro-0813}" >"$work/art/fix-meta.txt"
   echo "# summary" >"$work/art/summary.md"
   printf 'Fixed it. Ping @someone ```html\n<!-- hidden -->\n' >"$work/art/worker-note.md"
   fixture "$work/pub.json" "pr.head.sha=\"$head_sha\""
@@ -252,8 +253,9 @@ if [ "$new_remote" != "$head_sha" ] && [ "$(git -C "$bare" rev-parse "$new_remot
   && grep -q '^Run ID: 999' "$work/comment.md" && grep -q 'What I changed and why' "$work/comment.md" \
   && grep -q '(at)someone' "$work/comment.md" && ! grep -q '<!-- hidden' "$work/comment.md" \
   && [ "$(grep -c '^```' "$work/comment.md")" = 4 ] && grep -q '#74' "$work/comment.md" \
-  && grep -q 'factory/b.md' "$work/comment.md"; then
-  ok "publish-fix: remote branch advanced by one commit; comment has run facts and defanged note"
+  && grep -q 'factory/b.md' "$work/comment.md" \
+  && grep -qx 'AI disclosure: harness opencode-actions; model deepseek-ai/DeepSeek-V4-Pro-0813' "$work/comment.md"; then
+  ok "publish-fix: remote branch advanced by one commit; comment has run facts, routed model (#92), defanged note"
 else bad "publish-fix: push/comment content"; cat "$work/comment.md" 2>/dev/null || true; fi
 
 if grep -q '^Predicted cost: not predicted (fix run' "$work/comment.md" && grep -q 'Evidence: verification output' "$work/comment.md" \
@@ -341,5 +343,13 @@ if git config --global --get-regexp '^credential\.' >/dev/null 2>&1 || git -C "$
   bad "no credential config persisted"; else ok "no credential config persisted"; fi
 
 echo
+# #92: job A's meta must name a models.yaml deepinfra model, or publish-fix refuses before pushing.
+FIX_MODEL=openai/gpt-5 setup_remote
+rm -f "$work/comment.md"
+publish "model_id not in models.yaml refused (#92)" fail
+if [ ! -e "$work/comment.md" ] && grep -q 'model_id in fix-meta.txt is missing or not a deepinfra model' "$work/pub.log" \
+  && [ "$(git -C "$bare" rev-parse "refs/heads/$branch")" = "$head_sha" ]; then
+  ok "publish-fix: bad model_id -> no push, no comment (#92)"
+else bad "publish-fix: bad model_id refusal"; tail -3 "$work/pub.log"; fi
 echo "passed: $passed  failed: $failed"
 [ "$failed" -eq 0 ]
