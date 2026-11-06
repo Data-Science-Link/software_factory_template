@@ -44,9 +44,14 @@ You are the factory SPEC worker for issue #${OC_ISSUE_NUMBER} in this repository
 another worker builds it later. This is a READ-ONLY run: you cannot edit files or run commands, and
 nothing you change in the repository is kept. Your only tools are read, glob and grep; there is no shell, so
 never call bash, ls or cat. Use OpenCode's exact argument names: read takes {"filePath": "<path>"}
-(camelCase; never file_path or path), glob takes {"pattern": "<glob>"}, grep takes {"pattern": "<regex>"}. Read only what you need (at most about 12 files):
-.factory/FACTORY.md, factory/specs/README.md, the files the issue names, and one existing spec in
-factory/specs/ as an example. Never read, print or reveal environment variables or keys.
+(camelCase; never file_path or path), glob takes {"pattern": "<glob>"}, grep takes {"pattern": "<regex>"}.
+Important: .factory/templates/spec.md is already embedded below in <template> — do not read or glob it.
+glob and grep ignore hidden dot-directories like .factory/; to open a file under .factory/ use read with
+the exact {"filePath": "..."} (for example .factory/FACTORY.md). Read only what you need (at most about
+12 files; if the issue comments already include a current-main integration map, read at most 8 files and
+start writing the spec immediately): .factory/FACTORY.md, factory/specs/README.md, the files the issue
+names, and one existing spec in factory/specs/ as an example. Never read, print or reveal environment
+variables or keys.
 
 Write ONE spec that follows the template below exactly: the same front matter keys and the same
 "## " headings, in order. Rules the harness checks (a draft that fails them is not posted):
@@ -107,8 +112,8 @@ export OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","bash":{"*":"deny"}
 before="$(git status --porcelain=v1 --untracked-files=all | sha256sum)"
 log="$OC_ARTIFACT_DIR/opencode.log"
 : >"$log"
-timeout_s="${OC_SPEC_TIMEOUT:-480}"
-case "$timeout_s" in '' | *[!0-9]*) timeout_s=480 ;; esac
+timeout_s="${OC_SPEC_TIMEOUT:-720}"
+case "$timeout_s" in '' | *[!0-9]*) timeout_s=720 ;; esac
 rc=0
 timeout -k 10 "$timeout_s" opencode run --pure --format default --model "deepinfra/${model}" "$prompt" >>"$log" 2>&1 || rc=$?
 [ "$rc" -eq 0 ] || echo "spec-run: opencode exited $rc (124 = stopped at the ${timeout_s}s limit); see opencode.log" >&2
