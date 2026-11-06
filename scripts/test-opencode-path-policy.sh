@@ -183,10 +183,10 @@ if python3 - "$root/opencode.json" <<'PY2'
 import json, sys
 edit = json.load(open(sys.argv[1]))["permission"]["edit"]
 bad = [k for k, v in edit.items() if v == "deny" and k in ("scripts/**", "scripts/*", "*")]
-need = [k for k in (".github/**", "opencode.json", "scripts/protect-main.sh") if edit.get(k) != "deny"]
+need = [k for k in (".github/**", "opencode.json", ".factory/models.yaml", "requirements-factory.txt", "scripts/protect-main.sh") if edit.get(k) != "deny"]
 sys.exit(1 if bad or need else 0)
 PY2
-then ok "opencode.json: new scripts editable (scan judges them); .github, opencode.json, protect-main.sh denied"
+then ok "opencode.json: new scripts editable (scan judges them); .github, opencode.json, models.yaml, requirements-factory, protect-main.sh denied"
 else bad "opencode.json edit rules vs path policy"; fi
 
 # --- fix runs (#102): --base-scripts lists the default branch scripts; PR-added ones are editable ---

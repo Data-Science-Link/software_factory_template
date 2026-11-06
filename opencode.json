@@ -7,6 +7,7 @@
     "websearch": "deny",
     "skill": "deny",
     "question": "deny",
+    "external_directory": "deny",
     "read": {
       "*": "allow",
       "*.env": "deny",
@@ -30,6 +31,8 @@
       ".github/**": "deny",
       "opencode.json": "deny",
       ".factory/actions-security.md": "deny",
+      ".factory/models.yaml": "deny",
+      "requirements-factory.txt": "deny",
       "scripts/protect-main.sh": "deny",
       "AGENTS.md": "deny",
       "**/AGENTS.md": "deny"

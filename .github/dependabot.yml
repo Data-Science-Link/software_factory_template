@@ -1,0 +1,19 @@
+# Dependabot for GitHub Actions (#112).
+# cooldown.default-days only — semver-*-days keys are invalid for github-actions.
+# PRs are not auto-merged; they must pass pr-check and gitleaks.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:17"
+      timezone: "America/Chicago"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7

@@ -20,7 +20,7 @@ Threat model and controls for the `/oc` spike workflow (`opencode-spike.yml`). *
 3. **Agent job:** `contents: read` only; no `id-token`; checkout `persist-credentials: false`; unset `GITHUB_TOKEN` before OpenCode; only secret `DEEPINFRA_API_KEY`.
 4. **Publish job:** `contents: write`, `pull-requests: write` only; no DeepInfra secret.
 5. **Artifact gate:** `scripts/opencode-artifact-scan.sh` + gitleaks on patch, summary, and log (fail closed; redacted output only).
-6. **OpenCode config:** `webfetch` / `websearch` / `skill` denied; dangerous bash denied; API key via `{env:DEEPINFRA_API_KEY}` only.
+6. **OpenCode config:** `webfetch` / `websearch` / `skill` / `external_directory` denied; dangerous bash denied; owner-only `edit` denies include `.factory/models.yaml` and `requirements-factory.txt`; API key via `{env:DEEPINFRA_API_KEY}` only on the OpenCode step (spike/fix already; spec paste under #112).
 7. **Pinned** third-party Actions (full SHA) and pinned OpenCode version with SHA-512.
 8. **Optional:** `step-security/harden-runner` in **audit** mode first (egress visibility before block mode).
 9. **No merge** step; no push to `main`; concurrency per issue; job timeout.
@@ -28,6 +28,11 @@ Threat model and controls for the `/oc` spike workflow (`opencode-spike.yml`). *
 11. **Spec file (#75):** the harness writes `factory/specs/issue-<N>.md` from the validated approved comment (hash-checked before and after the model runs, worker edits overwritten); publish re-fetches the comment with its own token, re-validates it with the pristine `opencode-build-context.py --print-spec`, and refuses a patch whose spec file differs. The publish jobs need `issues: read` for that re-fetch; until it is pasted, a 403 makes publish fall back to job A's `spec.md` (pristine checker + the `spec_sha256` job A recorded), labeled `checked by publish against job A's copy only` in the PR. Any other fetch error refuses. `factory-spec-check.py` rejects `\"` in front matter.
 12. **Verification (#76, #80):** the worker shell stays git-only for build and fix runs (bash `*` deny in `opencode.json`), because any interpreter (python, dbt's `env_var()`, DuckDB) could read `DEEPINFRA_API_KEY` from the agent's environment. Instead `scripts/opencode-verify.sh` runs the spec's `## Verification` `bash` block after the model exits: scratch copy of the base commit plus the patch (scanned first), separate unprivileged user `ocverify` (via the runner's sudo) with `env -i`, so neither the key nor `/proc/<pid>/environ` of the runner's processes is readable; `timeout`, and a time budget so the job limit is never hit. The output is scanned (gitleaks, token patterns, the key value) before upload and again in publish, then pasted fenced and capped. **Residual risk:** the network is not blocked during verification (the spec's `pip install` needs it), so code from the patch could reach the internet with the repository contents; harden-runner stays in audit mode.
 13. **PR body text from the model or from commands** is pasted only inside a fenced `text` block (``` → ''', `@` → `(at)`, `<!--` defanged, capped) by `scripts/opencode-text-block.sh`, and `pr-check` ignores fenced blocks.
+
+## Dependabot + deferred worker-shell key strip (#112)
+
+14. **Dependabot:** `.github/dependabot.yml` weekly (Monday 09:17 America/Chicago) grouped `github-actions` updates with `cooldown.default-days: 7`; PRs still need pr-check + gitleaks — no auto-merge.
+15. **Worker-shell key isolation:** deferred under the $10 DeepInfra monthly spend cap until OpenCode supports native key isolation from the worker shell; step-scoped `DEEPINFRA_API_KEY` + bash `env*`/`printenv*` deny remain the current controls.
 
 ## `/oc fix` on an existing PR (issue #55)
 
