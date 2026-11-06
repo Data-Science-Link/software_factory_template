@@ -6,6 +6,9 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+export GIT_CONFIG_GLOBAL="$work/gitconfig"; : >"$GIT_CONFIG_GLOBAL"
+export GIT_CONFIG_NOSYSTEM=1
+git config --global user.name t; git config --global user.email t@t
 
 echo "== test: opencode usage capture parser =="
 bash "$root/scripts/test-opencode-capture-usage.sh"
