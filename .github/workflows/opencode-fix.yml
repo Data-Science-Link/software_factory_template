@@ -35,11 +35,18 @@ jobs:
       pull-requests: read
     outputs:
       head_sha: ${{ steps.ctx.outputs.head_sha }}
+      # #92: run start's decision and the failure class, for the notify job's comment and marker.
+      model_id: ${{ steps.start.outputs.model_id }}
+      routed_rule: ${{ steps.start.outputs.routed_rule }}
+      refused: ${{ steps.start.outputs.refused }}
+      prior_spend_usd: ${{ steps.start.outputs.prior_spend_usd }}
+      predicted_cost_usd: ${{ steps.start.outputs.predicted_cost_usd }}
+      cap_usd: ${{ steps.start.outputs.cap_usd }}
+      error_class: ${{ steps.classify.outputs.error_class }}
     env:
       OC_INSTRUCTION: ${{ github.event.comment.body }}
       OC_PR_NUMBER: ${{ github.event.issue.number }}
       OC_ARTIFACT_DIR: /tmp/oc-artifacts
-      DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
       # Seconds the agent script may use before it stops starting work (verification is
       # trimmed or skipped to fit); leaves ~3 minutes of the job for the scan and upload.
       OC_AGENT_BUDGET_SECONDS: "1020"
@@ -69,6 +76,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/opencode-build-fix-context.py
 
+      # #91/#92: routed from the LINKED issue's approved spec (risk/complexity) and that issue's
+      # spend, plus fix-run failure markers on this PR; decided before OpenCode is installed or the
+      # key is used. A refusal (exit 3) stops the job; the notify job posts the reason.
+      - name: Run start (route the model, check the issue cap; read-only token, this step only)
+        id: start
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OC_KIND: fix
+        run: bash scripts/factory-run-start.sh
+
       - name: Check out the PR head (the SHA the context was built from)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -84,9 +101,20 @@ jobs:
         run: bash scripts/opencode-install.sh
 
       - name: Run OpenCode fix agent
+        id: agent
         env:
           OC_PR_DIR: ${{ github.workspace }}/pr
+          # #92: the key is in this step only; OC_MODEL is exactly run start's routed model.
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          OC_MODEL: ${{ steps.start.outputs.model_id }}
         run: bash scripts/opencode-agent-fix.sh
+
+      # #92: only when the worker step itself failed: tool-call / reasoning-format failure or not
+      # (models.yaml rule 5). No class = not a worker failure, so the next run start won't retry on it.
+      - name: Classify a failed worker run
+        id: classify
+        if: always() && steps.agent.outcome == 'failure'
+        run: python3 scripts/factory-classify-failure.py --log "$OC_ARTIFACT_DIR/opencode.log"
 
       - name: Usage report (always)
         if: always()
@@ -190,3 +218,38 @@ jobs:
               cat "${OC_ARTIFACT_DIR}/usage-metrics.md"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # #84: one script-worded comment when the agent or publish job fails or is cancelled, including
+  # a run start refusal (#92: the reason and cap numbers, "no DeepInfra spend"). Its marker line
+  # records the routed model and failure class, which the next run start reads for rules 4 and 5.
+  # Separate job so it still runs after a timeout, and the write token never sits next to the key.
+  notify:
+    needs: [agent, publish]
+    if: always() && needs.agent.result != 'skipped' && (needs.agent.result != 'success' || needs.publish.result != 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Post one failure comment (wording from the script)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OC_KIND: fix
+          OC_TARGET_NUMBER: ${{ github.event.issue.number }}
+          OC_RUN_ID: ${{ github.run_id }}
+          OC_RUN_ATTEMPT: ${{ github.run_attempt }}
+          OC_AGENT_RESULT: ${{ needs.agent.result }}
+          OC_PUBLISH_RESULT: ${{ needs.publish.result }}
+          OC_REFUSED: ${{ needs.agent.outputs.refused }}
+          OC_MODEL_ID: ${{ needs.agent.outputs.model_id }}
+          OC_ROUTED_RULE: ${{ needs.agent.outputs.routed_rule }}
+          OC_ERROR_CLASS: ${{ needs.agent.outputs.error_class }}
+          OC_PRIOR_USD: ${{ needs.agent.outputs.prior_spend_usd }}
+          OC_PREDICTED_USD: ${{ needs.agent.outputs.predicted_cost_usd }}
+          OC_CAP_USD: ${{ needs.agent.outputs.cap_usd }}
+        run: bash scripts/opencode-notify-failure.sh
