@@ -350,7 +350,7 @@ def main():
             elif end_usd >= start_usd:
                 key_spend_available = True
                 key_spend_delta_usd = float(
-                    decimal.Decimal(str(end_usd - start_usd)).quantize(
+                    (decimal.Decimal(str(end_usd)) - decimal.Decimal(str(start_usd))).quantize(
                         decimal.Decimal("0.000001")
                     )
                 )

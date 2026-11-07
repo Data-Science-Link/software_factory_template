@@ -348,8 +348,8 @@ check_title_generation_gap_mismatch() {
   local notes
   notes=$(jq -r '.notes' "$record_path")
   
-  if [[ ! "$notes" =~ "unrecorded calls" ]]; then
-    echo "Expected notes to contain 'unrecorded calls', got $notes" >&2
+  if [[ ! "$notes" =~ "title generation" ]]; then
+    echo "Expected notes to contain 'title generation', got $notes" >&2
     return 1
   fi
   
@@ -1074,7 +1074,9 @@ mkdir -p "$artifact_dir"
 setup_secrets_test "$artifact_dir"
 
 secret="sentinel-secret-value-12345"
-FACTORY_TEST_SECRET="$secret" DEEPINFRA_API_KEY="$secret" result_secret=$(
+set +e
+result_secret=$(
+  FACTORY_TEST_SECRET="$secret" DEEPINFRA_API_KEY="$secret" \
   FACTORY_RUNS_DIR="$tmpdir/runs" \
   OC_ARTIFACT_DIR="$artifact_dir" \
   GITHUB_REPOSITORY="Data-Science-Link/software_factory_template" \
@@ -1088,6 +1090,7 @@ FACTORY_TEST_SECRET="$secret" DEEPINFRA_API_KEY="$secret" result_secret=$(
   scripts/factory-run-end.sh 2>"$tmpdir/stderr-secret.txt"
 )
 rc=$?
+set -e
 
 if [ "$rc" -ne 0 ]; then
   fail "Secrets test (script failed)"
