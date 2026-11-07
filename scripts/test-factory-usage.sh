@@ -77,7 +77,7 @@ json.dump(data, open(sys.argv[1], "w"), indent=2)
 
 result_null_cost="$("${PY[@]}" "$tmpdir_copy/session1.json" "$tmpdir_copy/session2.json")"
 echo "$result_null_cost" | grep -q '"opencode_cost_usd": null' || fail "cost nullification"
-note "one message cost removed -> opencode_cost_usd is null"
+run_case "one message cost removed -> opencode_cost_usd is null" 0 '{"models": ["deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"], "opencode_cost_usd": null, "requests": 4, "sessions": 2, "source": "opencode-export", "tokens_cached": 8000, "tokens_in": 10000, "tokens_out": 240, "tokens_reasoning": 0}' "$tmpdir_copy/session1.json" "$tmpdir_copy/session2.json"
 
 # Test cost validation function from factory-validate-run.py using importlib
 python3 -c '
@@ -97,7 +97,7 @@ else:
     sys.exit(1)
 ' || fail "cost_from_usage validation"
 
-note "cost_from_usage validation"
+# Removed unconditional note call
 
 # Error cases - exit 3 with empty stdout
 # Duplicate file
@@ -177,6 +177,17 @@ json.dump(data, open(sys.argv[1], "w"), indent=2)
 ' "$tmpdir/negative-token.json"
 run_case "negative token value" 3 "" "$tmpdir/negative-token.json"
 
+# Boolean token value
+cp "$FIXTURE1" "$tmpdir/bool-token.json"
+python3 -c '
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+data["messages"][1]["info"]["tokens"]["input"] = True
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/bool-token.json"
+run_case "boolean token value" 3 "" "$tmpdir/bool-token.json"
+
 # Additional error cases for review fixes
 # Non-UTF-8 file
 printf '\xff\xfe' > "$tmpdir/non-utf8.json"
@@ -230,6 +241,17 @@ json.dump(data, open(sys.argv[1], "w"), indent=2)
 ' "$tmpdir/invalid-session-token.json"
 run_case "invalid session input value" 3 "" "$tmpdir/invalid-session-token.json"
 
+# Invalid session cache values (bool)
+cp "$FIXTURE1" "$tmpdir/invalid-session-cache.json"
+python3 -c '
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+data["info"]["tokens"]["cache"]["read"] = False
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/invalid-session-cache.json"
+run_case "invalid session cache value" 3 "" "$tmpdir/invalid-session-cache.json"
+
 # Missing message token keys
 cp "$FIXTURE1" "$tmpdir/missing-message-keys.json"
 python3 -c '
@@ -242,7 +264,7 @@ json.dump(data, open(sys.argv[1], "w"), indent=2)
 run_case "missing message token key: input" 3 "" "$tmpdir/missing-message-keys.json"
 
 # Usage error cases - exit 2
-run_case "no arguments and no OPENCODE_USAGE_FIXTURE" 2 "" ""
+run_case "no arguments and no OPENCODE_USAGE_FIXTURE" 2 ""  # No arguments
 run_case "missing path" 2 "" "/nonexistent/path"
 
 # Test secrets never appear in output

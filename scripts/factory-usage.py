@@ -83,13 +83,21 @@ def main():
         # Extract session-level tokens for cross-checking
         session_tokens = session_info.get('tokens', {})
         
+        # Check for unknown keys in session tokens
+        valid_session_token_keys = {'input', 'output', 'reasoning', 'cache'}
+        for key in session_tokens:
+            if key not in valid_session_token_keys:
+                print(f'factory-usage: unknown session token key: {key} in {file_path}', file=sys.stderr)
+                return 3
+        
         # Require all keys in session tokens
         required_session_token_keys = ['input', 'output', 'reasoning']
         for key in required_session_token_keys:
             if key not in session_tokens:
                 print(f'factory-usage: missing session token key: {key} in {file_path}', file=sys.stderr)
                 return 3
-            if not isinstance(session_tokens[key], int) or session_tokens[key] < 0:
+            # Explicitly check for boolean values
+            if not isinstance(session_tokens[key], int) or isinstance(session_tokens[key], bool) or session_tokens[key] < 0:
                 print(f'factory-usage: invalid session {key} value in {file_path}', file=sys.stderr)
                 return 3
                 
@@ -99,12 +107,21 @@ def main():
             if not isinstance(cache_obj, dict):
                 print(f'factory-usage: session cache is not an object in {file_path}', file=sys.stderr)
                 return 3
+            
+            # Check for unknown keys in session cache
+            valid_cache_keys = {'read', 'write'}
+            for key in cache_obj:
+                if key not in valid_cache_keys:
+                    print(f'factory-usage: unknown session cache key: {key} in {file_path}', file=sys.stderr)
+                    return 3
+                    
             required_cache_keys = ['read', 'write']
             for key in required_cache_keys:
                 if key not in cache_obj:
                     print(f'factory-usage: missing session cache key: {key} in {file_path}', file=sys.stderr)
                     return 3
-                if not isinstance(cache_obj[key], int) or cache_obj[key] < 0:
+                # Explicitly check for boolean values
+                if not isinstance(cache_obj[key], int) or isinstance(cache_obj[key], bool) or cache_obj[key] < 0:
                     print(f'factory-usage: invalid session cache.{key} value in {file_path}', file=sys.stderr)
                     return 3
         else:
@@ -152,6 +169,13 @@ def main():
                 print(f'factory-usage: message tokens is not an object in {file_path}', file=sys.stderr)
                 return 3
             
+            # Check for unknown keys in message tokens
+            valid_message_token_keys = {'input', 'output', 'reasoning', 'cache', 'total'}
+            for key in tokens:
+                if key not in valid_message_token_keys:
+                    print(f'factory-usage: unknown message token key: {key} in {file_path}', file=sys.stderr)
+                    return 3
+            
             # Require all keys in message tokens
             required_message_token_keys = ['input', 'output', 'reasoning', 'cache']
             for key in required_message_token_keys:
@@ -160,7 +184,8 @@ def main():
                     return 3
                 # Validate values are non-negative integers
                 if key != 'cache':
-                    if not isinstance(tokens[key], int) or tokens[key] < 0:
+                    # Explicitly check for boolean values
+                    if not isinstance(tokens[key], int) or isinstance(tokens[key], bool) or tokens[key] < 0:
                         print(f'factory-usage: invalid message {key} value in {file_path}', file=sys.stderr)
                         return 3
             
@@ -168,12 +193,21 @@ def main():
             if not isinstance(tokens['cache'], dict):
                 print(f'factory-usage: message cache is not an object in {file_path}', file=sys.stderr)
                 return 3
+                
+            # Check for unknown keys in message cache
+            valid_cache_keys = {'read', 'write'}
+            for key in tokens['cache']:
+                if key not in valid_cache_keys:
+                    print(f'factory-usage: unknown message cache key: {key} in {file_path}', file=sys.stderr)
+                    return 3
+                    
             required_cache_keys = ['read', 'write']
             for key in required_cache_keys:
                 if key not in tokens['cache']:
                     print(f'factory-usage: missing message cache key: {key} in {file_path}', file=sys.stderr)
                     return 3
-                if not isinstance(tokens['cache'][key], int) or tokens['cache'][key] < 0:
+                # Explicitly check for boolean values
+                if not isinstance(tokens['cache'][key], int) or isinstance(tokens['cache'][key], bool) or tokens['cache'][key] < 0:
                     print(f'factory-usage: invalid message cache.{key} value in {file_path}', file=sys.stderr)
                     return 3
             
