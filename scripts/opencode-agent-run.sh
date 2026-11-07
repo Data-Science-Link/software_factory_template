@@ -114,6 +114,8 @@ dot-directories such as .factory/, so to open a file under .factory/ use read wi
 filePath (for example .factory/schemas/run-record.schema.json).
 When an approved spec is included, read only the files it names, then start writing your edits
 promptly instead of browsing unrelated directories, so you finish well inside the worker timeout.
+The write tool creates parent directories automatically; never run mkdir, chmod, or git commit —
+the harness sets +x on new scripts, stages, and commits.
 
 ${path_rules}
 

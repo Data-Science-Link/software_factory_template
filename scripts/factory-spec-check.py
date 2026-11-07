@@ -7,13 +7,19 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+ARTIFACT_SCAN = HERE / "opencode-artifact-scan.sh"
+
 SPEC_MARKER = "<!-- factory-spec v1 -->"
+PATH_IN_BACKTICKS = re.compile(r"`([^`]+)`")
 
 BASE_HEADINGS = [
     "Outcome",
@@ -82,12 +88,13 @@ def load_body(path: Path) -> str:
 
 
 def strip_comment_wrapper(text: str) -> str:
+    """Drop any comment-body text before the factory-spec marker (#59)."""
     no_bom = text.lstrip("\ufeff")
-    leading_stripped = no_bom.lstrip()
-    if leading_stripped.startswith(SPEC_MARKER):
-        rest = leading_stripped[len(SPEC_MARKER) :].lstrip("\n")
-        return rest
-    return no_bom
+    idx = no_bom.find(SPEC_MARKER)
+    if idx == -1:
+        return no_bom
+    rest = no_bom[idx + len(SPEC_MARKER) :].lstrip("\n")
+    return rest
 
 
 def split_front_matter(text: str) -> tuple[dict[str, Any] | None, str]:
@@ -231,6 +238,63 @@ def raw_front_matter(text: str) -> str | None:
     return parts[1] if len(parts) >= 3 else None
 
 
+def section(markdown: str, heading: str) -> str:
+    m = re.search(
+        rf"^##[ \t]+{re.escape(heading)}[ \t]*\n(.*?)(?=^##[ \t]|\Z)",
+        markdown,
+        re.M | re.S,
+    )
+    return m.group(1) if m else ""
+
+
+def files_line_intent(line: str) -> str:
+    low = line.lower()
+    if re.search(r"\b(read\b|read-first)", low) and not re.search(r"\b(create|add|new)\b", low):
+        return "read"
+    if re.search(r"\b(create|add|new)\b", low):
+        return "create"
+    if re.search(r"\b(edit|change|modify|update)\b", low):
+        return "modify"
+    return "read"
+
+
+def files_section_paths(files_md: str) -> list[tuple[str, str]]:
+    paths: list[tuple[str, str]] = []
+    for line in files_md.splitlines():
+        found = PATH_IN_BACKTICKS.findall(line)
+        if not found:
+            continue
+        intent = files_line_intent(line)
+        for raw in found:
+            p = raw.strip()
+            if not p or "*" in p or "?" in p or "..." in p:
+                continue
+            paths.append((intent, p))
+    return paths
+
+
+def check_files_paths(body: str, errors: list[str]) -> None:
+    """Every ## Files path must be buildable under scripts/opencode-artifact-scan.sh (#131)."""
+    for intent, path in files_section_paths(section(body, "Files")):
+        r = subprocess.run(
+            ["bash", str(ARTIFACT_SCAN), "--check-spec-path", intent, path],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode == 0:
+            continue
+        msg = (r.stderr or r.stdout or "").strip()
+        if msg:
+            line = msg.splitlines()[-1]
+            if line.startswith("spec Files path policy:"):
+                errors.append(line)
+            else:
+                errors.append(f"spec Files path policy: {path} ({line})")
+        else:
+            errors.append(f"spec Files path policy: blocked path {path!r}")
+
+
 def check_escaped_quotes(raw: str | None, errors: list[str]) -> None:
     """Reject backslash-escaped quotes in front matter (issue #75).
 
@@ -253,6 +317,8 @@ def validate_text(text: str) -> list[str]:
     check_escaped_quotes(raw_front_matter(text), errors)
     check_front_matter(fm, errors)
     check_headings(body, fm if fm and "__yaml_error__" not in fm else None, errors)
+    if not errors:
+        check_files_paths(body, errors)
     return errors
 
 
@@ -270,6 +336,7 @@ def main() -> int:
         for err in errors:
             print(err, file=sys.stderr)
         return 1
+    print(f"OK {args.path}")
     return 0
 
 

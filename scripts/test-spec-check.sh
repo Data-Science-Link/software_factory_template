@@ -33,7 +33,7 @@ for fixture in "$fixtures_dir"/*.md; do
 
   case "$name" in
     pass-*)
-      if [ "$rc" -eq 0 ]; then
+      if [ "$rc" -eq 0 ] && printf '%s\n' "$output" | grep -q "^OK $fixture\$"; then
         echo "PASS  $name"
         passed=$((passed + 1))
       else
