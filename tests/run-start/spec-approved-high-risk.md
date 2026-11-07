@@ -16,7 +16,8 @@ predicted_tokens_out: 50000
 predicted_cost_usd: 0.4700
 budget_cap_usd: 1.00
 price_table_version: 2026-11-02
-approved_by: grok-bot
+approved_by: michael
+over_target_approved_by: michael
 approved_at: 2026-11-02T12:00:00Z
 drafted_by: grok-bot
 ---

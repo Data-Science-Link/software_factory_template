@@ -75,6 +75,7 @@ case "$refused" in
   router_guard) why="A models.yaml guard fired (rule 6: predicted cost over the cap, or rule 8: priority tier). Split the issue." ;;
   model_not_allowed) why="The routed model is not a DeepInfra model listed in .factory/models.yaml." ;;
   cap_unset) why="\`budget.issue_cap_usd\` is not set in .factory/models.yaml." ;;
+  over_target_unapproved) why="This run's predicted cost is over \`budget.issue_target_usd\` and the approved spec lacks \`over_target_approved_by: michael\`. Michael re-approves with scripts/factory-approve-spec.py ... --approved-by michael --over-target-ok (or split the issue)." ;;
   over_cap) why="Prior spend on this issue plus this run's predicted cost is over the per-issue cap. Split the issue or raise the cap in .factory/models.yaml." ;;
   *) refused=invalid; why="Run start refused the run (unrecognized reason code)." ;;
 esac

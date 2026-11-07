@@ -4,9 +4,13 @@
 Script only: the worker writes the spec text; every fact around it (status, model, predicted
 build cost, spec-run cost, reviewer, checks) is filled here, never by the model.
 
-  model                          print the model for spec runs: the models.yaml routing rule
-                                 whose `when` is exactly {work_type: spec} (rule 2)
-  preflight                      print model, predicted spec-run cost and cap; exit 1 when the
+  model [--context F] [--guidance G]
+                                 print the model for spec runs: the models.yaml routing rule whose
+                                 `when` is exactly {work_type: spec, risk: high} (rule 2, V4 Pro)
+                                 when the issue says high risk (or there is no context to tell),
+                                 else exactly {work_type: spec} (rule 9, V4 Flash)
+  preflight [--context F] [--guidance G]
+                                 print model, predicted spec-run cost and cap; exit 1 when the
                                  prediction is above budget.issue_cap_usd (refuse to run)
   build --log L --issue N --out-dir D [--usage U] [--run-url URL]
                                  extract the worker's spec from L, normalize the harness-owned
@@ -14,8 +18,11 @@ build cost, spec-run cost, reviewer, checks) is filled here, never by the model.
                                  write D/spec-comment.md (a DRAFT comment, or a "no draft"
                                  comment listing the failures) and D/spec-meta.txt
   check-comment F --issue N      publish: re-check a comment file before posting it
-  approve TEXT --approved-by WHO [--at ISO]
-                                 print TEXT (a draft spec) as the approved spec comment body
+  approve TEXT --approved-by WHO [--at ISO] [--over-target-ok]
+                                 print TEXT (a draft spec) as the approved spec comment body;
+                                 --over-target-ok (Michael only) sets over_target_approved_by:
+                                 michael, which run start needs when the build prediction is over
+                                 budget.issue_target_usd
 """
 from __future__ import annotations
 
@@ -36,9 +43,13 @@ END = "<!-- end factory-spec -->"
 DRAFT_TAG = "<!-- factory-spec-draft v1 -->"
 FAILED_TAG = "<!-- factory-spec-draft-failed v1 -->"
 SPEC_MODEL_RULE = {"work_type": "spec"}
+SPEC_MODEL_RULE_HIGH = {"work_type": "spec", "risk": "high"}
+# High risk if the issue context or the /oc spec guidance says so ("risk: high", "high risk",
+# "high-risk"). Fails safe: no context at all -> high (V4 Pro).
+HIGH_RISK_RE = re.compile(r"\brisk\b[^\n]{0,20}?\bhigh\b|\bhigh[- ]risk\b", re.I)
 # Spec-run token prior when models.yaml has no token_priors.spec (owner-only file).
 DEFAULT_SPEC_PRIOR = {"tokens_in": 150000, "tokens_cached_fraction": 0.80, "tokens_out": 12000}
-TARGET_USD = 0.10
+DEFAULT_TARGET_USD = 0.15
 MAX_SPEC_BYTES = 40000
 OWNED_FIELDS = ("issue", "status", "approved_by", "approved_at", "drafted_by", "model", "model_reason",
                 "predicted_tokens_in", "predicted_tokens_cached", "predicted_tokens_out",
@@ -62,11 +73,23 @@ def models_data(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def spec_model(data: dict) -> tuple[str, str]:
+def target_usd(data: dict) -> float:
+    return float((data.get("budget") or {}).get("issue_target_usd", DEFAULT_TARGET_USD))
+
+
+def issue_high_risk(context: str | None, guidance: str | None) -> bool:
+    """Spec-run risk class from the owner's issue text and /oc spec guidance (no context -> high)."""
+    if context is None or not context.strip():
+        return True
+    return bool(HIGH_RISK_RE.search(context) or HIGH_RISK_RE.search(guidance or ""))
+
+
+def spec_model(data: dict, high: bool = True) -> tuple[str, str]:
+    want = SPEC_MODEL_RULE_HIGH if high else SPEC_MODEL_RULE
     for rule in data.get("routing_rules") or []:
-        if (rule.get("when") or {}) == SPEC_MODEL_RULE:
+        if (rule.get("when") or {}) == want:
             return str(rule["model"]), f"models.yaml rule {rule.get('rule')}"
-    die("models.yaml has no routing rule with when: {work_type: spec}")
+    die(f"models.yaml has no routing rule with when: {want}")
     raise AssertionError
 
 
@@ -78,8 +101,8 @@ def price(data: dict, model: str) -> dict:
     raise AssertionError
 
 
-def spec_run_prediction(data: dict) -> tuple[str, float, float]:
-    model, _ = spec_model(data)
+def spec_run_prediction(data: dict, high: bool = True) -> tuple[str, float, float]:
+    model, _ = spec_model(data, high)
     p = price(data, model)
     prior = (data.get("token_priors") or {}).get("spec") or DEFAULT_SPEC_PRIOR
     t_in = int(prior["tokens_in"])
@@ -117,6 +140,17 @@ def set_field(fm: list[str], key: str, value: str) -> list[str]:
         out.append(line)
     if not done:
         out.append(f"{key}: {value}")
+    return out
+
+
+def del_field(fm: list[str], key: str) -> list[str]:
+    out, skip = [], False
+    for line in fm:
+        if skip and (line.startswith(" ") or line.startswith("\t")):
+            continue
+        skip = bool(re.match(rf"^{re.escape(key)}:(\s|$)", line))
+        if not skip:
+            out.append(line)
     return out
 
 
@@ -247,12 +281,29 @@ def fence(text: str, limit: int) -> str:
         Path(tmp).unlink(missing_ok=True)
 
 
+def over_target_line(predicted: float, target: float) -> str:
+    """Top-of-spec line for a build prediction over budget.issue_target_usd (empty when not over)."""
+    if predicted <= target:
+        return ""
+    return (f"**Over ${target:.2f} target: needs Michael's approval** (predicted build ${predicted:.4f}). "
+            "Run start refuses `/oc` until the approved spec has `over_target_approved_by: michael` "
+            "(`approve ... --approved-by michael --over-target-ok`).")
+
+
+def run_high_risk(a: argparse.Namespace) -> bool:
+    path = getattr(a, "context", None)
+    context = Path(path).read_text(encoding="utf-8", errors="replace") if path and Path(path).is_file() else None
+    return issue_high_risk(context, getattr(a, "guidance", None))
+
+
 def cmd_build(a: argparse.Namespace) -> int:
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     data = models_data(Path(a.models))
-    run_model, rule = spec_model(data)
-    _, predicted_run, cap = spec_run_prediction(data)
+    high = run_high_risk(a)
+    run_model, rule = spec_model(data, high)
+    _, predicted_run, cap = spec_run_prediction(data, high)
+    target = target_usd(data)
     toks, run_cost = usage(a.usage)
     log_text = Path(a.log).read_text(encoding="utf-8", errors="replace") if Path(a.log).is_file() else ""
     problems: list[str] = []
@@ -270,6 +321,7 @@ def cmd_build(a: argparse.Namespace) -> int:
         for key, val in (("issue", a.issue), ("status", "draft"), ("approved_by", "null"),
                          ("approved_at", "null"), ("drafted_by", "oc-spec-run")):
             fm = set_field(fm, key, val)
+        fm = del_field(fm, "over_target_approved_by")  # only Michael's approval sets it
         fm, pred, err = fill_prediction(head, fm, tail, Path(a.models))
         if pred is None:
             problems.append(f"factory-predict-cost.py refused the spec: {err}")
@@ -279,8 +331,8 @@ def cmd_build(a: argparse.Namespace) -> int:
         problems.append(f"this spec run cost ${run_cost:.4f}, above the ${cap:.2f} cap; not posted as a draft")
     run_line = (f"- Spec run: {run_model} ({rule}, set by the harness), tokens {toks}, cost "
                 + (f"${run_cost:.4f} (OpenCode-reported)" if run_cost is not None else "not measured")
-                + f"; predicted ${predicted_run:.4f}, target under ${TARGET_USD:.2f}, cap ${cap:.2f}"
-                + (" (over target)" if run_cost is not None and run_cost > TARGET_USD else ""))
+                + f"; predicted ${predicted_run:.4f}, target under ${target:.2f}, cap ${cap:.2f}"
+                + (" (over target)" if run_cost is not None and run_cost > target else ""))
     run_url = f"- Run: {a.run_url}" if a.run_url else "- Run: (not given)"
     meta = {"issue": a.issue, "spec_run_cost_usd": "" if run_cost is None else f"{run_cost:.4f}"}
     if problems:
@@ -292,7 +344,8 @@ def cmd_build(a: argparse.Namespace) -> int:
     else:
         risk, cx = get_field(fm, "risk"), get_field(fm, "complexity")
         review, approval = reviewer(risk, cx)
-        body = [DRAFT_TAG,
+        over = over_target_line(pred["predicted_cost_usd"], target)
+        body = [DRAFT_TAG] + ([over, ""] if over else []) + [
                 "**DRAFT spec, not approved.** Written by the `/oc spec` worker (model-written). `/oc` ignores it: "
                 "only an owner comment with `status: approved` counts.",
                 "",
@@ -304,7 +357,11 @@ def cmd_build(a: argparse.Namespace) -> int:
                 f"(cap ${float(pred['budget_cap_usd']):.2f})",
                 "- Checks (scripts): factory-spec-check.py passed; Verification has a bash block and expected output; "
                 "Files and Worker prompt filled; no HTML comments",
-                run_line, run_url, "", spec.rstrip("\n")]
+                run_line, run_url]
+        if risk == "high" and not high:
+            body.append(f"- Note: the issue did not say high risk, so this spec run used {run_model} ({rule}); "
+                        "the spec says risk high. For a V4 Pro draft, re-run `/oc spec risk: high`.")
+        body += ["", spec.rstrip("\n")]
         meta.update(status="draft", risk=risk, complexity=cx, reviewer=review.split(" ")[0],
                     build_predicted_usd=f"{pred['predicted_cost_usd']:.4f}")
         (out / "spec-draft.md").write_text(spec.rstrip("\n") + "\n", encoding="utf-8")
@@ -357,6 +414,15 @@ def cmd_approve(a: argparse.Namespace) -> int:
     fm, pred, err = fill_prediction(head, fm, tail, Path(a.models))
     if pred is None:
         die(f"factory-predict-cost.py refused the spec: {err}")
+    target = target_usd(models_data(Path(a.models)))
+    fm = del_field(fm, "over_target_approved_by")
+    if a.over_target_ok:
+        if who != "michael":
+            die("--over-target-ok is Michael's approval only (approved_by: michael)")
+        if pred["predicted_cost_usd"] > target:
+            fm = set_field(fm, "over_target_approved_by", "michael")
+    elif pred["predicted_cost_usd"] > target:
+        print(f"spec-draft: {over_target_line(pred['predicted_cost_usd'], target)}", file=sys.stderr)
     spec = "\n".join(head + fm + tail)
     problems = checks(spec, get_field(fm, "issue"))
     if problems:
@@ -369,9 +435,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--models", default=str(ROOT / ".factory" / "models.yaml"))
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("model")
-    sub.add_parser("preflight")
+    for name in ("model", "preflight"):
+        sp = sub.add_parser(name)
+        sp.add_argument("--context", help="issue-context.md (the spec run's risk class)")
+        sp.add_argument("--guidance", default="", help="the /oc spec guidance text")
     b = sub.add_parser("build")
+    b.add_argument("--context")
+    b.add_argument("--guidance", default="")
     b.add_argument("--log", required=True)
     b.add_argument("--issue", required=True)
     b.add_argument("--out-dir", required=True)
@@ -385,15 +455,18 @@ def main() -> int:
     p.add_argument("--approved-by", required=True)
     p.add_argument("--at")
     p.add_argument("--issue", default="")
+    p.add_argument("--over-target-ok", action="store_true")
     a = ap.parse_args()
     if getattr(a, "issue", None) not in (None, "") and not str(a.issue).isdigit():
         die("issue must be digits")
     if a.cmd == "model":
-        print(spec_model(models_data(Path(a.models)))[0])
+        print(spec_model(models_data(Path(a.models)), run_high_risk(a))[0])
         return 0
     if a.cmd == "preflight":
-        model, usd, cap = spec_run_prediction(models_data(Path(a.models)))
-        print(f"model={model}\npredicted_spec_run_usd={usd:.4f}\ncap_usd={cap:.2f}")
+        high = run_high_risk(a)
+        model, usd, cap = spec_run_prediction(models_data(Path(a.models)), high)
+        print(f"model={model}\nrisk_class={'high' if high else 'not_high'}\n"
+              f"predicted_spec_run_usd={usd:.4f}\ncap_usd={cap:.2f}")
         if usd > cap:
             die(f"predicted spec-run cost ${usd:.4f} is above the ${cap:.2f} cap; refusing to run")
         return 0

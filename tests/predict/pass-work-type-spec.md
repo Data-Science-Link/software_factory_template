@@ -1,4 +1,4 @@
-# predict-expect: model=deepseek-ai/DeepSeek-V4-Pro-0813 cost=0.1540 rule=2
+# predict-expect: model=deepseek-ai/DeepSeek-V4-Flash-0731 cost=0.0108 rule=9
 ---
 spec_version: 1
 issue: 9004

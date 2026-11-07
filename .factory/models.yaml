@@ -60,7 +60,7 @@ token_priors:
     tokens_cached_fraction: 0.70
     tokens_out: 50000
 
-# Model selection: first match wins (vision §10 rules 5, 4, 7, 2, 1, 3). Order matters.
+# Model selection: first match wins (vision §10 rules 5, 4, 7, 2, 9, 1, 3). Order matters.
 # `when`: every key at the same level must match (AND). Use `any:` for OR among alternatives.
 routing_rules:
   - rule: 5
@@ -87,10 +87,17 @@ routing_rules:
     notes: Grok Bot review on Cursor plan satisfies this for Actions workers.
 
   - rule: 2
-    description: "/oc spec run → V4 Pro (architect); listed before rule 1 so specs always win"
+    description: "/oc spec run on a high-risk issue → V4 Pro (architect); listed before rule 1 so specs always win"
     when:
       work_type: spec
+      risk: high
     model: deepseek-ai/DeepSeek-V4-Pro-0813
+
+  - rule: 9
+    description: "/oc spec run on any other issue → V4 Flash (trial from #64; Michael, 2026-11-07)"
+    when:
+      work_type: spec
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
 
   - rule: 1
     description: "High risk or complex work (build/fix) → Qwen3-Coder, fast non-thinking coder (issue 128)"
@@ -153,6 +160,16 @@ routing_worked_examples:
       selected_via_rule: 2
       check_actions: []
 
+  - name: normal_risk_spec_run_goes_to_flash
+    context:
+      risk: normal
+      complexity: standard
+      work_type: spec
+    expect:
+      selected_model: deepseek-ai/DeepSeek-V4-Flash-0731
+      selected_via_rule: 9
+      check_actions: []
+
   - name: normal_standard_run_goes_to_flash
     context:
       risk: normal
@@ -167,7 +184,7 @@ routing_worked_examples:
 budget:
   deepinfra_monthly_limit_usd: 10
   issue_cap_usd: 1.00
-  issue_target_usd: 0.10
+  issue_target_usd: 0.15
   actions_minutes_month: 2000
   actions_minutes_warn_pct: 80
   actions_minute_shadow_usd: 0

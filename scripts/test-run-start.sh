@@ -58,6 +58,15 @@ RUN_ARGS=(--spec tests/run-start/spec-approved-high-risk.md --issue 91 \
 run_case "case2 high risk -> Qwen3-Coder rule 1" 0 \
   "model=deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo" "routed_rule=1" "predicted_cost_usd=0.1900"
 
+# --- Case 2b/2c: over the $0.15 target (Michael, 2026-11-07) -> refused without his flag, any risk ---
+RUN_ARGS=(--spec tests/run-start/spec-approved-over-target-unflagged.md --issue 91 \
+  --runs-dir "$tmpdir/none2b" --github-output "$tmpdir/case2b-gh.txt")
+run_case "case2b spec predicted 0.19 over the 0.15 target, no over_target_approved_by -> refused" 3
+if grep -qx "refused=over_target_unapproved" "$tmpdir/case2b-gh.txt" && ! grep -q "^model=" "$tmpdir/case2b-gh.txt" \
+  && grep -q "over the \$0.15 target" "$tmpdir/stderr.txt"; then
+  note "case2c over-target refusal writes refused=over_target_unapproved, no model line"
+else fail "case2c over-target refusal output"; cat "$tmpdir/case2b-gh.txt" "$tmpdir/stderr.txt"; fi
+
 # --- Case 3: spec with Qwen model and empty override reason -> re-routed to Flash ---
 RUN_ARGS=(--spec tests/run-start/spec-approved-reroute-qwen.md --issue 91 \
   --runs-dir "$tmpdir/none3")
