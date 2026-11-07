@@ -273,11 +273,16 @@ def files_section_paths(files_md: str) -> list[tuple[str, str]]:
     return paths
 
 
-def check_files_paths(body: str, errors: list[str]) -> None:
-    """Every ## Files path must be buildable under scripts/opencode-artifact-scan.sh (#131)."""
+def check_files_paths(body: str, errors: list[str], base_scripts: Path | None = None) -> None:
+    """Every ## Files path must be buildable under scripts/opencode-artifact-scan.sh (#131).
+
+    base_scripts: file listing the scripts/ paths on the base branch; "existing script" is judged
+    against it, not HEAD, so a build PR that adds its own spec's scripts still passes.
+    """
+    base_args = ["--base-scripts", str(base_scripts)] if base_scripts else []
     for intent, path in files_section_paths(section(body, "Files")):
         r = subprocess.run(
-            ["bash", str(ARTIFACT_SCAN), "--check-spec-path", intent, path],
+            ["bash", str(ARTIFACT_SCAN), *base_args, "--check-spec-path", intent, path],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -311,27 +316,36 @@ def check_escaped_quotes(raw: str | None, errors: list[str]) -> None:
             )
 
 
-def validate_text(text: str) -> list[str]:
+def validate_text(text: str, base_scripts: Path | None = None) -> list[str]:
     errors: list[str] = []
     fm, body = split_front_matter(text)
     check_escaped_quotes(raw_front_matter(text), errors)
     check_front_matter(fm, errors)
     check_headings(body, fm if fm and "__yaml_error__" not in fm else None, errors)
     if not errors:
-        check_files_paths(body, errors)
+        check_files_paths(body, errors, base_scripts)
     return errors
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a factory spec markdown file.")
     parser.add_argument("path", type=Path, help="Spec file or comment body saved as .md")
+    parser.add_argument(
+        "--base-scripts",
+        type=Path,
+        help="File listing scripts/ paths on the base branch (default: tracked on HEAD)",
+    )
     args = parser.parse_args()
 
     if not args.path.is_file():
         print(f"not a file: {args.path}", file=sys.stderr)
         return 1
 
-    errors = validate_text(load_body(args.path))
+    if args.base_scripts is not None and not args.base_scripts.is_file():
+        print(f"not a file: {args.base_scripts}", file=sys.stderr)
+        return 1
+
+    errors = validate_text(load_body(args.path), args.base_scripts)
     if errors:
         for err in errors:
             print(err, file=sys.stderr)

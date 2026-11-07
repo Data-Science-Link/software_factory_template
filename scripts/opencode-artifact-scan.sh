@@ -169,6 +169,13 @@ tracked_path() { # $1 = repo path; true when git tracks it on HEAD
   git -C "$ROOT" ls-files --error-unmatch -- "$1" >/dev/null 2>&1
 }
 
+# A spec's ## Files is judged against the base branch: with --base-scripts, "existing" means on
+# the base list, so a build PR that adds the scripts its own spec names still passes. Without the
+# flag (trusted default-branch checkout, where HEAD is the base) it means tracked on HEAD.
+spec_path_exists() { # $1 = repo path
+  if [ -n "$BASE_SCRIPTS_FILE" ]; then in_base_scripts "$1"; else tracked_path "$1"; fi
+}
+
 # factory-spec-check.py calls this (issue #131): one path from ## Files vs the same rules as patch scan.
 check_spec_path() { # $1 = intent (create|modify|read), $2 = repo path
   local intent="$1" p="$2" cls
@@ -186,7 +193,7 @@ check_spec_path() { # $1 = intent (create|modify|read), $2 = repo path
   case "$intent" in
     create | modify)
       if [ "$cls" = scripts ]; then
-        if [ "$intent" = modify ] || tracked_path "$p"; then
+        if [ "$intent" = modify ] || spec_path_exists "$p"; then
           spec_path_fail "change to an existing script under scripts/ (only new hyphenated scripts are allowed): $p"
         fi
         local rel="${p#"$ADD_ONLY_DIR"}" stem
@@ -381,7 +388,7 @@ if [ "${1:-}" = "--list-forbidden" ]; then
 fi
 
 if [ "${1:-}" = "--check-spec-path" ]; then
-  [ "$#" -eq 3 ] || { echo "usage: opencode-artifact-scan.sh --check-spec-path <create|modify|read> <path>" >&2; exit 2; }
+  [ "$#" -eq 3 ] || { echo "usage: opencode-artifact-scan.sh [--base-scripts FILE] --check-spec-path <create|modify|read> <path>" >&2; exit 2; }
   check_spec_path "$2" "$3"
   exit 0
 fi
