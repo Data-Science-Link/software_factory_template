@@ -298,14 +298,15 @@ def main():
 
     # Load usage if available
     usage_path = artifact_dir / "usage.json"
+    usage_data = None  # Initialize to None for proper handling of missing/invalid usage
     if usage_path.exists():
         try:
             with open(usage_path, "r", encoding="utf-8") as f:
                 usage_data = json.load(f)
             if not isinstance(usage_data, dict):
-                usage_data = {}
+                usage_data = None
         except (OSError, json.JSONDecodeError):
-            usage_data = {}
+            usage_data = None
 
         if usage_data:
             requests = usage_data.get("requests", 0)
@@ -331,14 +332,15 @@ def main():
         except (OSError, json.JSONDecodeError):
             key_spend_data = {}
 
-        # Validate key spend data
+        # Validate key spend data - reject bool values for start_usd/end_usd
         start_usd = key_spend_data.get("start_usd")
         end_usd = key_spend_data.get("end_usd")
         concurrent = key_spend_data.get("concurrent")
 
+        # Check that start_usd and end_usd are numbers (int or float) but not bool
         if (
-            isinstance(start_usd, (int, float))
-            and isinstance(end_usd, (int, float))
+            isinstance(start_usd, (int, float)) and not isinstance(start_usd, bool)
+            and isinstance(end_usd, (int, float)) and not isinstance(end_usd, bool)
             and isinstance(concurrent, bool)
             and start_usd >= 0
             and end_usd >= 0
@@ -488,7 +490,7 @@ def main():
     # Determine trigger URL and spec link
     repo_url = f"https://github.com/{repo}"
     trigger_url = oc_trigger_url or f"{repo_url}/issues/{issue}"
-    spec_link = oc_spec_link or f"{repo_url}/issues/{issue}#issuecomment-unknown"
+    spec_link = oc_spec_link or f"{repo_url}/issues/{issue}"
 
     # Build the record
     record = {

@@ -797,6 +797,127 @@ EOF
 EOF
 }
 
+setup_key_spend_rollover() {
+  local artifact_dir="$1"
+  
+  # Copy spec
+  cp factory/specs/issue-133.md "$artifact_dir/spec.md"
+  
+  # Create usage directory and copy fixtures
+  mkdir -p "$artifact_dir/usage"
+  cp tests/factory-usage/opencode-export-session-*.json "$artifact_dir/usage/"
+  
+  # Create run-start.json
+  cat > "$artifact_dir/run-start.json" <<EOF
+{
+  "run_id": "gha-42400000001-1",
+  "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+  "model_id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+  "predicted_cost_usd": 0.19,
+  "prior_spend_usd": 0.1263,
+  "cap_usd": 1.0
+}
+EOF
+  
+  # Create key-spend.json with end_usd < start_usd
+  cat > "$artifact_dir/key-spend.json" <<EOF
+{
+  "start_usd": 12.0017,
+  "end_usd": 12.0,
+  "concurrent": false
+}
+EOF
+}
+
+check_key_spend_rollover() {
+  local record_path="$1"
+  
+  # Check specific fields
+  local cost_check
+  cost_check=$(jq -r '.cost_check' "$record_path")
+  
+  if [ "$cost_check" != "skipped_unavailable" ]; then
+    echo "Expected cost_check=skipped_unavailable, got $cost_check" >&2
+    return 1
+  fi
+  
+  local key_spend_delta
+  key_spend_delta=$(jq -r '.key_spend_delta_usd' "$record_path")
+  
+  if [ "$key_spend_delta" != "null" ]; then
+    echo "Expected key_spend_delta_usd=null, got $key_spend_delta" >&2
+    return 1
+  fi
+  
+  return 0
+}
+
+setup_unknown_tokens_key() {
+  local artifact_dir="$1"
+  
+  # Copy spec
+  cp factory/specs/issue-133.md "$artifact_dir/spec.md"
+  
+  # Create usage directory and copy fixtures
+  mkdir -p "$artifact_dir/usage"
+  cp tests/factory-usage/opencode-export-session-1.json "$artifact_dir/usage/"
+  
+  # Modify the export to have an unknown tokens key
+  jq '.info.tokens.unknown_key = 100' tests/factory-usage/opencode-export-session-1.json > "$artifact_dir/usage/opencode-export-session-1.json"
+  
+  # Create run-start.json
+  cat > "$artifact_dir/run-start.json" <<EOF
+{
+  "run_id": "gha-42400000001-1",
+  "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+  "model_id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+  "predicted_cost_usd": 0.19,
+  "prior_spend_usd": 0.1263,
+  "cap_usd": 1.0
+}
+EOF
+  
+  # Create key-spend.json
+  cat > "$artifact_dir/key-spend.json" <<EOF
+{
+  "start_usd": 12.0,
+  "end_usd": 12.0017,
+  "concurrent": false
+}
+EOF
+}
+
+check_unknown_tokens_key() {
+  local record_path="$1"
+  
+  # Check specific fields - should be treated as missing usage
+  local cost_method
+  cost_method=$(jq -r '.cost_method' "$record_path")
+  
+  if [ "$cost_method" != "key_spend_delta" ]; then
+    echo "Expected cost_method=key_spend_delta, got $cost_method" >&2
+    return 1
+  fi
+  
+  local actual_cost
+  actual_cost=$(jq -r '.actual_cost_usd' "$record_path")
+  
+  if [ "$actual_cost" != "0.0017" ]; then
+    echo "Expected actual_cost_usd=0.0017, got $actual_cost" >&2
+    return 1
+  fi
+  
+  local tokens_in
+  tokens_in=$(jq -r '.tokens_in' "$record_path")
+  
+  if [ "$tokens_in" != "0" ]; then
+    echo "Expected tokens_in=0, got $tokens_in" >&2
+    return 1
+  fi
+  
+  return 0
+}
+
 # Run test cases
 run_case "Happy path" 0 check_happy_path setup_happy_path
 run_case "Cache-heavy" 0 check_cache_heavy setup_cache_heavy
@@ -804,6 +925,8 @@ run_case "Title-generation gap: match" 0 check_title_generation_gap_match setup_
 run_case "Title-generation gap: mismatch" 0 check_title_generation_gap_mismatch setup_title_generation_gap_mismatch
 run_case "Key spend concurrent" 0 check_key_spend_concurrent setup_key_spend_concurrent
 run_case "Key spend absent" 0 check_key_spend_absent setup_key_spend_absent
+run_case "Key spend end < start" 0 check_key_spend_rollover setup_key_spend_rollover
+run_case "Unknown tokens key" 0 check_unknown_tokens_key setup_unknown_tokens_key
 run_case "Missing usage with key spend" 0 check_missing_usage_with_key_spend setup_missing_usage_with_key_spend
 run_case "Missing usage without key spend" 0 check_missing_usage_without_key_spend setup_missing_usage_without_key_spend
 run_case "No run-start.json" 0 check_no_run_start setup_no_run_start
@@ -951,7 +1074,7 @@ mkdir -p "$artifact_dir"
 setup_secrets_test "$artifact_dir"
 
 secret="sentinel-secret-value-12345"
-FACTORY_TEST_SECRET="$secret" result_secret=$(
+FACTORY_TEST_SECRET="$secret" DEEPINFRA_API_KEY="$secret" result_secret=$(
   FACTORY_RUNS_DIR="$tmpdir/runs" \
   OC_ARTIFACT_DIR="$artifact_dir" \
   GITHUB_REPOSITORY="Data-Science-Link/software_factory_template" \

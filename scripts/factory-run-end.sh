@@ -7,10 +7,25 @@ set -euo pipefail
 : "${OC_HEAD_SHA:=$(git rev-parse HEAD)}"
 
 # Check required environment variables
-: "${OC_ARTIFACT_DIR:?OC_ARTIFACT_DIR is required}"
-: "${OC_STARTED_AT:?OC_STARTED_AT is required}"
-: "${OC_BASE_SHA:?OC_BASE_SHA is required}"
-: "${OC_OUTCOME:?OC_OUTCOME is required}"
+if [ -z "${OC_ARTIFACT_DIR:-}" ]; then
+  echo "factory-run-end: OC_ARTIFACT_DIR is required" >&2
+  exit 2
+fi
+
+if [ -z "${OC_STARTED_AT:-}" ]; then
+  echo "factory-run-end: OC_STARTED_AT is required" >&2
+  exit 2
+fi
+
+if [ -z "${OC_BASE_SHA:-}" ]; then
+  echo "factory-run-end: OC_BASE_SHA is required" >&2
+  exit 2
+fi
+
+if [ -z "${OC_OUTCOME:-}" ]; then
+  echo "factory-run-end: OC_OUTCOME is required" >&2
+  exit 2
+fi
 
 # Validate OC_OUTCOME
 case "$OC_OUTCOME" in
