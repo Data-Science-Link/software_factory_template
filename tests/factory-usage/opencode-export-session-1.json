@@ -1,0 +1,236 @@
+{
+  "info": {
+    "id": "ses_e4920f4efffePdicBe2tqSKag7",
+    "slug": "happy-eagle",
+    "projectID": "global",
+    "directory": "[redacted:session-directory:ses_e4920f4efffePdicBe2tqSKag7]",
+    "path": "",
+    "title": "[redacted:session-title:ses_e4920f4efffePdicBe2tqSKag7]",
+    "agent": "build",
+    "model": {
+      "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+      "providerID": "deepinfra",
+      "variant": "default"
+    },
+    "version": "1.19.5",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0.00058,
+    "tokens": {
+      "input": 700,
+      "output": 90,
+      "reasoning": 0,
+      "cache": {
+        "read": 2800,
+        "write": 0
+      }
+    },
+    "permission": [
+      {
+        "permission": "question",
+        "pattern": "*",
+        "action": "deny"
+      },
+      {
+        "permission": "plan_enter",
+        "pattern": "*",
+        "action": "deny"
+      },
+      {
+        "permission": "plan_exit",
+        "pattern": "*",
+        "action": "deny"
+      }
+    ],
+    "time": {
+      "created": 1794069433104,
+      "updated": 1794069434259
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1794069433141
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "deepinfra",
+          "modelID": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"
+        },
+        "summary": {
+          "diffs": []
+        },
+        "id": "msg_1b6df0b35001m5GA1QmFqk7h2Q",
+        "sessionID": "ses_e4920f4efffePdicBe2tqSKag7"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "[redacted:text:prt_1b6df0b4c0012iyNew7SN4dOv6]",
+          "id": "prt_1b6df0b4c0012iyNew7SN4dOv6",
+          "sessionID": "ses_e4920f4efffePdicBe2tqSKag7",
+          "messageID": "msg_1b6df0b35001m5GA1QmFqk7h2Q"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_1b6df0b35001m5GA1QmFqk7h2Q",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "[redacted:cwd:msg_1b6df0d18001Ljy0cEvykTv3qe]",
+          "root": "[redacted:root:msg_1b6df0d18001Ljy0cEvykTv3qe]"
+        },
+        "cost": 0.00025,
+        "tokens": {
+          "total": 1540,
+          "input": 300,
+          "output": 40,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 1200
+          }
+        },
+        "modelID": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+        "providerID": "deepinfra",
+        "time": {
+          "created": 1794069433624,
+          "completed": 1794069434203
+        },
+        "finish": "tool-calls",
+        "id": "msg_1b6df0d18001Ljy0cEvykTv3qe",
+        "sessionID": "ses_e4920f4efffePdicBe2tqSKag7"
+      },
+      "parts": [
+        {
+          "snapshot": "[redacted:snapshot:prt_1b6df0f2e001t55z7MEzXV3MIM]",
+          "type": "step-start",
+          "id": "prt_1b6df0f2e001t55z7MEzXV3MIM",
+          "sessionID": "ses_e4920f4efffePdicBe2tqSKag7",
+          "messageID": "msg_1b6df0d18001Ljy0cEvykTv3qe"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_mock1",
+          "state": {
+            "status": "completed",
+            "input": {
+              "redacted": "tool-input:prt_1b6df0f30001X0NWjWLilHbMt3"
+            },
+            "output": "[redacted:tool-output:prt_1b6df0f30001X0NWjWLilHbMt3]",
+            "metadata": {
+              "redacted": "tool-state-metadata:prt_1b6df0f30001X0NWjWLilHbMt3"
+            },
+            "title": "[redacted:tool-title:prt_1b6df0f30001X0NWjWLilHbMt3]",
+            "time": {
+              "start": 1794069434167,
+              "end": 1794069434177
+            }
+          },
+          "id": "prt_1b6df0f30001X0NWjWLilHbMt3",
+          "sessionID": "ses_e4920f4efffePdicBe2tqSKag7",
+          "messageID": "msg_1b6df0d18001Ljy0cEvykTv3qe"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "[redacted:snapshot:prt_1b6df0f50001NrbmZPxzpbkBwd]",
+          "type": "step-finish",
+          "tokens": {
+            "total": 1540,
+            "input": 300,
+            "output": 40,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 1200
+            }
+          },
+          "cost": 0.00025,
+          "id": "prt_1b6df0f50001NrbmZPxzpbkBwd",
+          "sessionID": "ses_e4920f4efffePdicBe2tqSKag7",
+          "messageID": "msg_1b6df0d18001Ljy0cEvykTv3qe"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_1b6df0b35001m5GA1QmFqk7h2Q",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "[redacted:cwd:msg_1b6df0f5d0015aB1HPGkNwRdws]",
+          "root": "[redacted:root:msg_1b6df0f5d0015aB1HPGkNwRdws]"
+        },
+        "cost": 0.00033,
+        "tokens": {
+          "total": 2050,
+          "input": 400,
+          "output": 50,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 1600
+          }
+        },
+        "modelID": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+        "providerID": "deepinfra",
+        "time": {
+          "created": 1794069434205,
+          "completed": 1794069434255
+        },
+        "finish": "stop",
+        "id": "msg_1b6df0f5d0015aB1HPGkNwRdws",
+        "sessionID": "ses_e4920f4efffePdicBe2tqSKag7"
+      },
+      "parts": [
+        {
+          "snapshot": "[redacted:snapshot:prt_1b6df0f75001FGewjVij3qkdQa]",
+          "type": "step-start",
+          "id": "prt_1b6df0f75001FGewjVij3qkdQa",
+          "sessionID": "ses_e4920f4efffePdicBe2tqSKag7",
+          "messageID": "msg_1b6df0f5d0015aB1HPGkNwRdws"
+        },
+        {
+          "type": "text",
+          "text": "[redacted:text:prt_1b6df0f76001SSuFHnbMN6or4L]",
+          "time": {
+            "start": 1794069434230,
+            "end": 1794069434232
+          },
+          "id": "prt_1b6df0f76001SSuFHnbMN6or4L",
+          "sessionID": "ses_e4920f4efffePdicBe2tqSKag7",
+          "messageID": "msg_1b6df0f5d0015aB1HPGkNwRdws"
+        },
+        {
+          "reason": "stop",
+          "snapshot": "[redacted:snapshot:prt_1b6df0f860018u0wWkr3DEGTGQ]",
+          "type": "step-finish",
+          "tokens": {
+            "total": 2050,
+            "input": 400,
+            "output": 50,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 1600
+            }
+          },
+          "cost": 0.00033,
+          "id": "prt_1b6df0f860018u0wWkr3DEGTGQ",
+          "sessionID": "ses_e4920f4efffePdicBe2tqSKag7",
+          "messageID": "msg_1b6df0f5d0015aB1HPGkNwRdws"
+        }
+      ]
+    }
+  ]
+}
