@@ -48,7 +48,15 @@ for fixture in "$fixtures_dir"/*.md; do
   name="$(basename "$fixture")"
 
   set +e
-  output="$(python3 scripts/factory-spec-check.py --base-scripts "$base_scripts" "$fixture" 2>&1)"
+  # Regression fixtures are checked as of their approval: scripts the spec created (since merged)
+  # are named in a "# spec-check-new-scripts: a b" first line and removed from this fixture's base.
+  fixture_base="$base_scripts"
+  new_scripts="$(head -n 1 "$fixture" | sed -n 's/^# spec-check-new-scripts: //p')"
+  if [ -n "$new_scripts" ]; then
+    fixture_base="$tmp/base-$name.txt"
+    printf '%s\n' $new_scripts | grep -vxF -f - "$base_scripts" >"$fixture_base" || true
+  fi
+  output="$(python3 scripts/factory-spec-check.py --base-scripts "$fixture_base" "$fixture" 2>&1)"
   rc=$?
   set -e
 
