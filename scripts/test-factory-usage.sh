@@ -78,7 +78,7 @@ json.dump(data, open(sys.argv[1], "w"), indent=2)
 run_case "one message cost removed -> opencode_cost_usd is null" 0 '{"models": ["deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"], "opencode_cost_usd": null, "requests": 4, "sessions": 2, "source": "opencode-export", "tokens_cached": 8000, "tokens_in": 10000, "tokens_out": 240, "tokens_reasoning": 0}' "$tmpdir_copy/session1.json" "$tmpdir_copy/session2.json"
 
 # Test cost validation function from factory-validate-run.py using importlib
-python3 -c '
+if python3 -c '
 import sys
 import importlib.util
 spec = importlib.util.spec_from_file_location("factory_validate_run", "scripts/factory-validate-run.py")
@@ -88,14 +88,14 @@ spec.loader.exec_module(module)
 result = module.cost_from_usage(10000, 8000, 240, 0.30, 0.10, 1.00)
 expected = 0.00164
 tolerance = 1e-9
-if abs(result - expected) < tolerance:
-    print("note  cost_from_usage validation")
-else:
-    print("fail  cost_from_usage validation (expected:", expected, "got:", result, ")")
+if abs(result - expected) >= tolerance:
+    print("cost_from_usage: expected", expected, "got", result, file=sys.stderr)
     sys.exit(1)
-' || fail "cost_from_usage validation"
-
-# Removed unconditional note call
+'; then
+  note "cost_from_usage validation"
+else
+  fail "cost_from_usage validation"
+fi
 
 # Error cases - exit 3 with empty stdout
 # Duplicate file
@@ -262,7 +262,16 @@ json.dump(data, open(sys.argv[1], "w"), indent=2)
 run_case "missing message token key: input" 3 "" "$tmpdir/missing-message-keys.json"
 
 # Usage error cases - exit 2
-run_case "no arguments and no OPENCODE_USAGE_FIXTURE" 2 "" env -u OPENCODE_USAGE_FIXTURE python3 scripts/factory-usage.py
+# No arguments: a direct call (run_case always passes args), with OPENCODE_USAGE_FIXTURE unset
+set +e
+noargs_out="$(env -u OPENCODE_USAGE_FIXTURE python3 scripts/factory-usage.py 2>"$tmpdir/stderr.txt")"
+noargs_rc=$?
+set -e
+if [ "$noargs_rc" -eq 2 ] && [ -z "$noargs_out" ]; then
+  note "no arguments and no OPENCODE_USAGE_FIXTURE"
+else
+  fail "no arguments and no OPENCODE_USAGE_FIXTURE (expected exit 2 and empty stdout, got $noargs_rc)"
+fi
 run_case "missing path" 2 "" "/nonexistent/path"
 
 # Test secrets never appear in output
