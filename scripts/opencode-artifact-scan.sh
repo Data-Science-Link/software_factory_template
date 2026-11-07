@@ -2,8 +2,15 @@
 # Fail closed if artifacts or logs contain secrets or forbidden paths. Never prints matched secrets.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
 fail() {
   echo "artifact-scan: FAIL — $1" >&2
+  exit 1
+}
+
+spec_path_fail() {
+  echo "spec Files path policy: $1" >&2
   exit 1
 }
 
@@ -156,6 +163,47 @@ check_new_script_name() { # $1 = path under scripts/
   if [[ "$stem" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
     fail "new script needs a hyphenated name (module-style names can shadow imports): $1"
   fi
+}
+
+tracked_path() { # $1 = repo path; true when git tracks it on HEAD
+  git -C "$ROOT" ls-files --error-unmatch -- "$1" >/dev/null 2>&1
+}
+
+# factory-spec-check.py calls this (issue #131): one path from ## Files vs the same rules as patch scan.
+check_spec_path() { # $1 = intent (create|modify|read), $2 = repo path
+  local intent="$1" p="$2" cls
+  case "$p" in
+    '' | /* | ../* | */../* | */.. | .. | ./* | */./* | */. | . | *//*) spec_path_fail "invalid path: $p" ;;
+  esac
+  case "$p" in *[[:cntrl:]\\]*) spec_path_fail "invalid path: $p" ;; esac
+  case "$intent" in
+    read) return 0 ;;
+  esac
+  cls="$(path_class "$p")"
+  if [ "$cls" = forbidden ]; then
+    spec_path_fail "forbidden path (owner-only or blocked by the harness): $p"
+  fi
+  case "$intent" in
+    create | modify)
+      if [ "$cls" = scripts ]; then
+        if [ "$intent" = modify ] || tracked_path "$p"; then
+          spec_path_fail "change to an existing script under scripts/ (only new hyphenated scripts are allowed): $p"
+        fi
+        local rel="${p#"$ADD_ONLY_DIR"}" stem
+        case "$rel" in */*) spec_path_fail "new script must sit directly under scripts/: $p" ;; esac
+        stem="${rel%%.*}"
+        if [[ "$stem" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+          spec_path_fail "new script needs a hyphenated name: $p"
+        fi
+      fi
+      if [ "$cls" = gitignore ] && [ "$intent" = modify ]; then
+        spec_path_fail "change to .gitignore (only added lines are allowed): $p"
+      fi
+      ;;
+    *)
+      spec_path_fail "unknown intent (expected create, modify, or read): $intent"
+      ;;
+  esac
 }
 
 # Per-file state for the patch parser.
@@ -329,6 +377,12 @@ fi
 
 if [ "${1:-}" = "--list-forbidden" ]; then
   printf '%s\n' "${FORBIDDEN_PATTERNS[@]}"
+  exit 0
+fi
+
+if [ "${1:-}" = "--check-spec-path" ]; then
+  [ "$#" -eq 3 ] || { echo "usage: opencode-artifact-scan.sh --check-spec-path <create|modify|read> <path>" >&2; exit 2; }
+  check_spec_path "$2" "$3"
   exit 0
 fi
 

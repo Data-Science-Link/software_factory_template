@@ -98,9 +98,10 @@ else bad "prompt framing"; fi
 if grep -qF 'Never call bash for' <<<"$prompt" && grep -qF 'ls, find, cat or reading files; use read, glob and grep instead.' <<<"$prompt" \
   && grep -qF 'glob and grep skip hidden' <<<"$prompt" && grep -qF 'dot-directories such as .factory/' <<<"$prompt" \
   && grep -qF 'filePath (for example .factory/schemas/run-record.schema.json)' <<<"$prompt" \
-  && grep -qF 'read only the files it names, then start writing your edits' <<<"$prompt"; then
-  ok "prompt warns: no bash ls/find, read exact .factory/ paths, edit promptly (#128)"
-else bad "prompt tool-use guidance (#128)"; fi
+  && grep -qF 'read only the files it names, then start writing your edits' <<<"$prompt" \
+  && grep -qF 'never run mkdir, chmod, or git commit' <<<"$prompt"; then
+  ok "prompt warns: no bash ls/find, read exact .factory/ paths, edit promptly (#128,#131)"
+else bad "prompt tool-use guidance (#128,#131)"; fi
 
 # Publish: PR body names the spec comment (runs until the GH_TOKEN check; never pushes).
 publish_body() { # $1 = context-meta.txt content ("" = no file); body left in $work/pub$2/art/pr-body.md
