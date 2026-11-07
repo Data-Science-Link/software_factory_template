@@ -53,9 +53,8 @@ run_case "both sessions (order 1-2)" 0 "$EXPECTED_BOTH" "$FIXTURE1" "$FIXTURE2"
 run_case "both sessions (order 2-1)" 0 "$EXPECTED_BOTH" "$FIXTURE2" "$FIXTURE1"
 run_case "session 1 alone" 0 "$EXPECTED_SESSION1" "$FIXTURE1"
 
-# Test env override
-run_case "OPENCODE_USAGE_FIXTURE matches positional args" 0 "$EXPECTED_BOTH" \
-  env OPENCODE_USAGE_FIXTURE="$FIXTURE1:$FIXTURE2"
+# Test env override - set OPENCODE_USAGE_FIXTURE in environment properly
+OPENCODE_USAGE_FIXTURE="$FIXTURE1:$FIXTURE2" run_case "OPENCODE_USAGE_FIXTURE matches positional args" 0 "$EXPECTED_BOTH"
 
 # Test cost calculation
 tmpdir_copy="$tmpdir/copy"
@@ -80,18 +79,22 @@ result_null_cost="$("${PY[@]}" "$tmpdir_copy/session1.json" "$tmpdir_copy/sessio
 echo "$result_null_cost" | grep -q '"opencode_cost_usd": null' || fail "cost nullification"
 note "one message cost removed -> opencode_cost_usd is null"
 
-# Test cost validation function from factory-validate-run.py
+# Test cost validation function from factory-validate-run.py using importlib
 python3 -c '
 import sys
-sys.path.append("scripts")
-from factory_validate_run import cost_from_usage
-result = cost_from_usage(10000, 8000, 240, 0.30, 0.10, 1.00)
+import importlib.util
+spec = importlib.util.spec_from_file_location("factory_validate_run", "scripts/factory-validate-run.py")
+module = importlib.util.module_from_spec(spec)
+sys.modules["factory_validate_run"] = module
+spec.loader.exec_module(module)
+result = module.cost_from_usage(10000, 8000, 240, 0.30, 0.10, 1.00)
 expected = 0.00164
 tolerance = 1e-9
 if abs(result - expected) < tolerance:
     print("PASS  cost_from_usage validation")
 else:
     print("FAIL  cost_from_usage validation (expected:", expected, "got:", result, ")")
+    sys.exit(1)
 ' || fail "cost_from_usage validation"
 
 note "cost_from_usage validation"
@@ -173,6 +176,70 @@ data["messages"][1]["info"]["tokens"]["input"] = -1
 json.dump(data, open(sys.argv[1], "w"), indent=2)
 ' "$tmpdir/negative-token.json"
 run_case "negative token value" 3 "" "$tmpdir/negative-token.json"
+
+# Additional error cases for review fixes
+# Non-UTF-8 file
+printf '\xff\xfe' > "$tmpdir/non-utf8.json"
+run_case "non-UTF-8 file" 3 "" "$tmpdir/non-utf8.json"
+
+# Top-level JSON is not an object
+printf '["not", "an", "object"]' > "$tmpdir/not-object.json"
+run_case "top-level JSON is not an object" 3 "" "$tmpdir/not-object.json"
+
+# Messages is not a list
+cp "$FIXTURE1" "$tmpdir/messages-not-list.json"
+python3 -c '
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+data["messages"] = "not a list"
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/messages-not-list.json"
+run_case "messages is not a list" 3 "" "$tmpdir/messages-not-list.json"
+
+# Missing session token keys
+cp "$FIXTURE1" "$tmpdir/missing-session-keys.json"
+python3 -c '
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+del data["info"]["tokens"]["input"]
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/missing-session-keys.json"
+run_case "missing session token key: input" 3 "" "$tmpdir/missing-session-keys.json"
+
+# Missing session cache keys
+cp "$FIXTURE1" "$tmpdir/missing-session-cache-keys.json"
+python3 -c '
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+del data["info"]["tokens"]["cache"]["read"]
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/missing-session-cache-keys.json"
+run_case "missing session cache key: read" 3 "" "$tmpdir/missing-session-cache-keys.json"
+
+# Invalid session token values (bool)
+cp "$FIXTURE1" "$tmpdir/invalid-session-token.json"
+python3 -c '
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+data["info"]["tokens"]["input"] = True
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/invalid-session-token.json"
+run_case "invalid session input value" 3 "" "$tmpdir/invalid-session-token.json"
+
+# Missing message token keys
+cp "$FIXTURE1" "$tmpdir/missing-message-keys.json"
+python3 -c '
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+del data["messages"][1]["info"]["tokens"]["input"]
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/missing-message-keys.json"
+run_case "missing message token key: input" 3 "" "$tmpdir/missing-message-keys.json"
 
 # Usage error cases - exit 2
 run_case "no arguments and no OPENCODE_USAGE_FIXTURE" 2 "" ""

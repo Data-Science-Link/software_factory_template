@@ -42,16 +42,30 @@ def main():
             print(f'factory-usage: file not found: {file_path}', file=sys.stderr)
             return 2
             
+        # Check if file is valid UTF-8
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+        except UnicodeDecodeError:
+            print(f'factory-usage: non-UTF-8 file: {file_path}', file=sys.stderr)
+            return 3
         except (json.JSONDecodeError, OSError) as e:
             print(f'factory-usage: invalid JSON in {file_path}', file=sys.stderr)
+            return 3
+        
+        # Validate top-level JSON is an object
+        if not isinstance(data, dict):
+            print(f'factory-usage: top-level JSON is not an object in {file_path}', file=sys.stderr)
             return 3
         
         # Validate basic structure
         if 'info' not in data or 'messages' not in data:
             print(f'factory-usage: missing info or messages in {file_path}', file=sys.stderr)
+            return 3
+            
+        # Validate messages is a list
+        if not isinstance(data['messages'], list):
+            print(f'factory-usage: messages is not a list in {file_path}', file=sys.stderr)
             return 3
             
         session_info = data['info']
@@ -68,11 +82,40 @@ def main():
         
         # Extract session-level tokens for cross-checking
         session_tokens = session_info.get('tokens', {})
-        expected_input = session_tokens.get('input', 0)
-        expected_cache_read = session_tokens.get('cache', {}).get('read', 0)
-        expected_cache_write = session_tokens.get('cache', {}).get('write', 0)
-        expected_output = session_tokens.get('output', 0)
-        expected_reasoning = session_tokens.get('reasoning', 0)
+        
+        # Require all keys in session tokens
+        required_session_token_keys = ['input', 'output', 'reasoning']
+        for key in required_session_token_keys:
+            if key not in session_tokens:
+                print(f'factory-usage: missing session token key: {key} in {file_path}', file=sys.stderr)
+                return 3
+            if not isinstance(session_tokens[key], int) or session_tokens[key] < 0:
+                print(f'factory-usage: invalid session {key} value in {file_path}', file=sys.stderr)
+                return 3
+                
+        # Check cache keys if present
+        if 'cache' in session_tokens:
+            cache_obj = session_tokens['cache']
+            if not isinstance(cache_obj, dict):
+                print(f'factory-usage: session cache is not an object in {file_path}', file=sys.stderr)
+                return 3
+            required_cache_keys = ['read', 'write']
+            for key in required_cache_keys:
+                if key not in cache_obj:
+                    print(f'factory-usage: missing session cache key: {key} in {file_path}', file=sys.stderr)
+                    return 3
+                if not isinstance(cache_obj[key], int) or cache_obj[key] < 0:
+                    print(f'factory-usage: invalid session cache.{key} value in {file_path}', file=sys.stderr)
+                    return 3
+        else:
+            print(f'factory-usage: missing session cache object in {file_path}', file=sys.stderr)
+            return 3
+        
+        expected_input = session_tokens['input']
+        expected_cache_read = session_tokens['cache']['read']
+        expected_cache_write = session_tokens['cache']['write']
+        expected_output = session_tokens['output']
+        expected_reasoning = session_tokens['reasoning']
         
         # Count assistant messages and their tokens
         message_totals = {
@@ -86,10 +129,16 @@ def main():
         }
         
         for message in data['messages']:
+            if not isinstance(message, dict):
+                continue
+                
             if 'info' not in message:
                 continue
                 
             info = message['info']
+            if not isinstance(info, dict):
+                continue
+                
             if info.get('role') != 'assistant':
                 continue
                 
@@ -99,42 +148,43 @@ def main():
                 return 3
                 
             tokens = info['tokens']
-            
-            # Validate token keys
-            valid_keys = {'input', 'output', 'reasoning', 'cache', 'total'}
-            cache_keys = {'read', 'write'}
-            
-            # Check for unknown keys
-            unknown_keys = set(tokens.keys()) - valid_keys
-            if unknown_keys:
-                print(f'factory-usage: unknown token keys {sorted(unknown_keys)} in {file_path}', file=sys.stderr)
+            if not isinstance(tokens, dict):
+                print(f'factory-usage: message tokens is not an object in {file_path}', file=sys.stderr)
                 return 3
-                
-            # Check cache keys if present
-            if 'cache' in tokens:
-                unknown_cache_keys = set(tokens['cache'].keys()) - cache_keys
-                if unknown_cache_keys:
-                    print(f'factory-usage: unknown cache keys {unknown_cache_keys} in {file_path}', file=sys.stderr)
+            
+            # Require all keys in message tokens
+            required_message_token_keys = ['input', 'output', 'reasoning', 'cache']
+            for key in required_message_token_keys:
+                if key not in tokens:
+                    print(f'factory-usage: missing message token key: {key} in {file_path}', file=sys.stderr)
+                    return 3
+                # Validate values are non-negative integers
+                if key != 'cache':
+                    if not isinstance(tokens[key], int) or tokens[key] < 0:
+                        print(f'factory-usage: invalid message {key} value in {file_path}', file=sys.stderr)
+                        return 3
+            
+            # Check cache keys
+            if not isinstance(tokens['cache'], dict):
+                print(f'factory-usage: message cache is not an object in {file_path}', file=sys.stderr)
+                return 3
+            required_cache_keys = ['read', 'write']
+            for key in required_cache_keys:
+                if key not in tokens['cache']:
+                    print(f'factory-usage: missing message cache key: {key} in {file_path}', file=sys.stderr)
+                    return 3
+                if not isinstance(tokens['cache'][key], int) or tokens['cache'][key] < 0:
+                    print(f'factory-usage: invalid message cache.{key} value in {file_path}', file=sys.stderr)
                     return 3
             
-            # Validate token values are non-negative integers
-            for key in ['input', 'output', 'reasoning']:
-                if key in tokens and (not isinstance(tokens[key], int) or tokens[key] < 0):
-                    print(f'factory-usage: invalid {key} value in {file_path}', file=sys.stderr)
-                    return 3
-                    
-            if 'cache' in tokens:
-                for cache_key in ['read', 'write']:
-                    if cache_key in tokens['cache'] and (not isinstance(tokens['cache'][cache_key], int) or tokens['cache'][cache_key] < 0):
-                        print(f'factory-usage: invalid cache.{cache_key} value in {file_path}', file=sys.stderr)
-                        return 3
+
                         
             # Accumulate message tokens
-            message_totals['input'] += tokens.get('input', 0)
-            message_totals['output'] += tokens.get('output', 0)
-            message_totals['reasoning'] += tokens.get('reasoning', 0)
-            message_totals['cache_read'] += tokens.get('cache', {}).get('read', 0)
-            message_totals['cache_write'] += tokens.get('cache', {}).get('write', 0)
+            message_totals['input'] += tokens['input']
+            message_totals['output'] += tokens['output']
+            message_totals['reasoning'] += tokens['reasoning']
+            message_totals['cache_read'] += tokens['cache']['read']
+            message_totals['cache_write'] += tokens['cache']['write']
             message_totals['count'] += 1
             
             # Handle cost
