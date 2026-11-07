@@ -3,7 +3,8 @@
 
 Run by Grok Bot (or Michael) from the owner's gh login, never by a workflow:
 
-  factory-approve-spec.py <issue> <draft comment URL or id> --approved-by WHO [--from-file F] [--dry-run]
+  factory-approve-spec.py <issue> <draft comment URL or id> --approved-by WHO [--from-file F]
+                          [--over-target-ok] [--dry-run]
 
 Approval keeps the existing convention: /oc uses the latest OWNER comment with the spec marker and
 `status: approved`. The draft (posted by github-actions, `status: draft`) never counts. This script
@@ -11,7 +12,8 @@ takes the draft's spec (or an edited copy with --from-file), sets status approve
 and approved_at, re-runs the spec checks and the cost prediction, and posts it as a new comment.
 WHO is `grok-bot` (trivial or normal risk: Grok Bot reviews and approves) or `michael` (required
 for high risk), per factory/specs/README.md (Michael's decision, 2026-11-02). Use `michael` only
-after Michael has approved that spec.
+after Michael has approved that spec. A build prediction over budget.issue_target_usd also needs
+--over-target-ok (Michael only; sets over_target_approved_by: michael), or run start refuses /oc.
 """
 from __future__ import annotations
 
@@ -40,6 +42,8 @@ def main() -> int:
     ap.add_argument("--approved-by", required=True)
     ap.add_argument("--from-file", help="edited spec to approve instead of the draft text")
     ap.add_argument("--repo", default="")
+    ap.add_argument("--over-target-ok", action="store_true",
+                    help="Michael approved a build prediction over budget.issue_target_usd")
     ap.add_argument("--dry-run", action="store_true", help="print the approved comment; post nothing")
     a = ap.parse_args()
     if not a.issue.isdigit():
@@ -66,11 +70,14 @@ def main() -> int:
         f.write(text)
         src = f.name
     r = subprocess.run([sys.executable, str(HERE / "opencode-spec-draft.py"), "approve", src,
-                        "--approved-by", a.approved_by, "--issue", a.issue], capture_output=True, text=True)
+                        "--approved-by", a.approved_by, "--issue", a.issue,
+                        *(["--over-target-ok"] if a.over_target_ok else [])], capture_output=True, text=True)
     Path(src).unlink(missing_ok=True)
     if r.returncode != 0:
         die((r.stderr or "approve failed").strip())
     approved = r.stdout
+    if r.stderr.strip():
+        print(r.stderr.strip(), file=sys.stderr)  # e.g. the over-target warning
     if a.dry_run:
         sys.stdout.write(approved)
         return 0

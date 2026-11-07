@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Job A of /oc spec (#78): a READ-ONLY OpenCode worker drafts a spec for the issue; scripts check
-# it and write the draft comment. No GitHub token. The model is set here from models.yaml (rule 2,
-# work_type spec), never by the worker or the comment. Nothing from the worktree is published.
+# it and write the draft comment. No GitHub token. The model is set here from models.yaml (rule 2
+# for high-risk issues, rule 9 otherwise), never by the worker or the comment. Nothing from the worktree is published.
 # --print-prompt: build and print the prompt, then exit (tests; no key, no opencode).
 set -euo pipefail
 
@@ -27,12 +27,13 @@ guidance="$(head -c 4000 <<<"$guidance")"
 unset GITHUB_TOKEN GH_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL || true
 if [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then echo "spec-run: a GitHub token is still set; refusing" >&2; exit 1; fi
 
-# Model and cost guard come from the owner-only models.yaml, before any spend.
-preflight="$(python3 scripts/opencode-spec-draft.py preflight)" || exit 1
+# Model and cost guard come from the owner-only models.yaml, before any spend. Rule 2 (V4 Pro) when
+# the issue context or the guidance says high risk (or there is no context), else rule 9 (V4 Flash).
+context_file="$OC_ARTIFACT_DIR/issue-context.md"
+preflight="$(python3 scripts/opencode-spec-draft.py preflight --context "$context_file" --guidance="$guidance")" || exit 1
 model="$(sed -n 's/^model=//p' <<<"$preflight")"
 [[ "$model" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "spec-run: bad model id from models.yaml" >&2; exit 1; }
 
-context_file="$OC_ARTIFACT_DIR/issue-context.md"
 if [ -f "$context_file" ]; then context="$(cat "$context_file")"
 else context="(issue context step did not run; only the /oc spec guidance is available)"; fi
 template="$(cat .factory/templates/spec.md)"
@@ -127,7 +128,8 @@ fi
 bash scripts/opencode-capture-usage.sh "$OC_ARTIFACT_DIR/usage-metrics.md" >/dev/null || true
 run_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-0}"
 python3 scripts/opencode-spec-draft.py build --log "$log" --issue "$OC_ISSUE_NUMBER" --out-dir "$OC_ARTIFACT_DIR" \
-  --usage "$OC_ARTIFACT_DIR/usage-metrics.md" --run-url "$run_url"
+  --usage "$OC_ARTIFACT_DIR/usage-metrics.md" --run-url "$run_url" \
+  --context "$context_file" --guidance="$guidance"
 printf 'worktree=%s\nopencode_exit=%s\n' "$tree_note" "$rc" >>"$OC_ARTIFACT_DIR/spec-meta.txt"
 
 # Fail closed before upload if anything secret-looking is in what publish will read.

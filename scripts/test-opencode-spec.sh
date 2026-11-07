@@ -25,8 +25,17 @@ draft() { "$py" scripts/opencode-spec-draft.py "$@"; }
 
 # --- model and cost guard from models.yaml
 if [ "$(draft model)" = deepseek-ai/DeepSeek-V4-Pro-0813 ] && draft preflight | grep -q '^predicted_spec_run_usd=0\.0[0-9]*$'; then
-  ok "model: V4 Pro from models.yaml rule 2; predicted spec run under \$0.10"
+  ok "model: no issue context -> V4 Pro from models.yaml rule 2 (fail safe); predicted spec run under \$0.10"
 else bad "model / preflight"; fi
+printf '# Issue #64\n\ndbt hygiene: disable anonymous stats.\n' >"$work/ctx-normal.md"
+printf '# Issue #134\n\n## Budget\n- Risk: **high**, complexity: **standard**\n' >"$work/ctx-high.md"
+pf_normal="$(draft preflight --context "$work/ctx-normal.md" --guidance="keep it small")"
+if grep -qx 'model=deepseek-ai/DeepSeek-V4-Flash-0731' <<<"$pf_normal" && grep -qx 'risk_class=not_high' <<<"$pf_normal" \
+  && [ "$(draft model --context "$work/ctx-high.md")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
+  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="risk: high")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
+  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="-x high-risk change")" = deepseek-ai/DeepSeek-V4-Pro-0813 ]; then
+  ok "model: issue without high risk -> V4 Flash rule 9; 'Risk: high' in the issue or guidance -> V4 Pro rule 2"
+else bad "model: risk-based spec routing"; echo "$pf_normal"; fi
 "$py" - "$work/models-big.yaml" <<'PY'
 import sys, yaml
 d = yaml.safe_load(open(".factory/models.yaml"))
@@ -104,7 +113,7 @@ if [ "$rc" -eq 0 ] && [ "$(head -n 1 "$c")" = '<!-- factory-spec-draft v1 -->' ]
   ok "build: approved/override fields reset to a draft; model + prediction filled by factory-predict-cost.py"
 else bad "build: normalized draft (rc=$rc)"; cat "$work/good.log"; head -40 "$c" 2>/dev/null; fi
 if grep -q '^- Review: Grok Bot (risk normal)' "$c" && grep -q '^- Approval: Grok Bot may approve (risk normal; approved_by: grok-bot)' "$c" \
-  && grep -q 'Spec run: deepseek-ai/DeepSeek-V4-Pro-0813 (models.yaml rule 2' "$c" && grep -q 'cost \$0.0712 (OpenCode-reported)' "$c" \
+  && grep -q 'Spec run: deepseek-ai/DeepSeek-V4-Flash-0731 (models.yaml rule 9' "$c" && grep -q 'cost \$0.0712 (OpenCode-reported)' "$c" \
   && grep -q 'actions/runs/4242' "$c" && grep -qx 'reviewer=Grok' "$work/good/spec-meta.txt" && grep -qx 'worktree=unchanged' "$work/good/spec-meta.txt"; then
   ok "build: review/approval lines, spec-run model + cost + run link"
 else bad "build: header lines"; head -12 "$c"; cat "$work/good/spec-meta.txt"; fi
@@ -139,6 +148,12 @@ wrap "$work/high.md" "$work/out-high.txt"
 specrun high "$work/out-high.txt"
 if grep -q '^- Review: Michael (risk high)' "$work/high/spec-comment.md" && grep -q '^- Approval: Michael only (risk high' "$work/high/spec-comment.md"; then ok "build: risk high -> Michael reviews and approves"
 else bad "build: high-risk reviewer"; head -8 "$work/high/spec-comment.md"; fi
+hc="$work/high/spec-comment.md"
+if sed -n 2p "$hc" | grep -q "^\*\*Over \$0\.15 target: needs Michael's approval\*\* (predicted build \$0\.1900)" \
+  && grep -q '^- Note: the issue did not say high risk, so this spec run used deepseek-ai/DeepSeek-V4-Flash-0731' "$hc" \
+  && ! grep -q '^over_target_approved_by:' "$hc" && ! grep -q 'Over \$0.15 target' "$work/good/spec-comment.md"; then
+  ok "build: build prediction over the \$0.15 target -> top line 'needs Michael's approval'; Flash-drafted high risk noted"
+else bad "build: over-target line / Flash note"; head -14 "$hc"; fi
 
 # Failing drafts: no draft posted, failures listed, the spec marker defanged in the note.
 sed '/^```bash$/,/^```$/d' tests/oc-spec/good-spec.md >"$work/nover.md"
@@ -230,6 +245,17 @@ if [ "$hr" -ne 0 ] && grep -q 'only Michael approves high-risk specs' <<<"$hout"
   && draft approve "$work/high-spec.md" --approved-by michael | grep -qx 'approved_by: michael'; then
   ok "approve: high risk -> grok-bot refused, michael accepted"
 else bad "approve: high-risk rule"; echo "$hout"; fi
+set +e
+ot_plain="$(draft approve "$work/high-spec.md" --approved-by michael 2>"$work/ot.err")"
+ot_bot="$(draft approve "$work/high-spec.md" --approved-by grok-bot --over-target-ok 2>&1)"; ot_bot_rc=$?
+set -e
+ot_ok="$(draft approve "$work/high-spec.md" --approved-by michael --over-target-ok)"
+if ! grep -q '^over_target_approved_by:' <<<"$ot_plain" && grep -q "Over \$0.15 target: needs Michael's approval" "$work/ot.err" \
+  && grep -qx 'over_target_approved_by: michael' <<<"$ot_ok" && [ "$ot_bot_rc" -ne 0 ] \
+  && ! draft approve "$spec_only" --approved-by michael --over-target-ok | grep -q '^over_target_approved_by:' \
+  && printf '%s\n' "$ot_ok" >"$work/ot-ok.md" && "$py" scripts/factory-spec-check.py "$work/ot-ok.md" >/dev/null; then
+  ok "approve: over target -> warning without --over-target-ok; flag sets over_target_approved_by: michael (Michael only; not set under target)"
+else bad "approve: over-target flag"; cat "$work/ot.err"; echo "$ot_bot"; fi
 if ! draft approve "$spec_only" --approved-by someone-else >/dev/null 2>&1; then ok "approve: unknown approver refused"
 else bad "approve: unknown approver"; fi
 draft approve "$spec_only" --approved-by michael --at '2026-11-02T19:00:00-06:00' --issue 7 >"$work/approved.md"

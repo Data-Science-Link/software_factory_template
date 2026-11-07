@@ -213,6 +213,14 @@ if [ "$rc" -eq 0 ] && posts | grep -qF '**`/oc fix` run stopped at run start** (
   ok "#92 no_approved_spec refusal on a fix run: fix title, reason text"
 else bad "#92 no_approved_spec (rc=$rc)"; posts; fi
 
+# --- 16b. over_target_unapproved refusal (Michael, 2026-11-07).
+: >"$work/comments.json"
+set +e; OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped OC_REFUSED=over_target_unapproved run c16b; rc=$?; set -e
+if [ "$rc" -eq 0 ] && posts | grep -qF '(refused: `over_target_unapproved`)' && posts | grep -q 'over_target_approved_by: michael' \
+  && posts | grep -q -- '--over-target-ok'; then
+  ok "over_target_unapproved refusal: reason names the flag and how Michael approves"
+else bad "over_target_unapproved refusal (rc=$rc)"; posts; fi
+
 # --- 17. unknown refusal code -> generic text, code not echoed.
 : >"$work/comments.json"
 set +e; OC_KIND=build OC_AGENT_RESULT=failure OC_PUBLISH_RESULT=skipped OC_REFUSED='<script>' run c17; rc=$?; set -e

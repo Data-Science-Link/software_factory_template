@@ -1,4 +1,4 @@
-# spec-check-new-scripts: scripts/factory-usage.py
+# spec-check-new-scripts: scripts/factory-usage.py scripts/factory-run-end.sh scripts/test-run-end.sh
 <!-- factory-spec v1 -->
 ---
 spec_version: 1

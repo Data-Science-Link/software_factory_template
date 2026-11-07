@@ -44,6 +44,7 @@ ATTEMPT_KEYS = ("retry", "escalated_from", "error_class", "prior_model_family")
 REFUSAL_CODES = frozenset({
     "no_approved_spec", "spec_not_approved", "spec_issue_mismatch", "spec_check_failed",
     "router_failed", "router_guard", "model_not_allowed", "cap_unset", "over_cap",
+    "over_target_unapproved",
 })
 
 DEFAULT_RUNS_DIR = ROOT / "factory" / "runs"
@@ -406,6 +407,10 @@ def main() -> int:
     ctx, route_reason, retry_of = attempt_context(comments, args.kind, fm.get("complexity"))
     with tempfile.TemporaryDirectory() as td:
         routed = route_model(routed_spec_copy(spec_text, fm, ctx, Path(td)), args.models)
+    # The spec's own prediction (current models.yaml, no retry context) for the over-target gate,
+    # so a harness retry/fallback never needs a second approval.
+    with tempfile.TemporaryDirectory() as td:
+        base = route_model(routed_spec_copy(spec_text, fm, {}, Path(td)), args.models) if ctx else routed
     if routed is None:
         return refuse("model router failed or produced no result", "router_failed")
     model_id = routed.get("model")
@@ -423,6 +428,20 @@ def main() -> int:
     if not is_deepinfra_model(str(model_id), models_data):
         return refuse(
             f"model {model_id!r} is not a deepinfra model in models.yaml", "model_not_allowed"
+        )
+
+    # Over-target gate (Michael, 2026-11-07): any risk class. A prediction over
+    # budget.issue_target_usd needs his explicit flag in the approved spec.
+    target_raw = (models_data.get("budget") or {}).get("issue_target_usd")
+    spec_predicted = (base or {}).get("predicted_cost_usd")
+    if spec_predicted is None:
+        return refuse("router output is missing predicted_cost_usd", "router_failed")
+    if target_raw is not None and float(spec_predicted) > float(target_raw) \
+            and fm.get("over_target_approved_by") != "michael":
+        return refuse(
+            f"spec predicted ${float(spec_predicted):.4f} is over the ${float(target_raw):.2f} target and the "
+            "approved spec has no over_target_approved_by: michael",
+            "over_target_unapproved",
         )
 
     spend: dict[str, float] = {}
