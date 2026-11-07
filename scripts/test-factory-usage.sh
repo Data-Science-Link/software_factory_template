@@ -75,8 +75,6 @@ for msg in data["messages"]:
 json.dump(data, open(sys.argv[1], "w"), indent=2)
 ' "$tmpdir_copy/session1.json"
 
-result_null_cost="$("${PY[@]}" "$tmpdir_copy/session1.json" "$tmpdir_copy/session2.json")"
-echo "$result_null_cost" | grep -q '"opencode_cost_usd": null' || fail "cost nullification"
 run_case "one message cost removed -> opencode_cost_usd is null" 0 '{"models": ["deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"], "opencode_cost_usd": null, "requests": 4, "sessions": 2, "source": "opencode-export", "tokens_cached": 8000, "tokens_in": 10000, "tokens_out": 240, "tokens_reasoning": 0}' "$tmpdir_copy/session1.json" "$tmpdir_copy/session2.json"
 
 # Test cost validation function from factory-validate-run.py using importlib
@@ -91,9 +89,9 @@ result = module.cost_from_usage(10000, 8000, 240, 0.30, 0.10, 1.00)
 expected = 0.00164
 tolerance = 1e-9
 if abs(result - expected) < tolerance:
-    print("PASS  cost_from_usage validation")
+    print("note  cost_from_usage validation")
 else:
-    print("FAIL  cost_from_usage validation (expected:", expected, "got:", result, ")")
+    print("fail  cost_from_usage validation (expected:", expected, "got:", result, ")")
     sys.exit(1)
 ' || fail "cost_from_usage validation"
 
@@ -264,7 +262,7 @@ json.dump(data, open(sys.argv[1], "w"), indent=2)
 run_case "missing message token key: input" 3 "" "$tmpdir/missing-message-keys.json"
 
 # Usage error cases - exit 2
-run_case "no arguments and no OPENCODE_USAGE_FIXTURE" 2 ""  # No arguments
+run_case "no arguments and no OPENCODE_USAGE_FIXTURE" 2 "" env -u OPENCODE_USAGE_FIXTURE python3 scripts/factory-usage.py
 run_case "missing path" 2 "" "/nonexistent/path"
 
 # Test secrets never appear in output
