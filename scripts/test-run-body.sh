@@ -317,16 +317,13 @@ EOF
   # Reset gh_calls.log between tests
   rm -f "$TEMP_WORK_DIR/gh_calls.log"
   
-  # Run the script and capture exit code
+  # Run the script and capture exit code before any if (so $? is the script's)
   cd "$TEMP_WORK_DIR"
-  if FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" "$SCRIPT_DIR/factory-run-body.sh" 789 gha-90000000135-3 > "$TEMP_WORK_DIR/output.txt" 2>&1; then
-    echo "FAIL: Script should have exited with code 2"
-    return 1
-  fi
-  
-  # Check that exit code is exactly 2
-  local exit_code=$?
-  if [ $exit_code -ne 2 ]; then
+  set +e
+  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" "$SCRIPT_DIR/factory-run-body.sh" 789 gha-90000000135-3 > "$TEMP_WORK_DIR/output.txt" 2>&1
+  exit_code=$?
+  set -e
+  if [ "$exit_code" -ne 2 ]; then
     echo "FAIL: Script should have exited with code 2, got $exit_code"
     return 1
   fi
