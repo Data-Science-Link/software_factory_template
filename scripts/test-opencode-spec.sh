@@ -101,6 +101,9 @@ if grep -qF 'already embedded below in <template>' <<<"$pp" && grep -qF 'do not 
   && grep -qF 'ignore hidden dot-directories like .factory/' <<<"$pp" \
   && grep -qF 'read at most 8 files' <<<"$pp"; then ok "prompt: embedded template + no .factory glob (#125)"
 else bad "prompt: embedded template / dot-dir rules (#125)"; fi
+if grep -qF 'No exclusion' <<<"$pp" && grep -qF 'under "## Out of scope", in plain words' <<<"$pp"; then
+  ok "prompt: Files lists exact paths only; exclusions go under Out of scope (#64)"
+else bad "prompt: Files exact-paths rule (#64)"; fi
 
 # Good draft: normalized to a draft, prediction filled by script, reviewer from risk.
 wrap tests/oc-spec/good-spec.md "$work/out-good.txt"

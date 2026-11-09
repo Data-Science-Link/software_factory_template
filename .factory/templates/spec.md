@@ -31,10 +31,10 @@ drafted_by: grok-bot
 <!-- What changes. -->
 
 ## Out of scope
-<!-- What the worker must not touch. The /oc path policy (`scripts/opencode-artifact-scan.sh --list-rules`) already forbids `.github/`, `opencode.json`, `.factory/actions-security.md`, `.factory/models.yaml`, other dot-paths and edits to existing scripts; don't ask for those. -->
+<!-- What the worker must not touch. The /oc path policy (`scripts/opencode-artifact-scan.sh --list-rules`) already forbids `.github/`, `opencode.json`, `.factory/actions-security.md`, `.factory/models.yaml`, other dot-paths and edits to existing scripts; don't ask for those. Say what not to touch here in plain words, never as a Files entry. -->
 
 ## Files
-<!-- Create, change, or read first. New scripts: a new hyphenated file directly under scripts/ (e.g. scripts/dbt-seed-check.sh). Never plan an edit to an existing script, .github/, or an owner-only .factory/ file for the worker; list it under Manual steps for Michael. .gitignore: added lines only. -->
+<!-- Only exact paths to create, change, or read first, one per bullet; no exclusion sentences (every path here counts as planned work; what not to touch goes under Out of scope). New scripts: a new hyphenated file directly under scripts/ (e.g. scripts/dbt-seed-check.sh). Never plan an edit to an existing script, .github/, or an owner-only .factory/ file for the worker; list it under Manual steps for Michael. .gitignore: added lines only. -->
 
 ## Acceptance criteria
 <!-- Tick only when diff or command output proves it. -->
