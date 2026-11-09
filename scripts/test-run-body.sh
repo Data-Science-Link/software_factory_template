@@ -16,7 +16,8 @@ FAILED=0
 # Temporary directories and files
 TEST_TEMP_DIR=$(mktemp -d)
 TEMP_BIN_DIR="$TEST_TEMP_DIR/bin"
-TEMP_WORK_DIR="$TEST_TEMP_DIR/work"
+  TEMP_WORK_DIR="$TEST_TEMP_DIR/work"
+  export TEMP_WORK_DIR
 TEMP_FACTORY_RUNS_DIR="$TEMP_WORK_DIR/factory/runs"
 
 # Cleanup function
@@ -29,13 +30,13 @@ trap cleanup EXIT
 setup_test_env() {
   mkdir -p "$TEMP_BIN_DIR" "$TEMP_FACTORY_RUNS_DIR"
   
-  # Create a stub gh command
+# Create a stub gh command
   cat > "$TEMP_BIN_DIR/gh" <<'EOF'
 #!/bin/bash
 # gh stub for testing
 
 # Record the command
-echo "gh $*" >> "$TEMP_WORK_DIR/gh_calls.log"
+echo "gh $*" >> "${TEMP_WORK_DIR}/gh_calls.log"
 
 # Handle specific gh commands
 case "$1" in
@@ -43,14 +44,14 @@ case "$1" in
     case "$2" in
       view)
         # Return test PR body
-        cat "$TEMP_WORK_DIR/test_pr_body.txt"
+        cat "${TEMP_WORK_DIR}/test_pr_body.txt"
         ;;
       edit)
         # Capture the edited body
         if [[ "$*" == *"--body-file"* ]]; then
           # Extract the body file path (assuming it's the last argument)
           body_file="${!#}"
-          cp "$body_file" "$TEMP_WORK_DIR/edited_pr_body.txt"
+          cp "$body_file" "${TEMP_WORK_DIR}/edited_pr_body.txt"
         fi
         echo "PR edited successfully"
         ;;
@@ -60,7 +61,7 @@ case "$1" in
     echo "Unknown gh command: $*" >&2
     exit 1
     ;;
-esac
+ esac
 EOF
   
   chmod +x "$TEMP_BIN_DIR/gh"
@@ -99,7 +100,7 @@ This is a test PR.
 
 Some other content here.
 
-<!-- factory-run-start -->
+<!-- factory-run:start -->
 Run ID: old-run-id
 Workflow run: https://example.com/old-workflow
 Model: old-model
@@ -111,7 +112,7 @@ Key spend check: skipped_unavailable
 Actions minutes: 0
 Gate: false
 Run record: factory/runs/old-run-id.json
-<!-- factory-run-end -->
+<!-- factory-run:end -->
 
 Cost: $0.00 (placeholder)
 
@@ -120,10 +121,10 @@ Cost: $0.00 (placeholder)
 More content here.
 EOF
 
-  # Create a test run record
-  cat > "$TEMP_FACTORY_RUNS_DIR/test-run-123.json" <<'EOF'
+  # Create a test run record with proper format
+  cat > "$TEMP_FACTORY_RUNS_DIR/gha-90000000135-1.json" <<'EOF'
 {
-  "run_id": "test-run-123",
+  "run_id": "gha-90000000135-1",
   "workflow_run_url": "https://github.com/test/repo/actions/runs/123",
   "model": "test-model",
   "tokens_in": 1000,
@@ -134,13 +135,23 @@ EOF
   "cost_method": "usage_x_price_table",
   "cost_check": "match",
   "actions_minutes": 2,
+  "gate": {
+    "gitleaks": "pass",
+    "run_record_valid": "pass",
+    "cost_recorded": "pass",
+    "pr_template": "pass",
+    "pr_check": "pass",
+    "budget_cap": "pass",
+    "no_workflow_changes": "pass",
+    "spec_present": "pass"
+  },
   "gate_passed": true
 }
 EOF
 
   # Run the script
   cd "$TEMP_WORK_DIR"
-  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 123 test-run-123 > "$TEMP_WORK_DIR/output.txt" 2>&1
+  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 123 gha-90000000135-1 > "$TEMP_WORK_DIR/output.txt" 2>&1
   
   # Check that gh pr edit was called
   if ! grep -q "gh pr edit 123 --body-file" "$TEMP_WORK_DIR/gh_calls.log"; then
@@ -163,7 +174,7 @@ EOF
   fi
   
   # Check that the Cost line was updated
-  if ! echo "$edited_body" | grep -q "Cost: \$0.045 (usage_x_price_table)"; then
+  if ! echo "$edited_body" | grep -q "Cost: \$0.045 on DeepInfra (factory run record; usage_x_price_table)"; then
     echo "FAIL: Cost line was not updated correctly"
     return 1
   fi
@@ -189,7 +200,7 @@ test_no_secrets_printed() {
   
   # Create test PR body with factory-run block
   cat > "$TEMP_WORK_DIR/test_pr_body.txt" <<'EOF'
-<!-- factory-run-start -->
+<!-- factory-run:start -->
 Run ID: old-run-id
 Workflow run: https://example.com/old-workflow
 Model: old-model
@@ -201,15 +212,15 @@ Key spend check: skipped_unavailable
 Actions minutes: 0
 Gate: false
 Run record: factory/runs/old-run-id.json
-<!-- factory-run-end -->
+<!-- factory-run:end -->
 
 Cost: $0.00 (placeholder)
 EOF
 
-  # Create a test run record
-  cat > "$TEMP_FACTORY_RUNS_DIR/test-run-456.json" <<'EOF'
+  # Create a test run record with proper format
+  cat > "$TEMP_FACTORY_RUNS_DIR/gha-90000000135-2.json" <<'EOF'
 {
-  "run_id": "test-run-456",
+  "run_id": "gha-90000000135-2",
   "workflow_run_url": "https://github.com/test/repo/actions/runs/456",
   "model": "test-model",
   "tokens_in": 1000,
@@ -220,13 +231,23 @@ EOF
   "cost_method": "usage_x_price_table",
   "cost_check": "match",
   "actions_minutes": 2,
+  "gate": {
+    "gitleaks": "pass",
+    "run_record_valid": "pass",
+    "cost_recorded": "pass",
+    "pr_template": "pass",
+    "pr_check": "pass",
+    "budget_cap": "pass",
+    "no_workflow_changes": "pass",
+    "spec_present": "pass"
+  },
   "gate_passed": true
 }
 EOF
 
   # Run the script and capture output
   cd "$TEMP_WORK_DIR"
-  output=$(FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 456 test-run-456 2>&1)
+  output=$(FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 456 gha-90000000135-2 2>&1)
   
   # Check that the output doesn't contain sensitive information
   # In this simple case, we just check that it doesn't contain the actual cost value
@@ -262,10 +283,10 @@ Cost: $0.00 (placeholder)
 More content here.
 EOF
 
-  # Create a test run record
-  cat > "$TEMP_FACTORY_RUNS_DIR/test-run-789.json" <<'EOF'
+  # Create a test run record with proper format
+  cat > "$TEMP_FACTORY_RUNS_DIR/gha-90000000135-3.json" <<'EOF'
 {
-  "run_id": "test-run-789",
+  "run_id": "gha-90000000135-3",
   "workflow_run_url": "https://github.com/test/repo/actions/runs/789",
   "model": "test-model",
   "tokens_in": 1000,
@@ -276,13 +297,23 @@ EOF
   "cost_method": "usage_x_price_table",
   "cost_check": "match",
   "actions_minutes": 2,
+  "gate": {
+    "gitleaks": "pass",
+    "run_record_valid": "pass",
+    "cost_recorded": "pass",
+    "pr_template": "pass",
+    "pr_check": "pass",
+    "budget_cap": "pass",
+    "no_workflow_changes": "pass",
+    "spec_present": "pass"
+  },
   "gate_passed": true
 }
 EOF
 
   # Run the script and capture exit code
   cd "$TEMP_WORK_DIR"
-  if FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 789 test-run-789 > "$TEMP_WORK_DIR/output.txt" 2>&1; then
+  if FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 789 gha-90000000135-3 > "$TEMP_WORK_DIR/output.txt" 2>&1; then
     echo "FAIL: Script should have exited with code 2"
     return 1
   fi

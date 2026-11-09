@@ -11,14 +11,9 @@ fi
 pr_number="$1"
 run_id="$2"
 
-# Validate run_id format (should match gha-<number>-<number>)
-if [[ ! "$run_id" =~ ^gha-[0-9]+-[0-9]+$ ]]; then
-  echo "factory-run-body: run_id must be in format gha-<number>-<number>" >&2
-  exit 2
-fi
-
-# Define paths
-run_record_path="factory/runs/$run_id.json"
+# Define paths using FACTORY_RUNS_DIR with default
+FACTORY_RUNS_DIR="${FACTORY_RUNS_DIR:-factory/runs}"
+run_record_path="$FACTORY_RUNS_DIR/$run_id.json"
 temp_body_file=$(mktemp)
 
 # Cleanup function
@@ -39,21 +34,21 @@ if ! gh pr view "$pr_number" --json body -q '.body' > "$temp_body_file"; then
   exit 2
 fi
 
-# Check for factory-run markers
-start_marker='<!-- factory-run-start -->'
-end_marker='<!-- factory-run-end -->'
+# Check for factory-run markers using the correct markers from opencode-run-facts.sh
+start_marker='<!-- factory-run:start -->'
+end_marker='<!-- factory-run:end -->'
 
 if ! grep -q "$start_marker" "$temp_body_file" || ! grep -q "$end_marker" "$temp_body_file"; then
   echo "factory-run-body: missing factory-run markers in PR body" >&2
   exit 2
 fi
 
-# Extract cost facts from run record
+# Extract cost facts from run record using the schema from tests/run-records/pass-failed-no-pr.json
 actual_cost_usd=$(jq -r '.actual_cost_usd' "$run_record_path")
 cost_method=$(jq -r '.cost_method' "$run_record_path")
 
-# Format the cost line
-cost_line="Cost: \$${actual_cost_usd} (${cost_method})"
+# Format the cost line to match the existing publish Cost: style
+cost_line="Cost: \$${actual_cost_usd} on DeepInfra (factory run record; ${cost_method})"
 
 # Generate the new factory-run block content
 # We'll construct this based on the PR template structure
@@ -67,7 +62,7 @@ Actual cost: \$${actual_cost_usd}
 Cost method: ${cost_method}
 Key spend check: $(jq -r '.cost_check' "$run_record_path")
 Actions minutes: $(jq -r '.actions_minutes' "$run_record_path")
-Gate: $(jq -r '.gate_passed' "$run_record_path")
+Gate: $(jq -r '.gate' | jq -r 'if . == null then "not available" else "passed: \(. | to_entries[] | select(.value == \"pass\") | .key) failed: \(. | to_entries[] | select(.value == \"fail\") | .key)" end' "$run_record_path")
 Run record: $run_record_path
 EOF
 )
