@@ -62,7 +62,7 @@ Actual cost: \$${actual_cost_usd}
 Cost method: ${cost_method}
 Key spend check: $(jq -r '.cost_check' "$run_record_path")
 Actions minutes: $(jq -r '.actions_minutes' "$run_record_path")
-Gate: $(jq -r '.gate' | jq -r 'if . == null then "not available" else "passed: \(. | to_entries[] | select(.value == \"pass\") | .key) failed: \(. | to_entries[] | select(.value == \"fail\") | .key)" end' "$run_record_path")
+Gate: $(jq -r 'if .gate and (.gate | type) == "object" then "passed: \(.gate | to_entries[] | select(.value == \"pass\") | .key) failed: \(.gate | to_entries[] | select(.value == \"fail\") | .key)" else (.gate | tostring) end' "$run_record_path")
 Run record: $run_record_path
 EOF
 )

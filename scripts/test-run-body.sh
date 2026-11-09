@@ -16,9 +16,12 @@ FAILED=0
 # Temporary directories and files
 TEST_TEMP_DIR=$(mktemp -d)
 TEMP_BIN_DIR="$TEST_TEMP_DIR/bin"
-  TEMP_WORK_DIR="$TEST_TEMP_DIR/work"
-  export TEMP_WORK_DIR
+TEMP_WORK_DIR="$TEST_TEMP_DIR/work"
+export TEMP_WORK_DIR
 TEMP_FACTORY_RUNS_DIR="$TEMP_WORK_DIR/factory/runs"
+
+# Get the script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Cleanup function
 cleanup() {
@@ -151,7 +154,7 @@ EOF
 
   # Run the script
   cd "$TEMP_WORK_DIR"
-  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 123 gha-90000000135-1 > "$TEMP_WORK_DIR/output.txt" 2>&1
+  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" "$SCRIPT_DIR/factory-run-body.sh" 123 gha-90000000135-1 > "$TEMP_WORK_DIR/output.txt" 2>&1
   
   # Check that gh pr edit was called
   if ! grep -q "gh pr edit 123 --body-file" "$TEMP_WORK_DIR/gh_calls.log"; then
@@ -168,7 +171,7 @@ EOF
   edited_body=$(cat "$TEMP_WORK_DIR/edited_pr_body.txt")
   
   # Check that the factory-run block was updated
-  if ! echo "$edited_body" | grep -q "Run ID: test-run-123"; then
+  if ! echo "$edited_body" | grep -q "Run ID: gha-90000000135-1"; then
     echo "FAIL: factory-run block was not updated correctly"
     return 1
   fi
@@ -247,7 +250,7 @@ EOF
 
   # Run the script and capture output
   cd "$TEMP_WORK_DIR"
-  output=$(FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 456 gha-90000000135-2 2>&1)
+  output=$(FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" "$SCRIPT_DIR/factory-run-body.sh" 456 gha-90000000135-2 2>&1)
   
   # Check that the output doesn't contain sensitive information
   # In this simple case, we just check that it doesn't contain the actual cost value
@@ -311,15 +314,25 @@ EOF
 }
 EOF
 
+  # Reset gh_calls.log between tests
+  rm -f "$TEMP_WORK_DIR/gh_calls.log"
+  
   # Run the script and capture exit code
   cd "$TEMP_WORK_DIR"
-  if FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" ../scripts/factory-run-body.sh 789 gha-90000000135-3 > "$TEMP_WORK_DIR/output.txt" 2>&1; then
+  if FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" "$SCRIPT_DIR/factory-run-body.sh" 789 gha-90000000135-3 > "$TEMP_WORK_DIR/output.txt" 2>&1; then
     echo "FAIL: Script should have exited with code 2"
     return 1
   fi
   
+  # Check that exit code is exactly 2
+  local exit_code=$?
+  if [ $exit_code -ne 2 ]; then
+    echo "FAIL: Script should have exited with code 2, got $exit_code"
+    return 1
+  fi
+  
   # Check that gh pr edit was not called
-  if grep -q "gh pr edit" "$TEMP_WORK_DIR/gh_calls.log" 2>/dev/null; then
+  if [ -f "$TEMP_WORK_DIR/gh_calls.log" ] && grep -q "gh pr edit" "$TEMP_WORK_DIR/gh_calls.log"; then
     echo "FAIL: gh pr edit should not have been called"
     return 1
   fi
