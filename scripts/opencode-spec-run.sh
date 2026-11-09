@@ -68,7 +68,11 @@ Write ONE spec that follows the template below exactly: the same front matter ke
 - "## Verification": exactly one \`\`\`bash block of fast commands (the build harness runs it in a
   sandbox with an empty environment after the worker; HEAD~1 is the base; no origin remote),
   then a line starting "Expected:" with the expected output.
-- "## Files": exact repository paths to create, change, or read first.
+- "## Files": only exact repository paths the build creates, changes, or reads first, one
+  backticked path per bullet (e.g. "- Create: \`scripts/new-check.sh\`"). No exclusion
+  sentences and no directories or files the worker must not touch: the checker reads every path
+  in this section as planned work, so "nothing under \`.github/\`" fails the draft. Put what
+  not to touch under "## Out of scope", in plain words, not as Files entries.
 - "## Worker prompt": start "Read issue #${OC_ISSUE_NUMBER} and \`.factory/FACTORY.md\` first"; end "Fill the
   PR template; tick only what you proved".
 - No HTML comments (delete the template's <!-- --> notes), no @mentions, under 30 KB.
