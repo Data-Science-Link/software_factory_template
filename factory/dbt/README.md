@@ -10,7 +10,7 @@ run records (`factory/runs/*.json`). One seed (`agent_runs`), one staging view
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r requirements-dbt.txt
+pip install -r factory/dbt/requirements-dbt.txt
 export DBT_SEND_ANONYMOUS_USAGE_STATS=false   # disable dbt anonymous usage stats
 ```
 
