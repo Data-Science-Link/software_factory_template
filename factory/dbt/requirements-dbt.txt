@@ -1,0 +1,5 @@
+# dbt-duckdb project (factory/dbt): dbt + DuckDB for the run-cost pipeline.
+# Split out of requirements-factory.txt (#64) so jobs that never run dbt don't install it.
+dbt-core==1.11.16
+dbt-duckdb==1.11.1
+duckdb==1.5.6

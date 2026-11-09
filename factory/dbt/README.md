@@ -10,7 +10,7 @@ run records (`factory/runs/*.json`). One seed (`agent_runs`), one staging view
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r requirements-factory.txt
+pip install -r requirements-dbt.txt
 export DBT_SEND_ANONYMOUS_USAGE_STATS=false   # disable dbt anonymous usage stats
 ```
 
@@ -42,6 +42,10 @@ dbt build --profiles-dir .                                           # real seed
 
 ## Notes
 
+- dbt is split out of `requirements-factory.txt` into `factory/dbt/requirements-dbt.txt`
+  (issue #64) so run jobs that never invoke dbt don't install it. A dbt CI job (or any
+  dbt user) should install `-r factory/dbt/requirements-dbt.txt`, not
+  `requirements-factory.txt`.
 - `profiles.yml` is in-repo with a relative DuckDB path under `target/` (gitignored):
   no warehouse, no credentials, works offline.
 - `logs/` and `*.duckdb` are gitignored via `factory/dbt/.gitignore`.
