@@ -46,13 +46,16 @@ def main():
         )
         return 1
 
-    if template_version == models_version:
-        print(f"price_table_version OK: {template_version}")
+    template_str = str(template_version)
+    models_str = str(models_version)
+
+    if template_str == models_str:
+        print(f"price_table_version OK: {template_str}")
         return 0
 
     print(
-        f"drift: template price_table_version {template_version!r} != "
-        f"models.yaml price_table_version {models_version!r}; sync .factory/templates/spec.md",
+        f"drift: template price_table_version {template_str!r} != "
+        f"models.yaml price_table_version {models_str!r}; sync .factory/templates/spec.md",
         file=sys.stderr,
     )
     return 1
