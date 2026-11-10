@@ -42,10 +42,10 @@ dbt build --profiles-dir .                                           # real seed
 
 ## Notes
 
-- dbt is split out of `requirements-factory.txt` into `factory/dbt/requirements-dbt.txt`
-  (issue #64) so run jobs that never invoke dbt don't install it. A dbt CI job (or any
-  dbt user) should install `-r factory/dbt/requirements-dbt.txt`, not
-  `requirements-factory.txt`.
+- dbt is pinned only in `factory/dbt/requirements-dbt.txt` (issue #64); `requirements-factory.txt`
+  no longer installs it, so run jobs that never invoke dbt don't. A dbt CI job (or any dbt
+  user) installs `-r factory/dbt/requirements-dbt.txt`. Run dbt on Python 3.13 or older:
+  dbt 1.11 crashes on 3.14 (#148).
 - `profiles.yml` is in-repo with a relative DuckDB path under `target/` (gitignored):
   no warehouse, no credentials, works offline.
 - `logs/` and `*.duckdb` are gitignored via `factory/dbt/.gitignore`.
