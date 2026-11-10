@@ -46,3 +46,24 @@ sort_keys=True)` output of the review for the matching fixture, one per run.
 compares with `cmp`, proving byte-identical, deterministic output. It also sets
 a sentinel environment variable and asserts it never appears in the script's
 output, proving the script makes no model calls and reads no key or env value.
+
+## Live-path parser fixture (`live/`)
+
+The `live/` directory drives the live-path parser offline (no network, no `gh`).
+It mirrors exactly what `--pr`/`--issue` mode sees on the live path:
+
+- `pr-head.txt` — the PR's head branch `oc/issue-<N>-<build_run_id>` (what
+  `gh pr view ... headRefName` returns).
+- `run-list.json` — the unfiltered `gh run list --json ...` output, spanning the
+  real workflow names `opencode-spike`, `opencode-spec`, `opencode-fix`.
+- `artifacts/<run_id>/` — the run's artifact directory as `gh run download`
+  yields it: `run-start.json` (model / routing rule), `spec.md` (`## Files`),
+  `opencode-export.json` (session export delegated to `scripts/factory-usage.py`
+  for cost/tokens), `scan.json` (artifact-scan result), `evidence.md`, and
+  `log.txt`.
+
+The test feeds `live/` to `scripts/factory-run-review.py --live-dir` and asserts
+model, cost and scan are populated from the artifacts, and that the run
+selection keeps the build run (headBranch `main`) plus the later `opencode-fix`
+run while excluding unrelated `opencode-spec`/build runs. All fixture contents
+are sanitized: no secrets, keys, tokens or env values.

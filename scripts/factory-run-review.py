@@ -15,12 +15,18 @@ with a committed expected-*.json using cmp.
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FACTORY_USAGE = os.path.join(REPO_ROOT, "scripts", "factory-usage.py")
+
+# The real /oc workflow names. Do not use a --workflow=opencode filter; the
+# names are opencode-spike (builds), opencode-spec, and opencode-fix.
+WORKFLOW_NAMES = ("opencode-spike", "opencode-spec", "opencode-fix")
+FIX_WORKFLOW = "opencode-fix"
 
 # Thresholds (seconds). Stays stable so identical input gives identical output.
 STALL_GAP_SECONDS = 780.0
@@ -242,10 +248,15 @@ def render_markdown(review):
 
 
 def run_gh(args):
-    """Run a read-only gh subprocess; return (returncode, stdout)."""
+    """Run a read-only gh subprocess; return (returncode, stdout).
+
+    The binary is overridable for offline tests that must never hit the
+    network; the override value is never printed.
+    """
+    binary = os.environ.get("FACTORY_RUN_REVIEW_GH", "gh")
     try:
         proc = subprocess.run(
-            args, capture_output=True, text=True, check=False
+            [binary] + list(args), capture_output=True, text=True, check=False
         )
         return proc.returncode, proc.stdout
     except (OSError, subprocess.SubprocessError):
@@ -272,18 +283,22 @@ def resolve_pr_head(pr_number):
     return head or None
 
 
-def list_oc_runs(head_branch):
-    """List /oc workflow runs for a head branch (read-only)."""
+def list_workflow_runs():
+    """List workflow runs across the /oc workflows (read-only).
+
+    The real workflow names are opencode-spike, opencode-spec, opencode-fix; a
+    --workflow=opencode filter matches none of them, so the list is fetched
+    unfiltered and filtered by name in code.
+    """
     rc, out = run_gh(
         [
             "gh",
             "run",
             "list",
-            "--workflow=opencode",
             "--json",
             "databaseId,workflowName,status,conclusion,createdAt,updatedAt,headBranch",
             "--limit",
-            "100",
+            "200",
         ]
     )
     if rc != 0:
@@ -292,7 +307,49 @@ def list_oc_runs(head_branch):
         runs = json.loads(out)
     except json.JSONDecodeError:
         return []
-    return [r for r in runs if r.get("headBranch") == head_branch]
+    return [r for r in runs if r.get("workflowName") in WORKFLOW_NAMES]
+
+
+def build_run_id_from_branch(branch):
+    """Return the build run id encoded in a head branch oc/issue-<N>-<id>, else None."""
+    if not isinstance(branch, str):
+        return None
+    m = re.match(r"oc/issue-\d+-(\d+)$", branch)
+    return m.group(1) if m else None
+
+
+def issue_number_from_branch(branch):
+    """Return the issue number encoded in a head branch oc/issue-<N>-<id>, else None."""
+    if not isinstance(branch, str):
+        return None
+    m = re.match(r"oc/issue-(\d+)-\d+$", branch)
+    return m.group(1) if m else None
+
+
+def select_oc_runs(runs, pr_head):
+    """Select the runs that belong to a PR.
+
+    A build is triggered from an issue comment and often has headBranch `main`
+    while the PR head is `oc/issue-<N>-<build_run_id>`. So we take the build run
+    id from the PR branch name and include that run, plus later opencode-fix
+    runs that belong to the same PR (same branch, or the same issue number).
+    """
+    build_id = build_run_id_from_branch(pr_head)
+    pr_issue = issue_number_from_branch(pr_head)
+    selected = []
+    for r in runs or []:
+        run_id = str(r.get("databaseId"))
+        branch = r.get("headBranch")
+        if build_id and run_id == build_id:
+            selected.append(r)
+            continue
+        if r.get("workflowName") == FIX_WORKFLOW:
+            if branch == pr_head:
+                selected.append(r)
+            elif pr_issue and issue_number_from_branch(branch) == pr_issue:
+                selected.append(r)
+    selected.sort(key=lambda r: str(r.get("databaseId", "")))
+    return selected
 
 
 def run_log_text(run_id):
@@ -364,6 +421,126 @@ def detect_blocked_calls(log_text):
     return blocked
 
 
+def _read_text(path):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _read_json(path):
+    text = _read_text(path)
+    if text is None:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
+def parse_spec_files(spec_md):
+    """Extract the spec's `## Files` create/read-first paths."""
+    if not spec_md:
+        return []
+    paths = []
+    in_files = False
+    for line in spec_md.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## Files"):
+            in_files = True
+            continue
+        if in_files and stripped.startswith("## "):
+            break
+        if not in_files:
+            continue
+        low = stripped.lower()
+        if low.startswith("- create:") or low.startswith("- read first:"):
+            path = stripped.split(":", 1)[1].strip().strip("`").strip()
+            p = normalize_path(path)
+            if p:
+                paths.append(p)
+    return sorted(set(paths))
+
+
+def parse_artifacts(artifacts_dir):
+    """Populate live run facts from a downloaded artifact directory.
+
+    Degrades gracefully: a missing or malformed file becomes null, never a
+    guess. Cost/tokens are delegated to scripts/factory-usage.py on a session
+    export when one is present.
+    """
+    facts = {
+        "model": None,
+        "routing_rule": None,
+        "opencode_export": None,
+        "spec_files": [],
+        "scan": {"result": None, "detail": None},
+        "evidence": {"present": None, "label": None},
+    }
+    if not artifacts_dir or not os.path.isdir(artifacts_dir):
+        return facts
+
+    start = _read_json(os.path.join(artifacts_dir, "run-start.json"))
+    if start:
+        facts["model"] = start.get("model") or start.get("model_id")
+        facts["routing_rule"] = start.get("routed_rule")
+
+    spec_md = _read_text(os.path.join(artifacts_dir, "spec.md"))
+    if spec_md:
+        facts["spec_files"] = parse_spec_files(spec_md)
+
+    scan = _read_json(os.path.join(artifacts_dir, "scan.json"))
+    if scan:
+        facts["scan"] = {
+            "result": scan.get("result"),
+            "detail": scan.get("detail"),
+        }
+
+    evidence_path = os.path.join(artifacts_dir, "evidence.md")
+    if os.path.isfile(evidence_path):
+        facts["evidence"] = {"present": True, "label": "harness-verified"}
+    else:
+        facts["evidence"] = {"present": False, "label": None}
+
+    export = _read_json(os.path.join(artifacts_dir, "opencode-export.json"))
+    if export is not None:
+        facts["opencode_export"] = export
+
+    return facts
+
+
+def base_run_facts(run, log_text):
+    """Build the base run-facts object for a workflow run, from gh metadata."""
+    run_id = run.get("databaseId")
+    return {
+        "run_id": run_id,
+        "workflow": run.get("workflowName"),
+        "status": run.get("status"),
+        "conclusion": run.get("conclusion"),
+        "model": None,
+        "routing_rule": None,
+        "created_at": run.get("createdAt"),
+        "updated_at": run.get("updatedAt"),
+        "wall_time_seconds": wall_time_seconds(
+            run.get("createdAt"), run.get("updatedAt")
+        ),
+        "timeout": bool(log_text and "timed out" in log_text.lower()),
+        "opencode_export": None,
+        "spec_files": [],
+        "tool_events": parse_tool_events(log_text),
+        "blocked_calls": detect_blocked_calls(log_text),
+        "scan": {"result": None, "detail": None},
+        "evidence": {"present": None, "label": None},
+    }
+
+
+def download_run_artifacts(run_id, dest_dir):
+    """Download a run's artifacts read-only into dest_dir; True on success."""
+    rc, _ = run_gh(["gh", "run", "download", str(run_id), "--dir", dest_dir])
+    return rc == 0
+
+
 def fetch_runs(args):
     """Resolve PR/issue to /oc run facts using gh (read-only)."""
     pr_number = args.pr
@@ -385,33 +562,45 @@ def fetch_runs(args):
     head_branch = resolve_pr_head(pr_number) if pr_number is not None else None
     if head_branch is None:
         return []
-    runs = list_oc_runs(head_branch)
+    runs = select_oc_runs(list_workflow_runs(), head_branch)
     facts = []
     for run in runs:
         run_id = run.get("databaseId")
         log_text = run_log_text(run_id) if run_id is not None else ""
-        facts.append(
-            {
-                "run_id": run_id,
-                "workflow": run.get("workflowName"),
-                "status": run.get("status"),
-                "conclusion": run.get("conclusion"),
-                "model": None,
-                "routing_rule": None,
-                "created_at": run.get("createdAt"),
-                "updated_at": run.get("updatedAt"),
-                "wall_time_seconds": wall_time_seconds(
-                    run.get("createdAt"), run.get("updatedAt")
-                ),
-                "timeout": bool(log_text and "timed out" in log_text.lower()),
-                "opencode_export": None,
-                "spec_files": [],
-                "tool_events": parse_tool_events(log_text),
-                "blocked_calls": detect_blocked_calls(log_text),
-                "scan": {"result": None, "detail": None},
-                "evidence": {"present": None, "label": None},
-            }
+        item = base_run_facts(run, log_text)
+        if run_id is not None:
+            with tempfile.TemporaryDirectory(
+                prefix="oc-review-", dir=tempfile.gettempdir()
+            ) as tmp:
+                if download_run_artifacts(run_id, tmp):
+                    item.update(parse_artifacts(tmp))
+        facts.append(item)
+    return facts
+
+
+def fetch_runs_live_dir(live_dir):
+    """Exercise the live-path parser offline from a recorded fixture directory.
+
+    The fixture mirrors what the live path sees: the PR head branch, the
+    unfiltered `gh run list` JSON, and one artifact subdirectory per run.
+    """
+    pr_head = _read_text(os.path.join(live_dir, "pr-head.txt"))
+    runs = _read_json(os.path.join(live_dir, "run-list.json"))
+    if not pr_head or runs is None:
+        return []
+    pr_head = pr_head.strip()
+    selected = select_oc_runs(runs, pr_head)
+    facts = []
+    for run in selected:
+        run_id = run.get("databaseId")
+        log_text = _read_text(
+            os.path.join(live_dir, "artifacts", str(run_id), "log.txt")
+        ) or ""
+        item = base_run_facts(run, log_text)
+        item.update(
+            parse_artifacts(os.path.join(live_dir, "artifacts", str(run_id)))
         )
+        facts.append(item)
     return facts
 
 
@@ -421,6 +610,11 @@ def main(argv=None):
     parser.add_argument("--issue", type=int, default=None, help="issue number")
     parser.add_argument("--repo", default=None, help="owner/name repo for issue lookup")
     parser.add_argument("--input", default=None, help="parsed run-facts JSON file (offline)")
+    parser.add_argument(
+        "--live-dir",
+        default=None,
+        help="recorded fixture dir that drives the live-path parser offline (no gh)",
+    )
     parser.add_argument("--output", default=None, help="write JSON to this path instead of stdout")
     args = parser.parse_args(argv)
 
@@ -436,8 +630,23 @@ def main(argv=None):
             print(text)
         return 0
 
+    if args.live_dir is not None:
+        runs = fetch_runs_live_dir(args.live_dir)
+        reviews = [review_run(run) for run in runs]
+        payload = {"runs": reviews}
+        text = json.dumps(payload, indent=2, sort_keys=True)
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as fh:
+                fh.write(text + "\n")
+        else:
+            print(text)
+            for review in reviews:
+                print()
+                print(render_markdown(review))
+        return 0
+
     if args.pr is None and args.issue is None:
-        parser.error("provide --pr, --issue, or --input")
+        parser.error("provide --pr, --issue, --live-dir, or --input")
 
     args.repo = args.repo or ""
     runs = fetch_runs(args)

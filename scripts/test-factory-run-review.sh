@@ -34,6 +34,34 @@ byte_identical 42282682618
 byte_identical 42290238204
 byte_identical 42297659590
 
+# Live-path parser: drives the same discovery + artifact parsing logic offline
+# from a recorded, sanitized fixture (no network, no gh). It must populate model,
+# routing rule, cost and scan from the artifact files, and select the build run
+# (headBranch main) plus the later opencode-fix run while excluding unrelated
+# opencode-spec/build runs.
+live_dir="$FIX_DIR/live"
+set +e
+"${REVIEW[@]}" --live-dir "$live_dir" > "$tmpdir/out-live.json" 2>"$tmpdir/err-live.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "live-path parser (script exited non-zero)"
+else
+  live_ok=1
+  grep -q '"model": "deepseek-ai/DeepSeek-V4-Flash-0731"' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"cost_usd": 0.004' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"scan_result": "pass"' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"workflow": "opencode-spike"' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"workflow": "opencode-fix"' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"workflow": "opencode-spec"' "$tmpdir/out-live.json" && live_ok=0
+  grep -q '"scan_result": null' "$tmpdir/out-live.json" && live_ok=0
+  if [ "$live_ok" -eq 1 ]; then
+    note "live-path parser (model/cost/scan populated)"
+  else
+    fail "live-path parser (model/cost/scan not populated from artifacts)"
+  fi
+fi
+
 # No model call, no secret printed: a sentinel in the environment must never
 # appear in the script's output or stderr.
 secret="sentinel-run-review-secret-98765"

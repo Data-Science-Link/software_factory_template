@@ -1,0 +1,3 @@
+read tool call .factory/FACTORY.md
+read tool call scripts/factory-run-review.py
+bash tool call git status

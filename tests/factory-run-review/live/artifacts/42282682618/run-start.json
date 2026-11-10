@@ -1,0 +1,10 @@
+{
+  "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "model_id": "DeepSeek-V4-Flash-0731",
+  "routed_rule": "default for all other factory worker runs -> V4 Flash",
+  "route_reason": "default standard code run",
+  "predicted_cost_usd": 0.011,
+  "cap_usd": 1.0,
+  "run_id": "42282682618",
+  "issue_number": 136
+}
