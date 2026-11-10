@@ -129,8 +129,27 @@ log="$OC_ARTIFACT_DIR/opencode.log"
 : >"$log"
 timeout_s="${OC_SPEC_TIMEOUT:-720}"
 case "$timeout_s" in '' | *[!0-9]*) timeout_s=720 ;; esac
+# #31: the spec run's own start state for factory-run-record.py (model, spec-run prediction, cap).
+# Prior issue spend is not read here (no token in this step): records say 0 for spec runs.
+python3 - "$OC_ARTIFACT_DIR/run-start.json" "$model" "$preflight" <<'PY' || true
+import json, os, sys
+kv = dict(l.split("=", 1) for l in sys.argv[3].splitlines() if "=" in l)
+run = "gha-%s-%s" % (os.environ.get("GITHUB_RUN_ID", "0"), os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
+json.dump({"run_id": run, "model_id": sys.argv[2], "model": "deepinfra/" + sys.argv[2],
+           "predicted_cost_usd": float(kv.get("predicted_spec_run_usd", 0) or 0),
+           "cap_usd": float(kv.get("cap_usd", 0) or 0), "prior_spend_usd": 0,
+           "risk_class": kv.get("risk_class", "high"), "kind": "spec"},
+          open(sys.argv[1], "w"), indent=2, sort_keys=True)
+PY
+# #31: run metering (key-spend snapshot before/after, sanitized session exports for run end).
+# Copies saved before the worker starts, so a worker edit to scripts/ can't change what runs.
+meter_dir="$(mktemp -d)"
+cp "scripts/opencode-run-meter.sh" "scripts/deepinfra-cost.sh" "$meter_dir/"
+meter() { OC_METER_COST_SH="$meter_dir/deepinfra-cost.sh" bash "$meter_dir/opencode-run-meter.sh" "$@" || true; }
+meter start .
 rc=0
 timeout -k 10 "$timeout_s" opencode run --pure --format default --model "deepinfra/${model}" "$prompt" >>"$log" 2>&1 || rc=$?
+meter end .
 [ "$rc" -eq 0 ] || echo "spec-run: opencode exited $rc (124 = stopped at the ${timeout_s}s limit); see opencode.log" >&2
 
 tree_note="unchanged"

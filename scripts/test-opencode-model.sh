@@ -26,7 +26,7 @@ QWEN=Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
 mkdir -p "$work/bin"
 cat >"$work/bin/opencode" <<'FAKE'
 #!/usr/bin/env bash
-if [ "$1" = stats ]; then exit 0; fi
+case "$1" in stats | session | export) exit 0 ;; esac  # #31: the run meter calls session/export
 prev=''
 for a in "$@"; do [ "$prev" = --model ] && echo "$a" >>"$FAKE_MODEL_LOG"; prev="$a"; done
 mkdir -p factory/x && echo hello >factory/x/model-test.md

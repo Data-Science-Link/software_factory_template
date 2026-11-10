@@ -49,6 +49,23 @@ cost_method=$(jq -r '.cost_method' "$run_record_path")
 
 # Format the cost line to match the existing publish Cost: style
 cost_line="Cost: \$${actual_cost_usd} on DeepInfra (factory run record; ${cost_method})"
+# #31: fix runs rewrite the block for the latest run, so also show the issue total so far.
+issue_total=$(jq -r '.issue_spend_to_date_usd // empty' "$run_record_path")
+if [ -n "$issue_total" ] && [ "$issue_total" != "$actual_cost_usd" ]; then
+  cost_line="${cost_line}; issue total so far \$${issue_total}"
+fi
+
+# One Gate line (#31): the old filter printed nothing when every gate was "skip" and one line per
+# pass/fail pair otherwise, which broke the block.
+gate_filter='if (.gate | type) == "object" then
+    ([.gate | to_entries[] | select(.value == "pass") | .key] | join(", ")) as $p
+  | ([.gate | to_entries[] | select(.value == "fail") | .key] | join(", ")) as $f
+  | ([.gate | to_entries[] | select(.value == "skip")] | length) as $s
+  | ([.gate | to_entries[]] | length) as $n
+  | (if (.risk // "") == "" then "" else "; risk \(.risk)" + (if .risk == "trivial" then "" else ": owner product gate required" end) end) as $r
+  | if $n > 0 and $s == $n then "not run (no gate checks wired yet)\($r)"
+    else "\(if .gate_passed == true then "passed" else "not passed" end) (pass: \(if $p == "" then "none" else $p end); fail: \(if $f == "" then "none" else $f end); skipped: \($s))\($r)" end
+  else (.gate | tostring) end'
 
 # Generate the new factory-run block content
 # We'll construct this based on the PR template structure
@@ -62,8 +79,9 @@ Actual cost: \$${actual_cost_usd}
 Cost method: ${cost_method}
 Key spend check: $(jq -r '.cost_check' "$run_record_path")
 Actions minutes: $(jq -r '.actions_minutes' "$run_record_path")
-Gate: $(jq -r 'if .gate and (.gate | type) == "object" then "passed: \(.gate | to_entries[] | select(.value == \"pass\") | .key) failed: \(.gate | to_entries[] | select(.value == \"fail\") | .key)" else (.gate | tostring) end' "$run_record_path")
-Run record: $run_record_path
+Gate: $(jq -r "$gate_filter" "$run_record_path")
+Spec: $(jq -r '.spec_path // "none"' "$run_record_path")
+Run record: ${OC_RUN_RECORD_URL:-$run_record_path}
 EOF
 )
 
