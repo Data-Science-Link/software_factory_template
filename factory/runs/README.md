@@ -20,6 +20,15 @@ Only **`scripts/factory-run-end.sh`** (the run end step on the Actions worker) w
 
 This directory on `main` holds **only this README** until real runs land; do not commit example records here (fixtures live under `tests/run-records/`).
 
+## How `/oc` runs record themselves (#31)
+
+Every `/oc spec`, `/oc` (build) and `/oc fix` run that reaches the worker gets a record, success or not:
+
+1. **Agent job** (holds the DeepInfra key): `scripts/opencode-run-meter.sh`, called by the agent script around `opencode run` from a copy saved before the worker starts, writes `run-clock.json`, `usage/session-N.json` (`opencode export --sanitize`) and `key-spend.json` (the key's month-to-date spend from DeepInfra before and after) to `$OC_RECORD_DIR`. Key spend needs the repo **variable** `FACTORY_DEEPINFRA_KEY_NAME` (the Actions key's name, not a secret); without it the record says `cost_check: skipped_unavailable`. `scripts/factory-run-pack.sh` adds `run-start.json`, `spec.md` and `fix-meta.txt`, scans everything (an export with a scan hit is dropped) and the job uploads `oc-record-<run>`.
+2. **Record job** (no key; default-branch scripts): `scripts/factory-run-finish.sh` runs `factory-run-end.sh` (tokens x price table, checked against the key-spend delta; `concurrent` when another `/oc` run overlapped), posts the record on the issue under `<!-- factory-run-record -->` (once per run attempt; run start reads these for the issue's prior spend), and on a build or fix PR rewrites the factory-run block and `Cost:` line (`scripts/factory-run-body.sh`).
+
+For now the record lives on the issue and as the `oc-run-record-<run>-<attempt>` artifact; committing `factory/runs/<run_id>.json` on the PR branch (place 1 above) is not wired yet.
+
 ## Validation
 
 Use a virtualenv (PEP 668–safe; do not rely on `pip install` into the system Python):
