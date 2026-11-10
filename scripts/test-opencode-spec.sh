@@ -29,13 +29,47 @@ if [ "$(draft model)" = deepseek-ai/DeepSeek-V4-Pro-0813 ] && draft preflight | 
 else bad "model / preflight"; fi
 printf '# Issue #64\n\ndbt hygiene: disable anonymous stats.\n' >"$work/ctx-normal.md"
 printf '# Issue #134\n\n## Budget\n- Risk: **high**, complexity: **standard**\n' >"$work/ctx-high.md"
-pf_normal="$(draft preflight --context "$work/ctx-normal.md" --guidance="keep it small")"
-if grep -qx 'model=deepseek-ai/DeepSeek-V4-Flash-0731' <<<"$pf_normal" && grep -qx 'risk_class=not_high' <<<"$pf_normal" \
-  && [ "$(draft model --context "$work/ctx-high.md")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
-  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="risk: high")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
-  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="-x high-risk change")" = deepseek-ai/DeepSeek-V4-Pro-0813 ]; then
-  ok "model: issue without high risk -> V4 Flash rule 9; 'Risk: high' in the issue or guidance -> V4 Pro rule 2"
-else bad "model: risk-based spec routing"; echo "$pf_normal"; fi
+# #153: risk comes from the issue's labels (issue-labels.txt beside the context) or a leading
+# `risk: high` guidance token, never from prose. Label lists: normal issue, risk:high issue.
+mkdir -p "$work/lbl-none" "$work/lbl-high" "$work/lbl-missing"
+printf 'priority:low\n' >"$work/lbl-none/issue-labels.txt"; printf 'priority:low\nrisk:high\n' >"$work/lbl-high/issue-labels.txt"
+cp "$work/ctx-normal.md" "$work/lbl-none/issue-context.md"; cp "$work/ctx-normal.md" "$work/lbl-high/issue-context.md"
+cp "$work/ctx-normal.md" "$work/lbl-missing/issue-context.md"
+# Normal-risk issue whose title and body say HIGH_RISK / high-risk / "risk high" (prose, #153's own case).
+printf '## Issue #153: /oc spec HIGH_RISK free-text match forces V4 Pro\n\nA high-risk misroute: "risk high" in prose. Risk: **high** in the body.\n' >"$work/lbl-none/ctx-prose.md"
+FLASH=deepseek-ai/DeepSeek-V4-Flash-0731; PRO=deepseek-ai/DeepSeek-V4-Pro-0813
+pf_normal="$(draft preflight --context "$work/lbl-none/issue-context.md" --guidance="keep it small")"
+if grep -qx "model=$FLASH" <<<"$pf_normal" && grep -qx 'risk_class=not_high' <<<"$pf_normal"; then
+  ok "model: normal issue (no risk label), plain guidance -> V4 Flash rule 9"
+else bad "model: normal issue routing"; echo "$pf_normal"; fi
+if [ "$(draft model --context "$work/lbl-none/issue-context.md" --guidance="remember the risk high heading rules from #152")" = "$FLASH" ] \
+  && [ "$(draft model --context "$work/lbl-none/issue-context.md" --guidance="-x high-risk change; Risk: high in the issue")" = "$FLASH" ] \
+  && [ "$(draft model --context "$work/lbl-none/issue-context.md" --guidance="note: risk: high later in the text")" = "$FLASH" ]; then
+  ok "model: free-text 'risk high' / 'high-risk' / later 'risk: high' in guidance -> V4 Flash (prose is inert, #153)"
+else bad "model: free-text guidance must not route to Pro"; fi
+if [ "$(draft model --context "$work/lbl-none/ctx-prose.md" --labels "$work/lbl-none/issue-labels.txt")" = "$FLASH" ] \
+  && [ "$(draft model --context "$work/ctx-high.md" --labels "$work/lbl-none/issue-labels.txt")" = "$FLASH" ]; then
+  ok "model: normal-risk issue whose title/body say HIGH_RISK / 'Risk: high' -> V4 Flash"
+else bad "model: issue prose must not route to Pro"; fi
+if [ "$(draft model --context "$work/lbl-high/issue-context.md" --guidance="keep it small")" = "$PRO" ] \
+  && [ "$(draft model --context "$work/lbl-none/issue-context.md" --guidance="risk: high")" = "$PRO" ] \
+  && [ "$(draft model --context "$work/lbl-none/issue-context.md" --guidance="risk:HIGH, and keep it small")" = "$PRO" ] \
+  && draft preflight --context "$work/lbl-high/issue-context.md" | grep -qx 'risk_class=high'; then
+  ok "model: risk:high label on the issue, or guidance starting with 'risk: high' -> V4 Pro rule 2"
+else bad "model: structured high-risk signal"; fi
+if [ "$(draft model --guidance="keep it small")" = "$PRO" ] && [ "$(draft model --context "$work/nonexistent.md")" = "$PRO" ] \
+  && [ "$(draft model --context "$work/lbl-missing/issue-context.md")" = "$PRO" ]; then
+  ok "model: no issue context, or no label list -> V4 Pro (fail closed)"
+else bad "model: fail-closed fallback"; fi
+# The context step writes the issue's labels from the API (gh issue object shape).
+printf '{"issue": {"number": 9, "title": "t", "body": "b", "labels": [{"name": "risk:high"}, {"name": "priority:low"}]}, "comments": []}' >"$work/lbl.json"
+printf '{"issue": {"number": 9, "title": "risk high", "body": "b", "labels": []}, "comments": []}' >"$work/lbl0.json"
+"$py" scripts/opencode-build-context.py --from-json "$work/lbl.json" --issue 9 --out-dir "$work/lblout" >/dev/null
+"$py" scripts/opencode-build-context.py --from-json "$work/lbl0.json" --issue 9 --out-dir "$work/lblout0" >/dev/null
+if [ "$(cat "$work/lblout/issue-labels.txt")" = "$(printf 'risk:high\npriority:low')" ] && [ ! -s "$work/lblout0/issue-labels.txt" ] \
+  && [ "$(draft model --context "$work/lblout/issue-context.md")" = "$PRO" ] && [ "$(draft model --context "$work/lblout0/issue-context.md")" = "$FLASH" ]; then
+  ok "context step writes issue-labels.txt from the API; label routes, title prose does not"
+else bad "context step labels file"; fi
 "$py" - "$work/models-big.yaml" <<'PY'
 import sys, yaml
 d = yaml.safe_load(open(".factory/models.yaml"))
@@ -72,6 +106,7 @@ wrap() { { echo "Here is the spec."; cat "$1"; echo "<!-- end factory-spec -->";
 specrun() { # name out-file [cost] [instruction] -> rc; artifacts in $work/<name>
   local art="$work/$1"; rm -rf "$art"; mkdir -p "$art"
   printf '# Issue #7\n\nBuild the hello doc.\n' >"$art/issue-context.md"
+  : >"$art/issue-labels.txt"
   set +e
   (cd "$repo" && env PATH="$work/bin:$PATH" DEEPINFRA_API_KEY=fake-key-123 GH_TOKEN= GITHUB_TOKEN= \
     OC_INSTRUCTION="${4:-/oc spec keep it tiny}" OC_ISSUE_NUMBER=7 OC_ARTIFACT_DIR="$art" FAKE_OC_OUT="$2" \
@@ -162,7 +197,7 @@ if grep -q '^- Review: Michael (risk high)' "$work/high/spec-comment.md" && grep
 else bad "build: high-risk reviewer"; head -8 "$work/high/spec-comment.md"; fi
 hc="$work/high/spec-comment.md"
 if sed -n 2p "$hc" | grep -q "^\*\*Over \$0\.15 target: needs Michael's approval\*\* (predicted build \$0\.1900)" \
-  && grep -q '^- Note: the issue did not say high risk, so this spec run used deepseek-ai/DeepSeek-V4-Flash-0731' "$hc" \
+  && grep -q '^- Note: the issue has no risk:high label, so this spec run used deepseek-ai/DeepSeek-V4-Flash-0731' "$hc" \
   && ! grep -q '^over_target_approved_by:' "$hc" && ! grep -q 'Over \$0.15 target' "$work/good/spec-comment.md"; then
   ok "build: build prediction over the \$0.15 target -> top line 'needs Michael's approval'; Flash-drafted high risk noted"
 else bad "build: over-target line / Flash note"; head -14 "$hc"; fi

@@ -28,7 +28,9 @@ unset GITHUB_TOKEN GH_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQU
 if [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then echo "spec-run: a GitHub token is still set; refusing" >&2; exit 1; fi
 
 # Model and cost guard come from the owner-only models.yaml, before any spend. Rule 2 (V4 Pro) when
-# the issue context or the guidance says high risk (or there is no context), else rule 9 (V4 Flash).
+# a structured signal says high risk (#153: the issue's risk:high label in issue-labels.txt beside the
+# context, or guidance starting with `risk: high`; prose never routes), or when there is no context
+# or label list (fail closed); else rule 9 (V4 Flash).
 context_file="$OC_ARTIFACT_DIR/issue-context.md"
 preflight="$(python3 scripts/opencode-spec-draft.py preflight --context "$context_file" --guidance="$guidance")" || exit 1
 model="$(sed -n 's/^model=//p' <<<"$preflight")"
