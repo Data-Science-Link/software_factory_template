@@ -104,6 +104,15 @@ else bad "prompt: embedded template / dot-dir rules (#125)"; fi
 if grep -qF 'No exclusion' <<<"$pp" && grep -qF 'under "## Out of scope", in plain words' <<<"$pp"; then
   ok "prompt: Files lists exact paths only; exclusions go under Out of scope (#64)"
 else bad "prompt: Files exact-paths rule (#64)"; fi
+# #149: required headings (incl. risk-high Test plan detail), HTML ban + code-span markers, no failure-hiding pipes.
+if grep -qF 'Read these harness rules FIRST' <<<"$pp" \
+  && grep -qF 'Test plan detail (broken case shown blocked)' <<<"$pp" \
+  && grep -qF 'risk high alone is enough' <<<"$pp" \
+  && grep -qF 'No HTML comments in prose' <<<"$pp" \
+  && grep -qF 'backtick code span or a fenced code block' <<<"$pp" \
+  && grep -qF 'never pipe a checked command into head, tail, or grep -q' <<<"$pp"; then
+  ok "prompt: #149 required sections, HTML/code-span markers, no failure-hiding pipes"
+else bad "prompt: #149 rules"; fi
 
 # Good draft: normalized to a draft, prediction filled by script, reviewer from risk.
 wrap tests/oc-spec/good-spec.md "$work/out-good.txt"
@@ -172,6 +181,26 @@ wrap "$work/html.md" "$work/out-html.txt"
 specrun html "$work/out-html.txt"
 if grep -q 'HTML comments are not allowed' "$work/html/spec-comment.md"; then ok "build: HTML comment in the draft -> refused"
 else bad "build: html comment"; fi
+# #149: the same marker string inside a code span is allowed (build can copy exact text).
+sed 's|^## Context$|## Context\nUse the exact marker `<!-- factory-run:start -->` from opencode-run-facts.sh.|' \
+  tests/oc-spec/good-spec.md >"$work/htmlok.md"
+wrap "$work/htmlok.md" "$work/out-htmlok.txt"
+specrun htmlok "$work/out-htmlok.txt"
+if [ "$(head -n 1 "$work/htmlok/spec-comment.md")" = '<!-- factory-spec-draft v1 -->' ] \
+  && grep -qF '<!-- factory-run:start -->' "$work/htmlok/spec-comment.md" \
+  && ! grep -q 'HTML comments are not allowed' "$work/htmlok/spec-comment.md"; then
+  ok "build: HTML marker inside backtick code span -> accepted (#149)"
+else bad "build: HTML in code span (#149)"; head -20 "$work/htmlok/spec-comment.md"; fi
+# #149: Verification | head without pipefail is refused.
+sed '/^```bash$/,/^```$/c\
+```bash\
+bash scripts/test-run-body.sh | head -1\
+```' tests/oc-spec/good-spec.md >"$work/pipe.md"
+wrap "$work/pipe.md" "$work/out-pipe.txt"
+specrun pipe "$work/out-pipe.txt"
+if grep -q 'pipes into head/tail/grep -q without pipefail' "$work/pipe/spec-comment.md"; then
+  ok "build: Verification | head without pipefail -> refused (#149)"
+else bad "build: Verification pipe (#149)"; head -20 "$work/pipe/spec-comment.md"; fi
 sed 's/^Issue #7 asks for a hello doc.$/Issue #7 asks for a hello doc; ping @someone. Mail a@b.example is fine./' tests/oc-spec/good-spec.md >"$work/at.md"
 wrap "$work/at.md" "$work/out-at.txt"
 specrun at "$work/out-at.txt"

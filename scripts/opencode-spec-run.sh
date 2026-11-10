@@ -55,19 +55,29 @@ names, and one existing spec in factory/specs/ as an example. Never read, print 
 variables or keys.
 
 Write ONE spec that follows the template below exactly: the same front matter keys and the same
-"## " headings, in order. Rules the harness checks (a draft that fails them is not posted):
-- factory-spec-check.py must pass: all base headings; for standard/complex or normal/high also
-  "Design / approach", "Risks, rollback and revert trigger", "What changes in production on
-  merge" and "Success metric (baseline, target, how measured)"; for complex or high also
-  "Alternatives considered", "Test plan detail (broken case shown blocked)", "Security and
-  liability review" and "Milestones / split plan".
+"## " headings, in order. Read these harness rules FIRST (a draft that fails them is not posted;
+the first draft of #135 wasted $0.12 on two of them):
+- Required "## " headings up front: every draft needs the base headings in the template
+  (Outcome through Worker prompt). When complexity is standard/complex OR risk is normal/high,
+  also include "Design / approach", "Risks, rollback and revert trigger", "What changes in
+  production on merge" and "Success metric (baseline, target, how measured)". When complexity
+  is complex OR risk is high (risk high alone is enough), also include "Alternatives
+  considered", "Test plan detail (broken case shown blocked)", "Security and liability review"
+  and "Milestones / split plan". Missing "## Test plan detail (broken case shown blocked)" on a
+  high-risk issue fails the draft.
+- No HTML comments in prose: delete the template's <!-- --> notes. A raw <!-- anywhere in
+  ordinary text fails the draft. To quote an exact literal marker or string the build must
+  copy (for example a PR-body HTML comment), put the exact characters inside a backtick code
+  span or a fenced code block — those are allowed so the build does not guess the spelling.
+- "## Verification": exactly one \`\`\`bash block of fast commands (the build harness runs it in a
+  sandbox with an empty environment after the worker; HEAD~1 is the base; no origin remote;
+  the harness already enables pipefail), then a line starting "Expected:" with the expected
+  output. Do not hide failures: never pipe a checked command into head, tail, or grep -q
+  unless the block also has set -o pipefail (prefer printing full output instead).
 - Front matter: issue: ${OC_ISSUE_NUMBER}, status: draft, drafted_by: oc-spec-run, plain or
   single-quoted values, never backslash-escaped quotes. Pick complexity (simple|standard|complex),
   risk (trivial|normal|high) and work_type (code|docs|data) honestly. Leave model, model_reason,
   predicted_* and price_table_version as in the template: the harness fills them.
-- "## Verification": exactly one \`\`\`bash block of fast commands (the build harness runs it in a
-  sandbox with an empty environment after the worker; HEAD~1 is the base; no origin remote),
-  then a line starting "Expected:" with the expected output.
 - "## Files": only exact repository paths the build creates, changes, or reads first, one
   backticked path per bullet (e.g. "- Create: \`scripts/new-check.sh\`"). No exclusion
   sentences and no directories or files the worker must not touch: the checker reads every path
@@ -75,7 +85,7 @@ Write ONE spec that follows the template below exactly: the same front matter ke
   not to touch under "## Out of scope", in plain words, not as Files entries.
 - "## Worker prompt": start "Read issue #${OC_ISSUE_NUMBER} and \`.factory/FACTORY.md\` first"; end "Fill the
   PR template; tick only what you proved".
-- No HTML comments (delete the template's <!-- --> notes), no @mentions, under 30 KB.
+- No @mentions, under 30 KB.
 - Never plan a change the build worker's path policy forbids (below); put it under "## Manual
   steps for Michael" instead. Keep the work to one PR of about 300 changed lines or less; if it
   is bigger, say so in the spec and plan a split.

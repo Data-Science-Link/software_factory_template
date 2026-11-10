@@ -205,14 +205,28 @@ def fill_prediction(head: list[str], fm: list[str], tail: list[str], models: Pat
     return fm, pred, ""
 
 
+def prose_without_code(text: str) -> str:
+    """Drop fenced code blocks and inline `code` spans so literal markers may appear there (#149)."""
+    # Fenced blocks first (```lang? ... ```), then single-line inline spans.
+    out = re.sub(r"^```[^\n]*\n.*?^```[ \t]*$", "", text, flags=re.M | re.S)
+    out = re.sub(r"`[^`\n]+`", "", out)
+    return out
+
+
 def checks(spec: str, issue: str) -> list[str]:
     """Problems that stop a draft from being posted. Empty list = all checks passed."""
     sc = load("spec_check", "factory-spec-check.py")
     errors = list(sc.validate_text(sc.strip_comment_wrapper(spec)))
     if len(spec.encode()) > MAX_SPEC_BYTES:
         errors.append(f"spec is {len(spec.encode())} bytes (limit {MAX_SPEC_BYTES})")
-    if "<!--" in spec.split("\n", 1)[1]:
-        errors.append("HTML comments are not allowed in a draft (remove the template's <!-- --> notes)")
+    # HTML comments are banned in prose (template notes leak otherwise). Exact marker strings may
+    # sit in backtick code spans or fenced code blocks so the build can copy them (#149).
+    after_first = spec.split("\n", 1)[1] if "\n" in spec else ""
+    if "<!--" in prose_without_code(after_first):
+        errors.append(
+            "HTML comments are not allowed in a draft (remove the template's <!-- --> notes; "
+            "put literal markers inside backtick code spans or a fenced code block)"
+        )
     if re.search(r"(?<![\w.`/@-])@[A-Za-z][\w-]*", spec):
         errors.append("@mentions are not allowed in a draft (the bot would notify people)")
     if END in spec or DRAFT_TAG in spec or FAILED_TAG in spec:
@@ -221,6 +235,14 @@ def checks(spec: str, issue: str) -> list[str]:
     block = re.search(r"^```(bash|sh)[ \t]*\n(.*?)^```[ \t]*$", ver, re.M | re.S)
     if not block or not block.group(2).strip():
         errors.append("## Verification has no ```bash block with commands")
+    else:
+        cmds = block.group(2)
+        # Piping into head/tail/grep -q hides a failing left-hand command unless pipefail is on (#149).
+        if re.search(r"\|\s*(head|tail|grep\b[^\n]*-q)", cmds) and "pipefail" not in cmds:
+            errors.append(
+                "## Verification pipes into head/tail/grep -q without pipefail "
+                "(those mask exit codes; use set -o pipefail or print full output)"
+            )
     if not re.search(r"expect", ver, re.I):
         errors.append("## Verification does not state the expected output")
     files = re.sub(r"\s+", "", section(spec, "Files"))
@@ -356,7 +378,7 @@ def cmd_build(a: argparse.Namespace) -> int:
                 f"- Build run prediction (factory-predict-cost.py): {pred['model']}, ${pred['predicted_cost_usd']:.4f} "
                 f"(cap ${float(pred['budget_cap_usd']):.2f})",
                 "- Checks (scripts): factory-spec-check.py passed; Verification has a bash block and expected output; "
-                "Files and Worker prompt filled; no HTML comments",
+                "Files and Worker prompt filled; no HTML comments in prose (code spans/fences OK)",
                 run_line, run_url]
         if risk == "high" and not high:
             body.append(f"- Note: the issue did not say high risk, so this spec run used {run_model} ({rule}); "
