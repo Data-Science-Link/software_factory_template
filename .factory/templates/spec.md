@@ -7,15 +7,15 @@ complexity: simple
 complexity_reason: one line
 risk: trivial
 work_type: code
-model: deepseek-ai/DeepSeek-V4-Flash-0731
+model:
 model_override_reason:  # leave empty to let factory-predict-cost.py route the model; fill only to keep model as an owner override
-model_reason: default for simple code
-predicted_tokens_in: 300000
-predicted_tokens_cached: 240000
-predicted_tokens_out: 20000
-predicted_cost_usd: 0.011
+model_reason:
+predicted_tokens_in:
+predicted_tokens_cached:
+predicted_tokens_out:
+predicted_cost_usd:
 budget_cap_usd: 1.00
-price_table_version: 2026-11-01
+price_table_version: 2026-11-02
 approved_by: null
 approved_at: null
 drafted_by: grok-bot

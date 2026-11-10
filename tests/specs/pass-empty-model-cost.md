@@ -1,0 +1,45 @@
+---
+spec_version: 1
+issue: 1
+title: Empty model and cost fixture
+status: approved
+complexity: simple
+complexity_reason: test
+risk: trivial
+work_type: docs
+model:
+model_reason:
+predicted_tokens_in:
+predicted_tokens_cached:
+predicted_tokens_out:
+predicted_cost_usd:
+budget_cap_usd: 1.00
+price_table_version: 2026-11-01
+approved_by: grok-bot (simple+trivial)
+approved_at: 2026-11-02T12:00:00Z
+drafted_by: grok-bot
+---
+## Outcome
+x
+## Context
+x
+## Scope
+x
+## Out of scope
+x
+## Files
+x
+## Acceptance criteria
+x
+## Verification
+x
+## Classification
+x
+## Cost forecast
+x
+## Manual steps for Michael
+x
+## Dependencies
+x
+## Worker prompt
+Read issue #1 and `.factory/FACTORY.md` first. Fill the PR template; tick only what you proved.
