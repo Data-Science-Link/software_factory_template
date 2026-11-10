@@ -1,0 +1,155 @@
+{
+  "info": {
+    "id": "ses_live_fix_42290239999",
+    "slug": "live-fix",
+    "projectID": "global",
+    "directory": "[redacted:session-directory]",
+    "path": "",
+    "title": "[redacted:session-title]",
+    "agent": "build",
+    "model": {
+      "id": "DeepSeek-V4-Flash-0731",
+      "providerID": "deepinfra",
+      "variant": "default"
+    },
+    "version": "1.19.5",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0.002,
+    "tokens": {
+      "input": 20000,
+      "output": 500,
+      "reasoning": 0,
+      "cache": {
+        "read": 40000,
+        "write": 0
+      }
+    },
+    "permission": [
+      {
+        "permission": "question",
+        "pattern": "*",
+        "action": "deny"
+      }
+    ],
+    "time": {
+      "created": 1769061000000,
+      "updated": 1769061001000
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1769061000100
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "deepinfra",
+          "modelID": "DeepSeek-V4-Flash-0731"
+        },
+        "summary": {
+          "diffs": []
+        },
+        "id": "msg_live_fix_1",
+        "sessionID": "ses_live_fix_42290239999"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "[redacted:text]",
+          "id": "prt_live_fix_1",
+          "sessionID": "ses_live_fix_42290239999",
+          "messageID": "msg_live_fix_1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_live_fix_1",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "[redacted:cwd]",
+          "root": "[redacted:root]"
+        },
+        "cost": 0.002,
+        "tokens": {
+          "total": 60500,
+          "input": 20000,
+          "output": 500,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 40000
+          }
+        },
+        "modelID": "DeepSeek-V4-Flash-0731",
+        "providerID": "deepinfra",
+        "time": {
+          "created": 1769061000200,
+          "completed": 1769061000300
+        },
+        "finish": "stop",
+        "id": "msg_live_fix_2",
+        "sessionID": "ses_live_fix_42290239999"
+      },
+      "parts": [
+        {
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-start",
+          "id": "prt_live_fix_2",
+          "sessionID": "ses_live_fix_42290239999",
+          "messageID": "msg_live_fix_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_live_fix_1",
+          "state": {
+            "status": "completed",
+            "input": {
+              "redacted": "tool-input"
+            },
+            "output": "[redacted:tool-output]",
+            "metadata": {
+              "redacted": "tool-state-metadata"
+            },
+            "title": "[redacted:tool-title]",
+            "time": {
+              "start": 1769061000220,
+              "end": 1769061000230
+            }
+          },
+          "id": "prt_live_fix_3",
+          "sessionID": "ses_live_fix_42290239999",
+          "messageID": "msg_live_fix_2"
+        },
+        {
+          "reason": "stop",
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-finish",
+          "tokens": {
+            "total": 60500,
+            "input": 20000,
+            "output": 500,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 40000
+            }
+          },
+          "cost": 0.002,
+          "id": "prt_live_fix_4",
+          "sessionID": "ses_live_fix_42290239999",
+          "messageID": "msg_live_fix_2"
+        }
+      ]
+    }
+  ]
+}

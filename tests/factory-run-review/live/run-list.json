@@ -1,0 +1,38 @@
+[
+  {
+    "databaseId": 42282682618,
+    "workflowName": "opencode-spike",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-09T09:00:00.000Z",
+    "updatedAt": "2026-11-09T09:08:30.000Z",
+    "headBranch": "main"
+  },
+  {
+    "databaseId": 42290239999,
+    "workflowName": "opencode-fix",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-09T18:00:00.000Z",
+    "updatedAt": "2026-11-09T18:06:00.000Z",
+    "headBranch": "oc/issue-136-42282682618"
+  },
+  {
+    "databaseId": 42291111111,
+    "workflowName": "opencode-spec",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-08T12:00:00.000Z",
+    "updatedAt": "2026-11-08T12:03:00.000Z",
+    "headBranch": "main"
+  },
+  {
+    "databaseId": 42293333333,
+    "workflowName": "opencode-spike",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-10T08:00:00.000Z",
+    "updatedAt": "2026-11-10T08:07:00.000Z",
+    "headBranch": "main"
+  }
+]

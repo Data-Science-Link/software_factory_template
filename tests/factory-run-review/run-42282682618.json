@@ -1,0 +1,302 @@
+{
+  "run_id": 42282682618,
+  "workflow": "opencode",
+  "status": "completed",
+  "conclusion": "timed_out",
+  "model": "deepseek-ai/DeepSeek-V4-Pro-0731",
+  "routing_rule": "standard code -> V4 Pro",
+  "created_at": "2026-11-08T14:00:00.000Z",
+  "updated_at": "2026-11-08T14:13:00.000Z",
+  "wall_time_seconds": 780,
+  "timeout": true,
+  "opencode_export": {
+    "info": {
+      "id": "ses_v4pro_timeout_42282682618",
+      "slug": "v4pro-timeout",
+      "projectID": "global",
+      "directory": "[redacted:session-directory]",
+      "path": "",
+      "title": "[redacted:session-title]",
+      "agent": "build",
+      "model": {
+        "id": "DeepSeek-V4-Pro-0731",
+        "providerID": "deepinfra",
+        "variant": "default"
+      },
+      "version": "1.19.5",
+      "summary": {
+        "additions": 0,
+        "deletions": 0,
+        "files": 0
+      },
+      "cost": 0.37,
+      "tokens": {
+        "input": 400000,
+        "output": 9000,
+        "reasoning": 240000,
+        "cache": {
+          "read": 800000,
+          "write": 0
+        }
+      },
+      "permission": [
+        {
+          "permission": "question",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "plan_enter",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "plan_exit",
+          "pattern": "*",
+          "action": "deny"
+        }
+      ],
+      "time": {
+        "created": 1769016000000,
+        "updated": 1769016780000
+      }
+    },
+    "messages": [
+      {
+        "info": {
+          "role": "user",
+          "time": {
+            "created": 1769016001000
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "deepinfra",
+            "modelID": "DeepSeek-V4-Pro-0731"
+          },
+          "summary": {
+            "diffs": []
+          },
+          "id": "msg_v4pro_timeout_1",
+          "sessionID": "ses_v4pro_timeout_42282682618"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "[redacted:text]",
+            "id": "prt_v4pro_timeout_1",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_1"
+          }
+        ]
+      },
+      {
+        "info": {
+          "parentID": "msg_v4pro_timeout_1",
+          "role": "assistant",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "[redacted:cwd]",
+            "root": "[redacted:root]"
+          },
+          "cost": 0.12,
+          "tokens": {
+            "total": 483000,
+            "input": 130000,
+            "output": 3000,
+            "reasoning": 80000,
+            "cache": {
+              "write": 0,
+              "read": 270000
+            }
+          },
+          "modelID": "DeepSeek-V4-Pro-0731",
+          "providerID": "deepinfra",
+          "time": {
+            "created": 1769016002000,
+            "completed": 1769016005000
+          },
+          "finish": "tool-calls",
+          "id": "msg_v4pro_timeout_2",
+          "sessionID": "ses_v4pro_timeout_42282682618"
+        },
+        "parts": [
+          {
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-start",
+            "id": "prt_v4pro_timeout_2",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_2"
+          },
+          {
+            "type": "tool",
+            "tool": "read",
+            "callID": "call_v4pro_1",
+            "state": {
+              "status": "completed",
+              "input": {
+                "redacted": "tool-input"
+              },
+              "output": "[redacted:tool-output]",
+              "metadata": {
+                "redacted": "tool-state-metadata"
+              },
+              "title": "[redacted:tool-title]",
+              "time": {
+                "start": 1769016003800,
+                "end": 1769016003900
+              }
+            },
+            "id": "prt_v4pro_timeout_3",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_2"
+          },
+          {
+            "reason": "tool-calls",
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-finish",
+            "tokens": {
+              "total": 483000,
+              "input": 130000,
+              "output": 3000,
+              "reasoning": 80000,
+              "cache": {
+                "write": 0,
+                "read": 270000
+              }
+            },
+            "cost": 0.12,
+            "id": "prt_v4pro_timeout_4",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_2"
+          }
+        ]
+      },
+      {
+        "info": {
+          "parentID": "msg_v4pro_timeout_1",
+          "role": "assistant",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "[redacted:cwd]",
+            "root": "[redacted:root]"
+          },
+          "cost": 0.25,
+          "tokens": {
+            "total": 966000,
+            "input": 270000,
+            "output": 6000,
+            "reasoning": 160000,
+            "cache": {
+              "write": 0,
+              "read": 530000
+            }
+          },
+          "modelID": "DeepSeek-V4-Pro-0731",
+          "providerID": "deepinfra",
+          "time": {
+            "created": 1769016005000,
+            "completed": 1769016780000
+          },
+          "finish": "stop",
+          "id": "msg_v4pro_timeout_3",
+          "sessionID": "ses_v4pro_timeout_42282682618"
+        },
+        "parts": [
+          {
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-start",
+            "id": "prt_v4pro_timeout_5",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_3"
+          },
+          {
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_v4pro_2",
+            "state": {
+              "status": "completed",
+              "input": {
+                "redacted": "tool-input"
+              },
+              "output": "[redacted:tool-output]",
+              "metadata": {
+                "redacted": "tool-state-metadata"
+              },
+              "title": "[redacted:tool-title]",
+              "time": {
+                "start": 1769016006000,
+                "end": 1769016006100
+              }
+            },
+            "id": "prt_v4pro_timeout_6",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_3"
+          },
+          {
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_v4pro_3",
+            "state": {
+              "status": "completed",
+              "input": {
+                "redacted": "tool-input"
+              },
+              "output": "[redacted:tool-output]",
+              "metadata": {
+                "redacted": "tool-state-metadata"
+              },
+              "title": "[redacted:tool-title]",
+              "time": {
+                "start": 1769016060000,
+                "end": 1769016060100
+              }
+            },
+            "id": "prt_v4pro_timeout_7",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_3"
+          },
+          {
+            "reason": "stop",
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-finish",
+            "tokens": {
+              "total": 966000,
+              "input": 270000,
+              "output": 6000,
+              "reasoning": 160000,
+              "cache": {
+                "write": 0,
+                "read": 530000
+              }
+            },
+            "cost": 0.25,
+            "id": "prt_v4pro_timeout_8",
+            "sessionID": "ses_v4pro_timeout_42282682618",
+            "messageID": "msg_v4pro_timeout_3"
+          }
+        ]
+      }
+    ]
+  },
+  "spec_files": [
+    "scripts/factory-run-review.py",
+    "scripts/test-factory-run-review.sh"
+  ],
+  "tool_events": [
+    {"tool": "read", "ts": 1769016002000, "input": ".factory/FACTORY.md"},
+    {"tool": "read", "ts": 1769016003800, "input": "scripts/factory-run-review.py"},
+    {"tool": "bash", "ts": 1769016006000, "input": "git status"},
+    {"tool": "bash", "ts": 1769016060000, "input": "git diff"}
+  ],
+  "blocked_calls": [],
+  "scan": {
+    "result": "pass",
+    "detail": null
+  },
+  "evidence": {
+    "present": true,
+    "label": "harness-verified"
+  }
+}

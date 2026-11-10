@@ -1,0 +1,41 @@
+{
+  "blocked_calls": [],
+  "conclusion": "success",
+  "cost_usd": 0.008,
+  "evidence_label": "harness-verified",
+  "evidence_present": true,
+  "findings": [
+    {
+      "code": "slow_tool_turn",
+      "meaning": "average seconds per tool turn above threshold",
+      "severity": "low"
+    },
+    {
+      "code": "stall",
+      "meaning": "long gap between tool turns",
+      "severity": "low"
+    }
+  ],
+  "longest_gap_seconds": 790.0,
+  "model": "deepseek-ai/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+  "out_of_spec_reads": [],
+  "routing_rule": "trivial/simple code -> Qwen3-Coder",
+  "run_id": 42297659590,
+  "scan_detail": null,
+  "scan_result": "pass",
+  "seconds_per_tool_turn": 395.5,
+  "status": "completed",
+  "timeout_hit": false,
+  "tokens": {
+    "cached": 220000,
+    "in": 310000,
+    "out": 1500,
+    "reasoning": 0
+  },
+  "tool_counts": {
+    "bash": 1,
+    "read": 2
+  },
+  "wall_time_seconds": 840,
+  "workflow": "opencode"
+}

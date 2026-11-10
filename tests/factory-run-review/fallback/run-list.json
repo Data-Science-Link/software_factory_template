@@ -1,0 +1,42 @@
+[
+  {
+    "databaseId": 42709151046,
+    "workflowName": "opencode-spike",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-09T22:08:45Z",
+    "updatedAt": "2026-11-09T22:10:08Z",
+    "headBranch": "main",
+    "displayTitle": "dbt hygiene: disable anonymous stats, split requirements-dbt.txt, fix cost-recompute test filter"
+  },
+  {
+    "databaseId": 42709632565,
+    "workflowName": "opencode-fix",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-09T22:11:46Z",
+    "updatedAt": "2026-11-09T22:13:09Z",
+    "headBranch": "main",
+    "displayTitle": "OpenCode: issue #64 (run 42709151046)"
+  },
+  {
+    "databaseId": 42733844876,
+    "workflowName": "opencode-fix",
+    "status": "completed",
+    "conclusion": "skipped",
+    "createdAt": "2026-11-10T00:00:00Z",
+    "updatedAt": "2026-11-10T00:00:10Z",
+    "headBranch": "main",
+    "displayTitle": "OpenCode: issue #64 (run 42709151046)"
+  },
+  {
+    "databaseId": 42736079295,
+    "workflowName": "opencode-spike",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-10T01:30:00Z",
+    "updatedAt": "2026-11-10T01:38:00Z",
+    "headBranch": "main",
+    "displayTitle": "Deterministic post-merge /oc run-review script"
+  }
+]

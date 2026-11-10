@@ -1,0 +1,46 @@
+{
+  "blocked_calls": [],
+  "conclusion": "timed_out",
+  "cost_usd": 0.37,
+  "evidence_label": "harness-verified",
+  "evidence_present": true,
+  "findings": [
+    {
+      "code": "cost_overrun",
+      "meaning": "run wasted more than $0.10",
+      "severity": "high"
+    },
+    {
+      "code": "run_failed",
+      "meaning": "the workflow run did not complete successfully",
+      "severity": "high"
+    },
+    {
+      "code": "timeout_hit",
+      "meaning": "run hit the wall-clock timeout",
+      "severity": "low"
+    }
+  ],
+  "longest_gap_seconds": 54.0,
+  "model": "deepseek-ai/DeepSeek-V4-Pro-0731",
+  "out_of_spec_reads": [],
+  "routing_rule": "standard code -> V4 Pro",
+  "run_id": 42282682618,
+  "scan_detail": null,
+  "scan_result": "pass",
+  "seconds_per_tool_turn": 19.33,
+  "status": "completed",
+  "timeout_hit": true,
+  "tokens": {
+    "cached": 800000,
+    "in": 1200000,
+    "out": 9000,
+    "reasoning": 240000
+  },
+  "tool_counts": {
+    "bash": 2,
+    "read": 2
+  },
+  "wall_time_seconds": 780,
+  "workflow": "opencode"
+}
