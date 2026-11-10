@@ -267,7 +267,6 @@ def resolve_pr_head(pr_number):
     """Return the PR's head branch name, or None on failure."""
     rc, out = run_gh(
         [
-            "gh",
             "pr",
             "view",
             str(pr_number),
@@ -292,7 +291,6 @@ def list_workflow_runs():
     """
     rc, out = run_gh(
         [
-            "gh",
             "run",
             "list",
             "--json",
@@ -354,7 +352,7 @@ def select_oc_runs(runs, pr_head):
 
 def run_log_text(run_id):
     """Fetch a run's job logs read-only; return text or '' on failure."""
-    rc, out = run_gh(["gh", "run", "view", str(run_id), "--log"])
+    rc, out = run_gh(["run", "view", str(run_id), "--log"])
     if rc != 0:
         return ""
     return out
@@ -537,7 +535,7 @@ def base_run_facts(run, log_text):
 
 def download_run_artifacts(run_id, dest_dir):
     """Download a run's artifacts read-only into dest_dir; True on success."""
-    rc, _ = run_gh(["gh", "run", "download", str(run_id), "--dir", dest_dir])
+    rc, _ = run_gh(["run", "download", str(run_id), "--dir", dest_dir])
     return rc == 0
 
 
@@ -549,7 +547,6 @@ def fetch_runs(args):
         # link is a graceful null result, never a crash.
         rc, out = run_gh(
             [
-                "gh",
                 "api",
                 f"repos/{args.repo}/issues/{args.issue}/timeline",
                 "--paginate",
