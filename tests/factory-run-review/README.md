@@ -67,3 +67,19 @@ model, cost and scan are populated from the artifacts, and that the run
 selection keeps the build run (headBranch `main`) plus the later `opencode-fix`
 run while excluding unrelated `opencode-spec`/build runs. All fixture contents
 are sanitized: no secrets, keys, tokens or env values.
+
+## Run-record fixture (`records/`)
+
+`records/issue-comments.json` is a sanitized copy of a `#31` issue comment
+(`<!-- factory-run-record -->` plus a fenced JSON record). `--live-dir records`
+must select run `42752519540` and populate model, cost, tokens and `gate` from
+the record alone (no `gh`, no workflow artifacts).
+
+## Fallback fixture (`fallback/`)
+
+`fallback/` is the pre-#31 layout: `gh run list` rows whose `headBranch` is
+`main`, a fix run identified by `displayTitle`, and artifacts nested under
+`oc-artifacts-<id>/` / `oc-fix-artifacts-<id>/` as `gh run download --dir`
+writes them. Cost comes from `usage-metrics.md` (`OpenCode-reported cost: $X`);
+scan comes from the `artifact-scan: passed.` log line. Skipped sibling runs and
+unrelated builds stay excluded.

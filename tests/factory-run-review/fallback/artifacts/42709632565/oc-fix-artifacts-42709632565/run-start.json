@@ -1,0 +1,9 @@
+{
+  "cap_usd": 1.0,
+  "model": "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "predicted_cost_usd": 0.0108,
+  "route_reason": "default",
+  "routed_rule": 3,
+  "run_id": "gha-42709632565-1"
+}

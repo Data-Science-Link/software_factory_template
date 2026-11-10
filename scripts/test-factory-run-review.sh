@@ -62,6 +62,57 @@ else
   fi
 fi
 
+# Run-record path: a recorded #31 issue comment is enough to select the run
+# and populate model, cost, tokens and gate without calling gh.
+records_dir="$FIX_DIR/records"
+set +e
+"${REVIEW[@]}" --live-dir "$records_dir" > "$tmpdir/out-records.json" 2>"$tmpdir/err-records.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "run-record parser (script exited non-zero)"
+else
+  rec_ok=1
+  grep -q '"run_id": 42752519540' "$tmpdir/out-records.json" || rec_ok=0
+  grep -q '"model": "deepseek-ai/DeepSeek-V4-Pro-0813"' "$tmpdir/out-records.json" || rec_ok=0
+  grep -q '"cost_usd": 0.088174' "$tmpdir/out-records.json" || rec_ok=0
+  grep -q '"workflow": "opencode-spec"' "$tmpdir/out-records.json" || rec_ok=0
+  grep -q '"gate_passed": false' "$tmpdir/out-records.json" || rec_ok=0
+  if [ "$rec_ok" -eq 1 ]; then
+    note "run-record parser (model/cost/gate from comment)"
+  else
+    fail "run-record parser (model/cost/gate not populated from record)"
+  fi
+fi
+
+# Fallback path: nested `gh run download` layout, cost from usage-metrics.md,
+# scan from the artifact-scan log line, fix run matched by displayTitle while
+# headBranch is main; skipped sibling runs stay excluded.
+fallback_dir="$FIX_DIR/fallback"
+set +e
+"${REVIEW[@]}" --live-dir "$fallback_dir" > "$tmpdir/out-fallback.json" 2>"$tmpdir/err-fallback.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "fallback parser (script exited non-zero)"
+else
+  fb_ok=1
+  grep -q '"run_id": 42709151046' "$tmpdir/out-fallback.json" || fb_ok=0
+  grep -q '"run_id": 42709632565' "$tmpdir/out-fallback.json" || fb_ok=0
+  grep -q '"run_id": 42733844876' "$tmpdir/out-fallback.json" && fb_ok=0
+  grep -q '"run_id": 42736079295' "$tmpdir/out-fallback.json" && fb_ok=0
+  grep -q '"cost_usd": 0.0037' "$tmpdir/out-fallback.json" || fb_ok=0
+  grep -q '"cost_usd": 0.0013' "$tmpdir/out-fallback.json" || fb_ok=0
+  grep -q 'DeepSeek-V4-Flash-0731' "$tmpdir/out-fallback.json" || fb_ok=0
+  grep -q '"scan_result": "pass"' "$tmpdir/out-fallback.json" || fb_ok=0
+  grep -q '"routing_rule": 3' "$tmpdir/out-fallback.json" || fb_ok=0
+  if [ "$fb_ok" -eq 1 ]; then
+    note "fallback parser (nested artifacts, usage-metrics, displayTitle)"
+  else
+    fail "fallback parser (model/cost/scan/selection not populated)"
+  fi
+fi
+
 # No model call, no secret printed: a sentinel in the environment must never
 # appear in the script's output or stderr.
 secret="sentinel-run-review-secret-98765"
