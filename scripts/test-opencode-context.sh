@@ -47,6 +47,24 @@ if [ "$(grep -c '=== END ISSUE CONTEXT ===' "$work/no-spec/issue-context.md")" =
   ok "end delimiter inside issue data is neutralised"
 else bad "end delimiter inside issue data is neutralised"; fi
 
+# #153: labels from the issue API object are written to issue-labels.txt (one per line).
+"$py" - "$work/labels.json" <<'PY'
+import json, sys
+d = json.load(open("tests/oc-context/no-spec.json"))
+d["issue"]["labels"] = [
+    {"name": "priority:low"},
+    {"name": "risk:high"},
+    {"name": "  Enhancement  "},
+    "bug",
+]
+json.dump(d, open(sys.argv[1], "w"))
+PY
+build labeled "$work/labels.json"
+if [ "$rc" -eq 0 ] && printf '%s\n' 'priority:low' 'risk:high' 'Enhancement' 'bug' | diff -q - "$work/labeled/issue-labels.txt" >/dev/null \
+  && [ -f "$work/no-spec/issue-labels.txt" ] && [ ! -s "$work/no-spec/issue-labels.txt" ]; then
+  ok "labels: issue-labels.txt has API names (trimmed, one per line); no labels -> empty file"
+else bad "labels file"; echo "labeled:"; cat "$work/labeled/issue-labels.txt" 2>/dev/null; ls -l "$work/no-spec/issue-labels.txt" 2>/dev/null; fi
+
 build malformed tests/oc-context/malformed.json
 if [ "$rc" -eq 1 ] && grep -q 'malformed' "$work/malformed.log" && [ ! -e "$work/malformed/issue-context.md" ]; then
   ok "latest approved spec malformed -> fail closed (no fallback to older spec)"

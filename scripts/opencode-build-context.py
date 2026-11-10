@@ -3,6 +3,8 @@
 
 Writes to --out-dir (default $OC_ARTIFACT_DIR):
   issue-context.md   issue title/body, latest owner-approved spec, recent owner comments (capped)
+  issue-labels.txt   issue label names from the GitHub API, one per line (empty if none); #153
+                     routing reads this, never the issue prose
   context-meta.txt   spec_comment_id=<id|none>, spec_sha256 and sizes; read by agent-run and publish
   spec.md            only when an approved spec exists: the exact spec (marker line on, LF line
                      ends, one trailing newline). The harness commits it as
@@ -93,6 +95,19 @@ def check_spec(text: str) -> None:
 
 def clean(s: str | None) -> str:
     return (s or "").replace("\r\n", "\n").replace(END, "[removed delimiter]").strip()
+
+
+def label_names(issue: dict) -> list[str]:
+    """Label names from a GitHub issue object (dicts with name, or plain strings)."""
+    names: list[str] = []
+    for lab in issue.get("labels") or []:
+        if isinstance(lab, dict):
+            name = (lab.get("name") or "").strip()
+        else:
+            name = str(lab).strip()
+        if name:
+            names.append(name)
+    return names
 
 
 def clip(s: str, limit: int) -> str:
@@ -213,6 +228,7 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     ctx = "".join(parts)
     (out / "issue-context.md").write_text(ctx, encoding="utf-8")
+    (out / "issue-labels.txt").write_text("".join(f"{n}\n" for n in label_names(issue)), encoding="utf-8")
     spec_sha = "none"
     if canonical is not None:
         (out / "spec.md").write_bytes(canonical.encode("utf-8"))

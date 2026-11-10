@@ -28,14 +28,34 @@ if [ "$(draft model)" = deepseek-ai/DeepSeek-V4-Pro-0813 ] && draft preflight | 
   ok "model: no issue context -> V4 Pro from models.yaml rule 2 (fail safe); predicted spec run under \$0.10"
 else bad "model / preflight"; fi
 printf '# Issue #64\n\ndbt hygiene: disable anonymous stats.\n' >"$work/ctx-normal.md"
-printf '# Issue #134\n\n## Budget\n- Risk: **high**, complexity: **standard**\n' >"$work/ctx-high.md"
-pf_normal="$(draft preflight --context "$work/ctx-normal.md" --guidance="keep it small")"
+printf '# Issue #134\n\n## Budget\n- Risk: **high**, complexity: **standard**\n' >"$work/ctx-high-prose.md"
+printf '# Issue #153\n\nRoute from a structured signal, not free text like "risk high" or `risk: high` in prose.\n' >"$work/ctx-153.md"
+printf 'risk:high\n' >"$work/labels-high.txt"
+printf 'priority:high\nbug\n' >"$work/labels-priority.txt"
+: >"$work/labels-empty.txt"
+pf_normal="$(draft preflight --context "$work/ctx-normal.md" --labels "$work/labels-empty.txt" --guidance="keep it small")"
 if grep -qx 'model=deepseek-ai/DeepSeek-V4-Flash-0731' <<<"$pf_normal" && grep -qx 'risk_class=not_high' <<<"$pf_normal" \
-  && [ "$(draft model --context "$work/ctx-high.md")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
+  && [ "$(draft model --context "$work/ctx-high-prose.md")" = deepseek-ai/DeepSeek-V4-Flash-0731 ] \
+  && [ "$(draft model --context "$work/ctx-153.md")" = deepseek-ai/DeepSeek-V4-Flash-0731 ] \
+  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="If you mark risk high … include Test plan detail")" = deepseek-ai/DeepSeek-V4-Flash-0731 ] \
+  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="-x high-risk change")" = deepseek-ai/DeepSeek-V4-Flash-0731 ] \
+  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="high risk")" = deepseek-ai/DeepSeek-V4-Flash-0731 ] \
+  && [ "$(draft model --context "$work/ctx-normal.md" --labels "$work/labels-priority.txt")" = deepseek-ai/DeepSeek-V4-Flash-0731 ]; then
+  ok "model: free-text 'risk high' / 'high-risk' / issue prose, and priority:high, stay on V4 Flash rule 9"
+else bad "model: free-text must not route to Pro"; echo "$pf_normal"; fi
+if [ "$(draft model --context "$work/ctx-normal.md" --labels "$work/labels-high.txt")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
   && [ "$(draft model --context "$work/ctx-normal.md" --guidance="risk: high")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
-  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="-x high-risk change")" = deepseek-ai/DeepSeek-V4-Pro-0813 ]; then
-  ok "model: issue without high risk -> V4 Flash rule 9; 'Risk: high' in the issue or guidance -> V4 Pro rule 2"
-else bad "model: risk-based spec routing"; echo "$pf_normal"; fi
+  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="risk:high Draft a spec")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
+  && [ "$(draft model --context "$work/ctx-normal.md" --guidance="$(printf 'keep it small\nrisk: high')")" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
+  && [ "$(draft model)" = deepseek-ai/DeepSeek-V4-Pro-0813 ]; then
+  ok "model: risk:high label, leading or token-line 'risk: high', or no context -> V4 Pro rule 2"
+else bad "model: structured high-risk signal"; fi
+mkdir -p "$work/sib"
+printf '# Issue #1\n\nnorm\n' >"$work/sib/issue-context.md"
+printf 'risk:high\n' >"$work/sib/issue-labels.txt"
+if [ "$(draft model --context "$work/sib/issue-context.md")" = deepseek-ai/DeepSeek-V4-Pro-0813 ]; then
+  ok "model: issue-labels.txt beside --context is picked up without --labels"
+else bad "model: sibling issue-labels.txt"; fi
 "$py" - "$work/models-big.yaml" <<'PY'
 import sys, yaml
 d = yaml.safe_load(open(".factory/models.yaml"))
@@ -162,7 +182,7 @@ if grep -q '^- Review: Michael (risk high)' "$work/high/spec-comment.md" && grep
 else bad "build: high-risk reviewer"; head -8 "$work/high/spec-comment.md"; fi
 hc="$work/high/spec-comment.md"
 if sed -n 2p "$hc" | grep -q "^\*\*Over \$0\.15 target: needs Michael's approval\*\* (predicted build \$0\.1900)" \
-  && grep -q '^- Note: the issue did not say high risk, so this spec run used deepseek-ai/DeepSeek-V4-Flash-0731' "$hc" \
+  && grep -q '^- Note: the issue has no risk:high label, so this spec run used deepseek-ai/DeepSeek-V4-Flash-0731' "$hc" \
   && ! grep -q '^over_target_approved_by:' "$hc" && ! grep -q 'Over \$0.15 target' "$work/good/spec-comment.md"; then
   ok "build: build prediction over the \$0.15 target -> top line 'needs Michael's approval'; Flash-drafted high risk noted"
 else bad "build: over-target line / Flash note"; head -14 "$hc"; fi
