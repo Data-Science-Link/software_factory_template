@@ -4,6 +4,8 @@
 Writes to --out-dir (default $OC_ARTIFACT_DIR):
   issue-context.md   issue title/body, latest owner-approved spec, recent owner comments (capped)
   context-meta.txt   spec_comment_id=<id|none>, spec_sha256 and sizes; read by agent-run and publish
+  issue-labels.txt   the issue's label names from the API, one per line (may be empty); the
+                     /oc spec run's structured risk signal (#153: label risk:high -> V4 Pro)
   spec.md            only when an approved spec exists: the exact spec (marker line on, LF line
                      ends, one trailing newline). The harness commits it as
                      factory/specs/issue-<N>.md; the worker never copies it by hand (#75).
@@ -213,6 +215,9 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     ctx = "".join(parts)
     (out / "issue-context.md").write_text(ctx, encoding="utf-8")
+    names = [clean(lb.get("name") if isinstance(lb, dict) else lb).replace("\n", " ").strip()
+             for lb in (issue.get("labels") or [])]
+    (out / "issue-labels.txt").write_text("".join(f"{n}\n" for n in names if n), encoding="utf-8")
     spec_sha = "none"
     if canonical is not None:
         (out / "spec.md").write_bytes(canonical.encode("utf-8"))

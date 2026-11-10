@@ -4,12 +4,16 @@
 Script only: the worker writes the spec text; every fact around it (status, model, predicted
 build cost, spec-run cost, reviewer, checks) is filled here, never by the model.
 
-  model [--context F] [--guidance G]
+  model [--context F] [--labels L] [--guidance G]
                                  print the model for spec runs: the models.yaml routing rule whose
                                  `when` is exactly {work_type: spec, risk: high} (rule 2, V4 Pro)
-                                 when the issue says high risk (or there is no context to tell),
-                                 else exactly {work_type: spec} (rule 9, V4 Flash)
-  preflight [--context F] [--guidance G]
+                                 when a structured signal says high risk (#153: the issue's
+                                 `risk:high` label, or guidance that starts with `risk: high`), or
+                                 when there is no context or label list to tell (fail closed);
+                                 else exactly {work_type: spec} (rule 9, V4 Flash). Prose in the
+                                 issue or guidance ("high-risk", "risk high") never routes.
+                                 L defaults to issue-labels.txt beside F (opencode-build-context.py)
+  preflight [--context F] [--labels L] [--guidance G]
                                  print model, predicted spec-run cost and cap; exit 1 when the
                                  prediction is above budget.issue_cap_usd (refuse to run)
   build --log L --issue N --out-dir D [--usage U] [--run-url URL]
@@ -44,9 +48,14 @@ DRAFT_TAG = "<!-- factory-spec-draft v1 -->"
 FAILED_TAG = "<!-- factory-spec-draft-failed v1 -->"
 SPEC_MODEL_RULE = {"work_type": "spec"}
 SPEC_MODEL_RULE_HIGH = {"work_type": "spec", "risk": "high"}
-# High risk if the issue context or the /oc spec guidance says so ("risk: high", "high risk",
-# "high-risk"). Fails safe: no context at all -> high (V4 Pro).
-HIGH_RISK_RE = re.compile(r"\brisk\b[^\n]{0,20}?\bhigh\b|\bhigh[- ]risk\b", re.I)
+# #153: high risk only from a structured signal, never from prose in the issue or comments:
+#   1. the issue carries the label RISK_HIGH_LABEL (labels come from the GitHub API, written by
+#      opencode-build-context.py to issue-labels.txt, one per line), or
+#   2. the /oc spec guidance STARTS with the token `risk: high` (or `risk:high`), as in
+#      `/oc spec risk: high ...`; the same words later in the guidance are inert.
+# Fails closed: no issue context, or no label list to check -> high (V4 Pro).
+RISK_HIGH_LABEL = "risk:high"
+GUIDANCE_HIGH_RE = re.compile(r"\Arisk:[ \t]*high(?![\w-])", re.I)
 # Spec-run token prior when models.yaml has no token_priors.spec (owner-only file).
 DEFAULT_SPEC_PRIOR = {"tokens_in": 150000, "tokens_cached_fraction": 0.80, "tokens_out": 12000}
 DEFAULT_TARGET_USD = 0.15
@@ -77,11 +86,14 @@ def target_usd(data: dict) -> float:
     return float((data.get("budget") or {}).get("issue_target_usd", DEFAULT_TARGET_USD))
 
 
-def issue_high_risk(context: str | None, guidance: str | None) -> bool:
-    """Spec-run risk class from the owner's issue text and /oc spec guidance (no context -> high)."""
-    if context is None or not context.strip():
+def issue_high_risk(context: str | None, guidance: str | None, labels: list[str] | None = None) -> bool:
+    """Spec-run risk class (#153): the issue's risk:high label or a leading `risk: high` guidance
+    token. No context or no label list -> high (fail closed). Prose is never read for risk."""
+    if context is None or not context.strip() or labels is None:
         return True
-    return bool(HIGH_RISK_RE.search(context) or HIGH_RISK_RE.search(guidance or ""))
+    if any(label.strip().lower() == RISK_HIGH_LABEL for label in labels):
+        return True
+    return bool(GUIDANCE_HIGH_RE.match((guidance or "").strip()))
 
 
 def spec_model(data: dict, high: bool = True) -> tuple[str, str]:
@@ -315,7 +327,11 @@ def over_target_line(predicted: float, target: float) -> str:
 def run_high_risk(a: argparse.Namespace) -> bool:
     path = getattr(a, "context", None)
     context = Path(path).read_text(encoding="utf-8", errors="replace") if path and Path(path).is_file() else None
-    return issue_high_risk(context, getattr(a, "guidance", None))
+    lpath = getattr(a, "labels", None) or (str(Path(path).parent / "issue-labels.txt") if path else None)
+    labels = None
+    if lpath and Path(lpath).is_file():
+        labels = [x for x in Path(lpath).read_text(encoding="utf-8", errors="replace").splitlines() if x.strip()]
+    return issue_high_risk(context, getattr(a, "guidance", None), labels)
 
 
 def cmd_build(a: argparse.Namespace) -> int:
@@ -381,8 +397,8 @@ def cmd_build(a: argparse.Namespace) -> int:
                 "Files and Worker prompt filled; no HTML comments in prose (code spans/fences OK)",
                 run_line, run_url]
         if risk == "high" and not high:
-            body.append(f"- Note: the issue did not say high risk, so this spec run used {run_model} ({rule}); "
-                        "the spec says risk high. For a V4 Pro draft, re-run `/oc spec risk: high`.")
+            body.append(f"- Note: the issue has no risk:high label, so this spec run used {run_model} ({rule}); "
+                        "the spec says risk high. For a V4 Pro draft, add the risk:high label or re-run `/oc spec risk: high`.")
         body += ["", spec.rstrip("\n")]
         meta.update(status="draft", risk=risk, complexity=cx, reviewer=review.split(" ")[0],
                     build_predicted_usd=f"{pred['predicted_cost_usd']:.4f}")
@@ -459,7 +475,9 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("model", "preflight"):
         sp = sub.add_parser(name)
-        sp.add_argument("--context", help="issue-context.md (the spec run's risk class)")
+        sp.add_argument("--context", help="issue-context.md (no context -> high risk, fail closed)")
+        sp.add_argument("--labels", help="issue-labels.txt, one label per line (default: beside --context); "
+                                         "label risk:high -> high risk; missing -> high (fail closed)")
         sp.add_argument("--guidance", default="", help="the /oc spec guidance text")
     b = sub.add_parser("build")
     b.add_argument("--context")
