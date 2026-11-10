@@ -1,0 +1,222 @@
+{
+  "run_id": 42290238204,
+  "workflow": "opencode",
+  "status": "completed",
+  "conclusion": "failure",
+  "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "routing_rule": "default for all other factory worker runs -> V4 Flash",
+  "created_at": "2026-11-08T15:00:00.000Z",
+  "updated_at": "2026-11-08T15:06:30.000Z",
+  "wall_time_seconds": 390,
+  "timeout": false,
+  "opencode_export": {
+    "info": {
+      "id": "ses_v4flash_block_42290238204",
+      "slug": "v4flash-block",
+      "projectID": "global",
+      "directory": "[redacted:session-directory]",
+      "path": "",
+      "title": "[redacted:session-title]",
+      "agent": "build",
+      "model": {
+        "id": "DeepSeek-V4-Flash-0731",
+        "providerID": "deepinfra",
+        "variant": "default"
+      },
+      "version": "1.19.5",
+      "summary": {
+        "additions": 0,
+        "deletions": 0,
+        "files": 0
+      },
+      "cost": 0.006,
+      "tokens": {
+        "input": 80000,
+        "output": 1200,
+        "reasoning": 0,
+        "cache": {
+          "read": 200000,
+          "write": 0
+        }
+      },
+      "permission": [
+        {
+          "permission": "question",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "plan_enter",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "plan_exit",
+          "pattern": "*",
+          "action": "deny"
+        }
+      ],
+      "time": {
+        "created": 1769022000000,
+        "updated": 1769022390000
+      }
+    },
+    "messages": [
+      {
+        "info": {
+          "role": "user",
+          "time": {
+            "created": 1769022001000
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "deepinfra",
+            "modelID": "DeepSeek-V4-Flash-0731"
+          },
+          "summary": {
+            "diffs": []
+          },
+          "id": "msg_v4flash_block_1",
+          "sessionID": "ses_v4flash_block_42290238204"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "[redacted:text]",
+            "id": "prt_v4flash_block_1",
+            "sessionID": "ses_v4flash_block_42290238204",
+            "messageID": "msg_v4flash_block_1"
+          }
+        ]
+      },
+      {
+        "info": {
+          "parentID": "msg_v4flash_block_1",
+          "role": "assistant",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "[redacted:cwd]",
+            "root": "[redacted:root]"
+          },
+          "cost": 0.006,
+          "tokens": {
+            "total": 281200,
+            "input": 80000,
+            "output": 1200,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 200000
+            }
+          },
+          "modelID": "DeepSeek-V4-Flash-0731",
+          "providerID": "deepinfra",
+          "time": {
+            "created": 1769022002000,
+            "completed": 1769022390000
+          },
+          "finish": "stop",
+          "id": "msg_v4flash_block_2",
+          "sessionID": "ses_v4flash_block_42290238204"
+        },
+        "parts": [
+          {
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-start",
+            "id": "prt_v4flash_block_2",
+            "sessionID": "ses_v4flash_block_42290238204",
+            "messageID": "msg_v4flash_block_2"
+          },
+          {
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_v4flash_1",
+            "state": {
+              "status": "denied",
+              "input": {
+                "redacted": "tool-input"
+              },
+              "output": "[redacted:tool-output]",
+              "metadata": {
+                "redacted": "tool-state-metadata"
+              },
+              "title": "[redacted:tool-title]",
+              "time": {
+                "start": 1769022003000,
+                "end": 1769022003100
+              }
+            },
+            "id": "prt_v4flash_block_3",
+            "sessionID": "ses_v4flash_block_42290238204",
+            "messageID": "msg_v4flash_block_2"
+          },
+          {
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_v4flash_2",
+            "state": {
+              "status": "denied",
+              "input": {
+                "redacted": "tool-input"
+              },
+              "output": "[redacted:tool-output]",
+              "metadata": {
+                "redacted": "tool-state-metadata"
+              },
+              "title": "[redacted:tool-title]",
+              "time": {
+                "start": 1769022004000,
+                "end": 1769022004100
+              }
+            },
+            "id": "prt_v4flash_block_4",
+            "sessionID": "ses_v4flash_block_42290238204",
+            "messageID": "msg_v4flash_block_2"
+          },
+          {
+            "reason": "stop",
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-finish",
+            "tokens": {
+              "total": 281200,
+              "input": 80000,
+              "output": 1200,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 200000
+              }
+            },
+            "cost": 0.006,
+            "id": "prt_v4flash_block_5",
+            "sessionID": "ses_v4flash_block_42290238204",
+            "messageID": "msg_v4flash_block_2"
+          }
+        ]
+      }
+    ]
+  },
+  "spec_files": [
+    "scripts/factory-run-review.py",
+    "scripts/test-factory-run-review.sh"
+  ],
+  "tool_events": [
+    {"tool": "read", "ts": 1769022002000, "input": ".factory/FACTORY.md"},
+    {"tool": "bash", "ts": 1769022003000, "input": "mkdir -p factory/tmp"},
+    {"tool": "bash", "ts": 1769022004000, "input": "chmod +x scripts/factory-run-review.py"},
+    {"tool": "read", "ts": 1769022005000, "input": "factory/specs/issue-136.md"}
+  ],
+  "blocked_calls": [
+    "mkdir -p factory/tmp",
+    "chmod +x scripts/factory-run-review.py"
+  ],
+  "scan": {
+    "result": "fail",
+    "detail": "blocked path: factory/tmp"
+  },
+  "evidence": {
+    "present": false,
+    "label": null
+  }
+}

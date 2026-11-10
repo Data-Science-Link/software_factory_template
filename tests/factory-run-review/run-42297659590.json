@@ -1,0 +1,218 @@
+{
+  "run_id": 42297659590,
+  "workflow": "opencode",
+  "status": "completed",
+  "conclusion": "success",
+  "model": "deepseek-ai/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+  "routing_rule": "trivial/simple code -> Qwen3-Coder",
+  "created_at": "2026-11-09T09:00:00.000Z",
+  "updated_at": "2026-11-09T09:14:00.000Z",
+  "wall_time_seconds": 840,
+  "timeout": false,
+  "opencode_export": {
+    "info": {
+      "id": "ses_qwen_stall_42297659590",
+      "slug": "qwen-stall",
+      "projectID": "global",
+      "directory": "[redacted:session-directory]",
+      "path": "",
+      "title": "[redacted:session-title]",
+      "agent": "build",
+      "model": {
+        "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+        "providerID": "deepinfra",
+        "variant": "default"
+      },
+      "version": "1.19.5",
+      "summary": {
+        "additions": 0,
+        "deletions": 0,
+        "files": 0
+      },
+      "cost": 0.008,
+      "tokens": {
+        "input": 90000,
+        "output": 1500,
+        "reasoning": 0,
+        "cache": {
+          "read": 220000,
+          "write": 0
+        }
+      },
+      "permission": [
+        {
+          "permission": "question",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "plan_enter",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "plan_exit",
+          "pattern": "*",
+          "action": "deny"
+        }
+      ],
+      "time": {
+        "created": 1769076000000,
+        "updated": 1769076840000
+      }
+    },
+    "messages": [
+      {
+        "info": {
+          "role": "user",
+          "time": {
+            "created": 1769076001000
+          },
+          "agent": "build",
+          "model": {
+            "providerID": "deepinfra",
+            "modelID": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"
+          },
+          "summary": {
+            "diffs": []
+          },
+          "id": "msg_qwen_stall_1",
+          "sessionID": "ses_qwen_stall_42297659590"
+        },
+        "parts": [
+          {
+            "type": "text",
+            "text": "[redacted:text]",
+            "id": "prt_qwen_stall_1",
+            "sessionID": "ses_qwen_stall_42297659590",
+            "messageID": "msg_qwen_stall_1"
+          }
+        ]
+      },
+      {
+        "info": {
+          "parentID": "msg_qwen_stall_1",
+          "role": "assistant",
+          "mode": "build",
+          "agent": "build",
+          "path": {
+            "cwd": "[redacted:cwd]",
+            "root": "[redacted:root]"
+          },
+          "cost": 0.008,
+          "tokens": {
+            "total": 311500,
+            "input": 90000,
+            "output": 1500,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 220000
+            }
+          },
+          "modelID": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+          "providerID": "deepinfra",
+          "time": {
+            "created": 1769076002000,
+            "completed": 1769076840000
+          },
+          "finish": "stop",
+          "id": "msg_qwen_stall_2",
+          "sessionID": "ses_qwen_stall_42297659590"
+        },
+        "parts": [
+          {
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-start",
+            "id": "prt_qwen_stall_2",
+            "sessionID": "ses_qwen_stall_42297659590",
+            "messageID": "msg_qwen_stall_2"
+          },
+          {
+            "type": "tool",
+            "tool": "read",
+            "callID": "call_qwen_1",
+            "state": {
+              "status": "completed",
+              "input": {
+                "redacted": "tool-input"
+              },
+              "output": "[redacted:tool-output]",
+              "metadata": {
+                "redacted": "tool-state-metadata"
+              },
+              "title": "[redacted:tool-title]",
+              "time": {
+                "start": 1769076003000,
+                "end": 1769076003100
+              }
+            },
+            "id": "prt_qwen_stall_3",
+            "sessionID": "ses_qwen_stall_42297659590",
+            "messageID": "msg_qwen_stall_2"
+          },
+          {
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call_qwen_2",
+            "state": {
+              "status": "completed",
+              "input": {
+                "redacted": "tool-input"
+              },
+              "output": "[redacted:tool-output]",
+              "metadata": {
+                "redacted": "tool-state-metadata"
+              },
+              "title": "[redacted:tool-title]",
+              "time": {
+                "start": 1769076780000,
+                "end": 1769076780100
+              }
+            },
+            "id": "prt_qwen_stall_4",
+            "sessionID": "ses_qwen_stall_42297659590",
+            "messageID": "msg_qwen_stall_2"
+          },
+          {
+            "reason": "stop",
+            "snapshot": "[redacted:snapshot]",
+            "type": "step-finish",
+            "tokens": {
+              "total": 311500,
+              "input": 90000,
+              "output": 1500,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 220000
+              }
+            },
+            "cost": 0.008,
+            "id": "prt_qwen_stall_5",
+            "sessionID": "ses_qwen_stall_42297659590",
+            "messageID": "msg_qwen_stall_2"
+          }
+        ]
+      }
+    ]
+  },
+  "spec_files": [
+    "scripts/factory-run-review.py",
+    "scripts/test-factory-run-review.sh"
+  ],
+  "tool_events": [
+    {"tool": "read", "ts": 1769076002000, "input": ".factory/FACTORY.md"},
+    {"tool": "read", "ts": 1769076003000, "input": "scripts/factory-run-review.py"},
+    {"tool": "bash", "ts": 1769076793000, "input": "git status"}
+  ],
+  "blocked_calls": [],
+  "scan": {
+    "result": "pass",
+    "detail": null
+  },
+  "evidence": {
+    "present": true,
+    "label": "harness-verified"
+  }
+}

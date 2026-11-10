@@ -1,0 +1,56 @@
+{
+  "blocked_calls": [
+    "chmod +x scripts/factory-run-review.py",
+    "mkdir -p factory/tmp"
+  ],
+  "conclusion": "failure",
+  "cost_usd": 0.006,
+  "evidence_label": null,
+  "evidence_present": false,
+  "findings": [
+    {
+      "code": "blocked_call",
+      "meaning": "a denied/blocked guardrail command was attempted",
+      "severity": "low"
+    },
+    {
+      "code": "guardrail_bypass",
+      "meaning": "a guardrail was bypassed (artifact-scan failure)",
+      "severity": "high"
+    },
+    {
+      "code": "out_of_spec_read",
+      "meaning": "a file was read outside the spec's ## Files",
+      "severity": "low"
+    },
+    {
+      "code": "run_failed",
+      "meaning": "the workflow run did not complete successfully",
+      "severity": "high"
+    }
+  ],
+  "longest_gap_seconds": 1.0,
+  "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "out_of_spec_reads": [
+    "factory/specs/issue-136.md"
+  ],
+  "routing_rule": "default for all other factory worker runs -> V4 Flash",
+  "run_id": 42290238204,
+  "scan_detail": "blocked path: factory/tmp",
+  "scan_result": "fail",
+  "seconds_per_tool_turn": 1.0,
+  "status": "completed",
+  "timeout_hit": false,
+  "tokens": {
+    "cached": 200000,
+    "in": 280000,
+    "out": 1200,
+    "reasoning": 0
+  },
+  "tool_counts": {
+    "bash": 2,
+    "read": 2
+  },
+  "wall_time_seconds": 390,
+  "workflow": "opencode"
+}
