@@ -21,6 +21,12 @@ approved_at: null
 drafted_by: grok-bot
 ---
 
+<!-- Harness rules (#149): delete every <!-- --> note in this template before posting. Raw HTML
+     comments in prose fail the draft. To quote an exact literal marker the build must copy, put
+     it in a backtick code span or a fenced code block. When risk is high (or complexity complex),
+     "## Test plan detail (broken case shown blocked)" is required. Verification must not pipe
+     checked commands into head/tail/grep -q without set -o pipefail. -->
+
 ## Outcome
 <!-- One sentence when done. -->
 
@@ -42,8 +48,9 @@ drafted_by: grok-bot
 ## Verification
 <!-- Commands + expected output. Put the commands in ONE ```bash block: the /oc harness runs that block
      itself after the worker (scripts/opencode-verify.sh: scratch copy of the base + the patch, HEAD~1 is the
-     base, no origin remote, empty environment, network allowed, ~5 min cap) and pastes the output into
-     the PR Evidence. The worker can't run commands. -->
+     base, no origin remote, empty environment, network allowed, ~5 min cap; pipefail is on) and pastes
+     the output into the PR Evidence. The worker can't run commands. Do not hide failures: never pipe a
+     checked command into head, tail, or grep -q unless the block also has set -o pipefail (prefer full output). -->
 
 ## Classification
 <!-- Complexity, risk, model + reasons (match front matter). -->
@@ -64,7 +71,7 @@ drafted_by: grok-bot
 <!-- Required: standard/normal or complex/high (vision §5.3). -->
 
 ## Alternatives considered
-<!-- Required for complex/high; optional for standard/normal. -->
+<!-- Required when complexity is complex OR risk is high; optional for standard/normal. -->
 
 ## Risks, rollback and revert trigger
 <!-- Required: standard/normal or complex/high. -->
@@ -76,10 +83,10 @@ drafted_by: grok-bot
 <!-- Required: standard/normal or complex/high. -->
 
 ## Test plan detail (broken case shown blocked)
-<!-- Required for complex/high; optional for standard/normal. -->
+<!-- Required when complexity is complex OR risk is high (risk high alone is enough); optional for standard/normal. A high-risk draft without this heading is refused. -->
 
 ## Security and liability review (`liability-gates.md`)
-<!-- Required for complex/high; optional for standard/normal. -->
+<!-- Required when complexity is complex OR risk is high; optional for standard/normal. -->
 
 ## Milestones / split plan (when near the cap)
-<!-- Required for complex/high; optional for standard/normal. -->
+<!-- Required when complexity is complex OR risk is high; optional for standard/normal. -->
