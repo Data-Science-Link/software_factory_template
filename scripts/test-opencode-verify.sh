@@ -172,6 +172,7 @@ cat >"$work/bin/opencode" <<'FAKE'
 #!/usr/bin/env bash
 # Fake worker: edits the spec (must be undone), adds a file, ends with a labeled note.
 if [ "$1" = stats ]; then cat "$FAKE_STATS"; exit 0; fi
+case "$1" in session | export) exit 0 ;; esac  # #31: the run meter calls session/export
 [ -f factory/specs/issue-7.md ] || { echo "spec file not pre-written"; exit 1; }
 sed -i 's/^title: .*/title: \\"tampered\\"/' factory/specs/issue-7.md
 echo '## Recent owner comments (0)' >>factory/specs/issue-7.md
@@ -206,7 +207,7 @@ else bad "agent-run prompt"; fi
 # Worker that only touches the spec: nothing to publish.
 cat >"$work/bin/opencode" <<'FAKE'
 #!/usr/bin/env bash
-if [ "$1" = stats ]; then exit 0; fi
+case "$1" in stats | session | export) exit 0 ;; esac  # #31: the run meter calls session/export
 echo 'x' >>factory/specs/issue-7.md
 FAKE
 art2="$work/art2"; mkdir -p "$art2"; cp "$work/ctx/"* "$art2/"
@@ -222,7 +223,7 @@ else bad "agent-run: spec-only patch (rc=$rc)"; fi
 # Worker that hangs (#89): stopped at the time limit; log and patch are still written.
 cat >"$work/bin/opencode" <<'FAKE'
 #!/usr/bin/env bash
-if [ "$1" = stats ]; then exit 0; fi
+case "$1" in stats | session | export) exit 0 ;; esac  # #31: the run meter calls session/export
 mkdir -p factory/x && echo partial >factory/x/partial.md
 echo "worker started"
 exec sleep 300
@@ -243,7 +244,7 @@ else bad "agent-run: hung worker (rc=$rc)"; tail -5 "$work/agent3.log"; fi
 # #101: new scripts with a shebang are staged 100755 in the patch; others stay 100644.
 cat >"$work/bin/opencode" <<'FAKE'
 #!/usr/bin/env bash
-if [ "$1" = stats ]; then exit 0; fi
+case "$1" in stats | session | export) exit 0 ;; esac  # #31: the run meter calls session/export
 printf '#!/usr/bin/env bash\necho tool\n' >scripts/new-tool-check.sh
 printf '#!/usr/bin/env python3\nprint(1)\n' >scripts/new-tool-report.py
 printf 'echo sourced only\n' >scripts/new-tool-lib.sh
@@ -377,7 +378,7 @@ fart="$work/fart"
 "$py" scripts/opencode-build-fix-context.py --repo Data-Science-Link/software_factory_template --from-json "$work/fixpr.json" --out-dir "$fart" >/dev/null
 cat >"$work/bin/opencode" <<'FAKE'
 #!/usr/bin/env bash
-if [ "$1" = stats ]; then exit 0; fi
+case "$1" in stats | session | export) exit 0 ;; esac  # #31: the run meter calls session/export
 echo "fixed" >>factory/x/hello.md
 printf '## What I changed and why\n- appended fixed\n'
 FAKE

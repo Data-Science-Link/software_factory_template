@@ -206,10 +206,19 @@ def main():
             start_state_trusted = True
             model = start_state.get("model_id", "unknown")
             predicted_cost_usd = start_state.get("predicted_cost_usd", 0.0)
-            budget_cap_usd = start_state.get("budget.cap_usd", 0.0)
+            budget_cap_usd = start_state.get("cap_usd", 0.0)
             prior_spend_usd = start_state.get("prior_spend_usd", 0.0)
         else:
             usage_notes += "run_id mismatch; "
+
+    if not start_state_trusted:
+        # Spec: untrusted start state -> budget_cap_usd is budget.issue_cap_usd from models.yaml.
+        try:
+            budget_cap_usd = float(
+                (load_models_config(".factory/models.yaml").get("budget") or {}).get("issue_cap_usd", 0.0)
+            )
+        except (OSError, TypeError, ValueError, yaml.YAMLError):
+            budget_cap_usd = 0.0
 
     # Load spec if available
     spec_path = artifact_dir / "spec.md"
@@ -480,8 +489,9 @@ def main():
         notes_parts.append(usage_notes.rstrip("; "))
     if cost_notes:
         notes_parts.append(cost_notes)
-    if not start_state_trusted and start_state:
-        notes_parts.append("run start state missing or run_id mismatch")
+    if not start_state_trusted and "run_id mismatch" not in usage_notes:
+        # #31: a missing run-start.json used to leave no note at all.
+        notes_parts.append("run start state missing")
     if not notes_parts:
         notes_parts.append("ok")
 

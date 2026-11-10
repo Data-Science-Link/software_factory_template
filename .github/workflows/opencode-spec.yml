@@ -33,7 +33,11 @@ jobs:
       OC_INSTRUCTION: ${{ github.event.comment.body }}
       OC_ISSUE_NUMBER: ${{ github.event.issue.number }}
       OC_ARTIFACT_DIR: /tmp/oc-artifacts
+      # #31: run metering output (scripts/opencode-run-meter.sh), kept apart from oc-artifacts.
+      OC_RECORD_DIR: /tmp/oc-record
       DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+      # #31: the Actions key's name (repo variable, not a secret) for the key-spend snapshot.
+      FACTORY_DEEPINFRA_KEY_NAME: ${{ vars.FACTORY_DEEPINFRA_KEY_NAME }}
     steps:
       - name: Harden runner (audit egress)
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
@@ -67,6 +71,27 @@ jobs:
       - name: Usage report (always)
         if: always()
         run: bash scripts/opencode-usage-report.sh
+
+      # #31: the run's metering (run clock, sanitized session exports, key spend) plus run-start.json,
+      # spec.md and fix-meta.txt, scanned, for the record job. Pristine copies of the scripts from the triggering commit
+      # (the worker's tree may have changed scripts/). An export with a scan hit is dropped.
+      - name: Pack run record inputs (scanned, always)
+        id: pack
+        if: always()
+        run: |
+          d="$(mktemp -d)"
+          git show "$GITHUB_SHA:scripts/factory-run-pack.sh" >"$d/pack.sh"
+          git show "$GITHUB_SHA:scripts/opencode-artifact-scan.sh" >"$d/scan.sh"
+          OC_SCAN_SH="$d/scan.sh" bash "$d/pack.sh"
+
+      - name: Upload run record inputs
+        if: always() && steps.pack.outputs.ok == 'yes'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oc-record-${{ github.run_id }}
+          path: ${{ env.OC_RECORD_DIR }}/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Upload spec artifacts
         if: success()
@@ -108,3 +133,53 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/opencode-publish-spec.sh
+
+  # #31: after every run that reached the worker (success, failure, timeout or cancel): build the
+  # run record (factory-run-end.sh: tokens x price table, checked against the key-spend delta), post
+  # it on the issue under <!-- factory-run-record --> (run start reads these for prior spend), and
+  # on a PR rewrite the factory-run block and Cost: line. No DeepInfra key; default-branch scripts.
+  record:
+    needs: [agent, publish]
+    if: always() && needs.agent.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      # Read-only: gh run list, to mark key spend "concurrent" when another /oc run overlapped.
+      actions: read
+    env:
+      OC_RECORD_DIR: /tmp/oc-record
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: oc-record-${{ github.run_id }}
+          path: ${{ env.OC_RECORD_DIR }}
+
+      - name: Record the run (issue comment, PR cost block)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OC_KIND: spec
+          OC_ARTIFACT_DIR: ${{ env.OC_RECORD_DIR }}
+          OC_ISSUE_NUMBER: ${{ github.event.issue.number }}
+          OC_AGENT_RESULT: ${{ needs.agent.result }}
+          OC_PUBLISH_RESULT: ${{ needs.publish.result }}
+          OC_TRIGGER_URL: ${{ github.event.comment.html_url }}
+          OC_RECORD_OUT: /tmp/oc-record-out/run-record.json
+        run: bash scripts/factory-run-finish.sh
+
+      - name: Upload run record
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oc-run-record-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/oc-record-out/
+          if-no-files-found: ignore
+          retention-days: 90

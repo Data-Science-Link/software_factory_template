@@ -21,13 +21,14 @@ run_case() {
   local setup_func="$4"
   
   # Create a clean artifact directory for each test
-  local artifact_dir="$tmpdir/artifact-$passed"
+  local artifact_dir="$tmpdir/artifact-$((passed + failed))"
   mkdir -p "$artifact_dir"
   
   # Setup the test case
   "$setup_func" "$artifact_dir"
   
-  # Run the script
+  # Run the script (no record left over from the previous case)
+  rm -f "$tmpdir/runs/gha-42400000001-1.json"
   set +e
   local out rc
   out=$(FACTORY_RUNS_DIR="$tmpdir/runs" \
@@ -50,8 +51,9 @@ run_case() {
     return
   fi
   
-  # Check record if expected
-  if [ "$expected_record_check" = "exists" ]; then
+  # Check record if expected. #31: callers pass a check_* function name, which never equalled
+  # "exists", so the record content checks used to be skipped; run any named function.
+  if declare -F "$expected_record_check" >/dev/null; then
     local run_id="gha-42400000001-1"
     local record_path="$tmpdir/runs/$run_id.json"
     
@@ -177,6 +179,14 @@ check_happy_path() {
   
   if [ "$requests" != "4" ]; then
     echo "Expected requests=4, got $requests" >&2
+    return 1
+  fi
+
+  # #31: budget_cap_usd comes from run-start.json cap_usd (was always 0.0).
+  local cap
+  cap=$(jq -r '.budget_cap_usd' "$record_path")
+  if [ "$cap" != "1" ] && [ "$cap" != "1.0" ]; then
+    echo "Expected budget_cap_usd=1.0, got $cap" >&2
     return 1
   fi
   
@@ -558,7 +568,7 @@ check_missing_usage_without_key_spend() {
   local actual_cost
   actual_cost=$(jq -r '.actual_cost_usd' "$record_path")
   
-  if [ "$actual_cost" != "0" ]; then
+  if [ "$actual_cost" != "0" ] && [ "$actual_cost" != "0.0" ]; then
     echo "Expected actual_cost_usd=0, got $actual_cost" >&2
     return 1
   fi
@@ -621,6 +631,14 @@ check_no_run_start() {
   
   if [[ ! "$notes" =~ "run start state missing" ]]; then
     echo "Expected notes to contain 'run start state missing', got $notes" >&2
+    return 1
+  fi
+
+  # #31: with no trusted start state the cap is models.yaml budget.issue_cap_usd (1.00).
+  local cap
+  cap=$(jq -r '.budget_cap_usd' "$record_path")
+  if [ "$cap" != "1" ] && [ "$cap" != "1.0" ]; then
+    echo "Expected budget_cap_usd=1.0 from models.yaml, got $cap" >&2
     return 1
   fi
   

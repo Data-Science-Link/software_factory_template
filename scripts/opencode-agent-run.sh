@@ -156,10 +156,17 @@ log="$OC_ARTIFACT_DIR/opencode.log"
 worker_timeout=$(( ${OC_AGENT_BUDGET_SECONDS:-720} - ${OC_VERIFY_RESERVE_SECONDS:-240} - SECONDS ))
 [ "$worker_timeout" -ge 60 ] || worker_timeout=60
 case "${OC_WORKER_TIMEOUT:-}" in '' | *[!0-9]*) ;; *) worker_timeout="$OC_WORKER_TIMEOUT" ;; esac
+# #31: run metering (key-spend snapshot before/after, sanitized session exports for run end).
+# Copies saved before the worker starts, so a worker edit to scripts/ can't change what runs.
+meter_dir="$(mktemp -d)"
+cp "scripts/opencode-run-meter.sh" "scripts/deepinfra-cost.sh" "$meter_dir/"
+meter() { OC_METER_COST_SH="$meter_dir/deepinfra-cost.sh" bash "$meter_dir/opencode-run-meter.sh" "$@" || true; }
+meter start .
 oc_rc=0
 timeout -k 15 "$worker_timeout" opencode run --pure --format default \
   --model "deepinfra/${oc_model}" \
   "$prompt" >>"$log" 2>&1 || oc_rc=$?
+meter end .
 if [ "$oc_rc" -eq 124 ] || [ "$oc_rc" -eq 137 ]; then
   echo "agent-run: worker stopped at the ${worker_timeout}s limit (#89); keeping what it produced" >&2
   printf '\n[harness] worker stopped at the %ss limit\n' "$worker_timeout" >>"$log"
