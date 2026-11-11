@@ -24,6 +24,7 @@ new_repo() {
   printf '#!/usr/bin/env bash\necho guard\n' >scripts/pr-check.sh
   chmod +x scripts/pr-check.sh
   printf 'print("hi")\n' >scripts/factory-report.py
+  printf 'print("vars")\n' >scripts/factory-budget-vars.py
   printf '__pycache__/\n*.log\n' >.gitignore
   printf 'target/\n' >factory/dbt/.gitignore
   printf '# Factory\n\nRules.\n' >.factory/FACTORY.md
@@ -32,6 +33,7 @@ new_repo() {
   printf '# Doc\n' >docs/readme.md
   printf '{}\n' >opencode.json
   printf 'dbt-core==1.11.16\n' >requirements-factory.txt
+  printf 'monthly_usd: 10\nweekly_usd: 2.50\n' >factory/budget.yml
   g add -A
   g commit -qm base
 }
@@ -137,6 +139,17 @@ new_repo; printf 'requests==2.32.3\n' >>requirements-factory.txt; capture
 expect fail "requirements-factory.txt is owner-only (edit)" "forbidden path: requirements-factory.txt"
 new_repo; g rm -q requirements-factory.txt; capture
 expect fail "requirements-factory.txt is owner-only (delete)" "forbidden path: requirements-factory.txt"
+# #56: factory/budget.yml is owner-only, so a worker can't raise its own budget.
+new_repo; printf 'monthly_usd: 1000\n' >factory/budget.yml; capture
+expect fail "factory/budget.yml is owner-only (edit)" "forbidden path: factory/budget.yml"
+new_repo; g rm -q factory/budget.yml; capture
+expect fail "factory/budget.yml is owner-only (delete)" "forbidden path: factory/budget.yml"
+new_repo; g mv factory/budget.yml factory/budget-old.yml; capture
+expect fail "factory/budget.yml is owner-only (rename away)" "factory/budget.yml"
+new_repo; printf 'x: 1\n' >factory/budget-notes.yml; capture
+expect pass "factory/: other new files next to budget.yml stay allowed"
+new_repo; printf 'echo more\n' >>scripts/factory-budget-vars.py; capture
+expect fail "scripts/factory-budget-vars.py is a protected budget script" "protected spend/security script"
 new_repo; printf 'requests==2.32.3\n' >factory/dbt/requirements-dbt.txt; capture
 expect pass "other requirements files outside the root stay allowed"
 new_repo; printf 'K=V\n' >.env.example; capture
@@ -178,7 +191,7 @@ rules="$(bash "$scan" --list-rules)"
 if grep -qF 'you may add new hyphenated scripts under scripts/, and you may edit the' <<<"$rules" \
   && grep -qF 'protected spend/security list' <<<"$rules" \
   && grep -qF '.factory/models.yaml' <<<"$rules" && grep -qF 'only ADD lines' <<<"$rules" \
-  && grep -qF 'requirements-factory.txt' <<<"$rules"; then
+  && grep -qF 'requirements-factory.txt' <<<"$rules" && grep -qF 'factory/budget.yml' <<<"$rules"; then
   ok "--list-rules states the scripts/, .factory/ and .gitignore rules"
 else bad "--list-rules wording"; fi
 missing_prot=""
@@ -203,7 +216,7 @@ if python3 - "$root/opencode.json" <<'PY2'
 import json, sys
 edit = json.load(open(sys.argv[1]))["permission"]["edit"]
 bad = [k for k, v in edit.items() if v == "deny" and k in ("scripts/**", "scripts/*", "*")]
-need = [k for k in (".github/**", "opencode.json", ".factory/models.yaml", "requirements-factory.txt", "scripts/protect-main.sh") if edit.get(k) != "deny"]
+need = [k for k in (".github/**", "opencode.json", ".factory/models.yaml", "requirements-factory.txt", "factory/budget.yml", "scripts/protect-main.sh") if edit.get(k) != "deny"]
 sys.exit(1 if bad or need else 0)
 PY2
 then ok "opencode.json: new scripts editable (scan judges them); .github, opencode.json, models.yaml, requirements-factory, protect-main.sh denied"

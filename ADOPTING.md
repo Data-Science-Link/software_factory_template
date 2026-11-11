@@ -44,7 +44,7 @@ Today the workflows only run for comments from the GitHub account `Data-Science-
 
 - Never read, print, or commit secrets, keys, or tokens, and never paste them into issues, PRs, or chat.
 - Never enable on-demand spend.
-- Never edit owner-only paths: `.github/`, `opencode.json`, `AGENTS.md`, `.factory/actions-security.md`, `.factory/models.yaml`, `requirements-factory.txt`, and the protected scripts listed by `bash scripts/opencode-artifact-scan.sh --list-protected`. Workers also must not delete, rename, or chmod an existing script.
+- Never edit owner-only paths: `.github/`, `opencode.json`, `AGENTS.md`, `.factory/actions-security.md`, `.factory/models.yaml`, `factory/budget.yml`, `requirements-factory.txt`, and the protected scripts listed by `bash scripts/opencode-artifact-scan.sh --list-protected`. Workers also must not delete, rename, or chmod an existing script.
 - Never run `curl`, `wget`, `gh api`, or `gh pr merge`; never push to `main`; never use `--no-verify`.
 - Never merge. Humans give the product gate for normal and high risk.
 - Stop and ask the owner when the spec is high risk, the predicted cost is over the issue target, a gate or required check fails, the change would touch an owner-only path, or the next step is a product choice.

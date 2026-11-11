@@ -62,7 +62,7 @@ These stay local to the install repo. After #156, factory scripts and workflows 
 | File | What you set |
 |---|---|
 | `.factory/models.yaml` | Model routing, prices, and today's spend caps (`budget.issue_target_usd`, `budget.issue_cap_usd`, `budget.deepinfra_monthly_limit_usd`). Owner-only: workers must not edit it. |
-| `factory/budget.yml` | Weekly and monthly site budgets (**#169 D3**; the file is added by #170, then made owner-only by #56). Starting values (**#169 D4**): $10 per month, $2.50 per week. Not in the repo yet. |
+| `factory/budget.yml` | Weekly and monthly site budgets (**#169 D3**, added by #170). Starting values (**#169 D4**): $10 per month, $2.50 per week. Owner-only (#56): workers must not edit it, and the path-policy scan rejects any worker patch that does. |
 | Protected-path list | Spend and security scripts workers must not edit. Printed by `bash scripts/opencode-artifact-scan.sh --list-protected`. The list lives in that script today; after #156 it comes from the pinned tag. |
 | `.factory/DOCS.md`, `.factory/DECISIONS.md`, repo `AGENTS.md` | That repo's doc map, decision log, and standing agent rules. |
 
@@ -73,9 +73,14 @@ Per epic #169 decision D1:
 - **Private repo:** the site is a downloadable Actions artifact only. Do not enable GitHub Pages; a Pages site from a private repo on this plan would be public.
 - **Public repo:** publish to GitHub Pages (Settings → Pages → Source: GitHub Actions), once the site workflow exists.
 
-The site is not published yet (#56). This template itself is planned to go public (#185) before that publish step, so its site should deploy to Pages.
+The site workflow is `.github/workflows/factory-site.yml`, an owner paste (high risk, #56). It runs on every push to `main` that touches the site inputs, weekly (Mondays 13:23 UTC), and on demand from the Actions tab (**#169 D5**). It checks the repo's visibility at run time: a public repo deploys to Pages, a private repo only uploads a `factory-site` artifact.
 
-The site workflow is an owner paste (high risk). Refresh cadence, once that workflow lands, is every push to `main`, weekly, and on demand (**#169 D5**).
+**Turning on Pages (public repos only):**
+1. Paste `.github/workflows/factory-site.yml`.
+2. Go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions** (not "Deploy from a branch"). There is no branch or folder to pick.
+3. Run the workflow once from the Actions tab (factory-site → Run workflow). The deploy job's summary links the site, normally `https://<owner>.github.io/<repo>/`.
+
+The first deploy creates the `github-pages` environment. If a run fails with "Get Pages site failed" or a 404 on deploy, the Source setting in step 2 isn't saved yet. On a private repo, skip steps 2 and 3 and download the artifact from the run page instead.
 
 ## 8. Actions access while this template is private
 
