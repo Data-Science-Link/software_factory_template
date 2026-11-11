@@ -50,6 +50,7 @@ FORBIDDEN_PATTERNS=(
   'AGENTS.md' '*/AGENTS.md'
   '.factory/actions-security.md'
   '.factory/models.yaml'
+  'factory/budget.yml'
   'requirements-factory.txt'
   'scripts'
   '*.tar.gz' '*.tgz' '*.zip' '*.tar' '*.deb' '*.rpm'
@@ -64,6 +65,7 @@ EDITABLE_DOT_DIR='.factory/'
 PROTECTED_SCRIPTS=(
   scripts/deepinfra-cost.sh
   scripts/factory-approve-spec.py
+  scripts/factory-budget-vars.py
   scripts/factory-check-model.py
   scripts/factory-classify-failure.py
   scripts/factory-cost.sh
@@ -156,6 +158,9 @@ say so in your final message.
 
 requirements-factory.txt (the pinned factory Python dependencies) is owner-only: never add,
 remove or re-pin a package. If the spec needs a new dependency, stop and say so instead.
+
+factory/budget.yml (the weekly and monthly budgets the site reports against) is owner-only:
+workers may not change their own budget. If the spec needs a budget change, stop and say so.
 RULES
   if [ "${1:-}" = fix ]; then
     cat <<'RULES'

@@ -32,6 +32,7 @@
       "opencode.json": "deny",
       ".factory/actions-security.md": "deny",
       ".factory/models.yaml": "deny",
+      "factory/budget.yml": "deny",
       "requirements-factory.txt": "deny",
       "scripts/protect-main.sh": "deny",
       "AGENTS.md": "deny",
