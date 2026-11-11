@@ -581,14 +581,14 @@ Append-only. Newest at the bottom.
 
 ### 2026-11-11 — Factory site: hosting, budgets, backlog titles, and #156 gate (#169)
 - **Status:** Accepted (Michael, 2026-11-11 10:09 AM CT).
-- **Decision:** The standalone factory site (epic #169: Architecture, Financials, Backlog, and dbt tabs) is the factory's financial and status surface. It supersedes the 2026-11-02 markdown-dashboard decision. Decided items (D5 refresh cadence stays open):
+- **Decision:** The standalone factory site (epic #169: Architecture, Financials, Backlog, and dbt tabs) is the factory's financial and status surface. It supersedes the 2026-11-02 markdown-dashboard decision. Decided items:
   - **D1 Hosting.** Private repo: downloadable Actions artifact only. Public repo: publish to GitHub Pages. Detect visibility at build/deploy time. Paid GitHub Pro/Team can enable Pages from a private repo, but the published site is publicly visible; only Enterprise Cloud supports private Pages. This private template therefore ships a downloadable build only.
   - **D2 Markdown dashboard superseded.** The 2026-11-02 entry that the financials dashboard is generated markdown (`factory/financials/README.md`), not GitHub Pages (vision §18, decisions 2 and 8), is superseded. The site replaces that page and its weekly refresh PR.
   - **D3 Budget location.** Budgets live in `factory/budget.yml`, made owner-only after #170 lands.
   - **D4 Starting budgets.** $10 per month, $2.50 per week.
   - **D6 Backlog titles.** Always show titles. There is no `--titles on|off` switch. Private repos stay artifact-only, so titles are not published on a public Pages site.
   - **#156 rollout.** Hold #156 until #174 (the Financials tab, the complex routing test) passes, in addition to the existing five-straight-successful-worker-build gate.
-  - **D5 Refresh cadence** (on every push to `main` vs weekly vs daily) was not decided in this round and stays open.
+  - **D5 Refresh cadence:** rebuild on every push to `main`, weekly, and on demand (`workflow_dispatch`). Michael, 2026-11-11 ~10:14 AM CT: "Site refresh: every push to main, weekly, and on demand".
 - **Decided by:** Michael, 2026-11-11 10:09 AM CT, in Grok Bot chat, verbatim:
   - D1: "Downloadable build for now, but if we deploy this to another repo and use it and that repo is public then push it to a page. I pay for github. Does that not give me pages on provate repo?"
   - D2: "Replace the Nov 2 markdown-dashboard decision with the site"
