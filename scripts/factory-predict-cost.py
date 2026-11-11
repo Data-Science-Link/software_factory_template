@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -143,15 +145,199 @@ def is_empty_model(value: Any) -> bool:
     return False
 
 
-def dump_front_matter(fm: dict[str, Any]) -> str:
-    return yaml.safe_dump(fm, sort_keys=False, default_flow_style=False).rstrip()
+# Fields --write owns. Every other byte of the file is left unchanged (#60).
+OWNED_WRITE_FIELDS = (
+    "model",
+    "model_reason",
+    "predicted_tokens_in",
+    "predicted_tokens_cached",
+    "predicted_tokens_out",
+    "predicted_cost_usd",
+    "budget_cap_usd",
+    "price_table_version",
+)
+
+_NEEDS_QUOTES = re.compile(
+    r"^(?:"
+    r"null|true|false|yes|no|on|off|~|"
+    r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+    r")$",
+    re.I,
+)
 
 
-def write_spec(path: Path, fm: dict[str, Any], body: str, prefix: str = "") -> None:
-    if body and not body.startswith("\n"):
-        body = "\n" + body
-    new_text = f"{prefix}---\n{dump_front_matter(fm)}\n---{body}"
-    path.write_text(new_text, encoding="utf-8")
+def _line_core(line: str) -> str:
+    return line.lstrip("\ufeff").rstrip("\r\n")
+
+
+def _line_ending(line: str) -> str:
+    if line.endswith("\r\n"):
+        return "\r\n"
+    if line.endswith("\n"):
+        return "\n"
+    return "\n"
+
+
+def _is_field_line(line: str, key: str) -> bool:
+    return bool(re.match(rf"^{re.escape(key)}:(\s|$)", _line_core(line)))
+
+
+def _is_continuation(line: str) -> bool:
+    core = line.rstrip("\r\n")
+    return bool(core) and core[0] in " \t"
+
+
+def _quote_if_needed(text: str) -> str:
+    """Single-quote a YAML scalar only when leaving it bare would change the value."""
+    if text == "":
+        return ""
+    needs = (
+        text[0] in " \t'\"&*!%@`|>{}[]?,:"
+        or text[-1] in " \t"
+        or (text[0] == "-" and (len(text) == 1 or text[1] in " \t"))
+        or "#" in text
+        or ": " in text
+        or text.endswith(":")
+        or "\n" in text
+        or bool(_NEEDS_QUOTES.fullmatch(text))
+    )
+    if needs:
+        return "'" + text.replace("'", "''") + "'"
+    return text
+
+
+def format_owned_value(key: str, value: Any) -> str:
+    if value is None:
+        return "null"
+    if key == "predicted_cost_usd":
+        return f"{float(value):.4f}"
+    if key == "budget_cap_usd":
+        return f"{float(value):.2f}"
+    if key in (
+        "predicted_tokens_in",
+        "predicted_tokens_cached",
+        "predicted_tokens_out",
+    ):
+        return str(int(value))
+    if key == "price_table_version":
+        # Unquoted so a version like 2026-11-02 stays a bare date, matching the template.
+        return _version_str(value)
+    return _quote_if_needed(str(value))
+
+
+def _parse_rhs(rhs: str) -> Any:
+    try:
+        loaded = yaml.safe_load("v: " + rhs)
+    except yaml.YAMLError:
+        return rhs.strip()
+    if isinstance(loaded, dict) and "v" in loaded:
+        return loaded["v"]
+    return loaded
+
+
+def _version_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def _values_match(key: str, existing: Any, new: Any) -> bool:
+    if key == "price_table_version":
+        return _version_str(existing) == _version_str(new) and _version_str(new) != ""
+    if key in ("predicted_cost_usd", "budget_cap_usd"):
+        if existing is None or new is None:
+            return existing is None and new is None
+        try:
+            return float(existing) == float(new)
+        except (TypeError, ValueError):
+            return False
+    if key in (
+        "predicted_tokens_in",
+        "predicted_tokens_cached",
+        "predicted_tokens_out",
+    ):
+        try:
+            return int(existing) == int(new)
+        except (TypeError, ValueError):
+            return False
+    exist_s = "" if existing is None else str(existing)
+    new_s = "" if new is None else str(new)
+    return exist_s == new_s
+
+
+def _front_matter_bounds(lines: list[str]) -> tuple[int, int]:
+    """Indexes of the opening and closing --- lines, searching after a spec marker if present."""
+    search_from = 0
+    for i, line in enumerate(lines):
+        if SPEC_MARKER in line:
+            search_from = i + 1
+            break
+    start = None
+    for i in range(search_from, len(lines)):
+        if _line_core(lines[i]).strip() == "---":
+            if start is None:
+                start = i
+            else:
+                return start, i
+    raise SystemExit("cannot --write: missing YAML front matter delimiters")
+
+
+def patch_owned_fields(text: str, updates: dict[str, Any]) -> str:
+    """Rewrite only owned front-matter field lines; leave every other byte unchanged."""
+    updates = {k: updates[k] for k in OWNED_WRITE_FIELDS if k in updates}
+    lines = text.splitlines(keepends=True)
+    if not lines:
+        raise SystemExit("cannot --write: empty file")
+    start, end = _front_matter_bounds(lines)
+    seen: set[str] = set()
+    out: list[str] = []
+    out.extend(lines[: start + 1])
+    i = start + 1
+    while i < end:
+        line = lines[i]
+        matched: str | None = None
+        for key in updates:
+            if _is_field_line(line, key):
+                matched = key
+                break
+        if matched is None:
+            out.append(line)
+            i += 1
+            continue
+        j = i + 1
+        while j < end and _is_continuation(lines[j]):
+            j += 1
+        if matched in seen:
+            i = j
+            continue
+        seen.add(matched)
+        rhs = _line_core(line).split(":", 1)[1]
+        if j > i + 1:
+            rhs += "".join(lines[i + 1 : j])
+        existing = _parse_rhs(rhs)
+        new_val = updates[matched]
+        if _values_match(matched, existing, new_val):
+            out.extend(lines[i:j])
+        else:
+            nl = _line_ending(line)
+            out.append(f"{matched}: {format_owned_value(matched, new_val)}{nl}")
+        i = j
+    missing = [k for k in OWNED_WRITE_FIELDS if k in updates and k not in seen]
+    if missing:
+        nl = _line_ending(lines[end]) if end < len(lines) else "\n"
+        for key in missing:
+            out.append(f"{key}: {format_owned_value(key, updates[key])}{nl}")
+    out.extend(lines[end:])
+    return "".join(out)
+
+
+def write_spec(path: Path, updates: dict[str, Any], original: str | None = None) -> None:
+    text = path.read_text(encoding="utf-8") if original is None else original
+    path.write_text(patch_owned_fields(text, updates), encoding="utf-8")
 
 
 def apply_checks(checks: list[dict], ctx: dict) -> list[str]:
@@ -172,7 +358,7 @@ def compute(
     as_json: bool,
 ) -> dict[str, Any]:
     raw = strip_test_directive(spec_path.read_text(encoding="utf-8"))
-    marker_prefix, raw = split_marker(raw)
+    _marker_prefix, raw = split_marker(raw)
     fm, body = split_front_matter(raw)
     if fm is None:
         raise SystemExit(f"{spec_path}: missing YAML front matter")
@@ -307,15 +493,19 @@ def compute(
         )
 
     if write:
-        fm["model"] = model_id
-        fm["model_reason"] = model_reason
-        fm["predicted_tokens_in"] = tokens_in
-        fm["predicted_tokens_cached"] = tokens_cached
-        fm["predicted_tokens_out"] = tokens_out
-        fm["predicted_cost_usd"] = predicted_cost
-        fm["budget_cap_usd"] = issue_cap
-        fm["price_table_version"] = price_table_version
-        write_spec(spec_path, fm, body, prefix=marker_prefix)
+        write_spec(
+            spec_path,
+            {
+                "model": model_id,
+                "model_reason": model_reason,
+                "predicted_tokens_in": tokens_in,
+                "predicted_tokens_cached": tokens_cached,
+                "predicted_tokens_out": tokens_out,
+                "predicted_cost_usd": predicted_cost,
+                "budget_cap_usd": issue_cap,
+                "price_table_version": price_table_version,
+            },
+        )
 
     if as_json:
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -349,7 +539,7 @@ def main() -> None:
     parser.add_argument(
         "--write",
         action="store_true",
-        help="Update spec front matter in place (body unchanged)",
+        help="Update owned front-matter fields in place (targeted line edits; every other byte unchanged)",
     )
     parser.add_argument(
         "--json",

@@ -139,6 +139,7 @@ run_pass tests/predict/pass-high-risk-qwen.md
 run_pass tests/predict/pass-work-type-spec.md
 run_pass tests/predict/pass-work-type-spec-high-risk.md
 run_pass tests/predict/pass-marker-prefixed.md
+run_pass tests/predict/pass-write-preserves-formatting.md
 # --write keeps the marker line (and any text above it) in place (#60, marker part).
 tmpm="$tmpdir/marker.md"
 grep -v '^# predict-expect:' tests/predict/pass-marker-prefixed.md >"$tmpm"
@@ -212,6 +213,72 @@ if [ "$first_hash" = "$second_hash" ]; then
   passed=$((passed + 1))
 else
   echo "FAIL  pass-write-idempotent (--write changed file on second run)"
+  failed=$((failed + 1))
+fi
+
+# #60: targeted --write leaves every unowned byte unchanged; a second write is a no-op.
+run_write_preserve() {
+  local fixture="$1"
+  local name
+  name="$(basename "$fixture")"
+  local before="$tmpdir/${name}.before"
+  local after="$tmpdir/${name}.after"
+  local jsonf="$tmpdir/${name}.json"
+  grep -v "^# predict-expect:" "$fixture" >"$before"
+  "${PY[@]}" "$before" --json >"$jsonf" 2>/dev/null
+  cp "$before" "$after"
+  "${PY[@]}" "$after" --write >/dev/null 2>&1
+  if python3 tests/predict/check-write-preserve.py "$before" "$after" "$jsonf"; then
+    echo "PASS  $name (--write preserves unowned bytes and already-correct owned lines)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  $name (--write did not preserve formatting)"
+    failed=$((failed + 1))
+    return
+  fi
+  local hash1 hash2
+  hash1="$(sha256sum "$after" | awk '{print $1}')"
+  "${PY[@]}" "$after" --write >/dev/null 2>&1
+  hash2="$(sha256sum "$after" | awk '{print $1}')"
+  if [ "$hash1" = "$hash2" ]; then
+    echo "PASS  $name (--write idempotent)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  $name (--write changed file on second run)"
+    failed=$((failed + 1))
+  fi
+}
+
+run_write_preserve tests/predict/pass-write-preserves-formatting.md
+run_write_preserve tests/predict/pass-write-already-filled.md
+
+# First --write on an already-correct file must be a byte-for-byte no-op (quoted date stays quoted).
+tmp_filled="$tmpdir/already-filled.md"
+cp tests/predict/pass-write-already-filled.md "$tmp_filled"
+before_hash="$(sha256sum "$tmp_filled" | awk '{print $1}')"
+"${PY[@]}" "$tmp_filled" --write >/dev/null 2>&1
+after_hash="$(sha256sum "$tmp_filled" | awk '{print $1}')"
+if [ "$before_hash" = "$after_hash" ]; then
+  echo "PASS  pass-write-already-filled (--write is a no-op when values already match)"
+  passed=$((passed + 1))
+else
+  echo "FAIL  pass-write-already-filled (--write rewrote an already-correct file)"
+  failed=$((failed + 1))
+fi
+
+# Missing owned keys are inserted; unowned lines stay the same.
+tmp_miss="$tmpdir/missing-keys.md"
+grep -v -e "^price_table_version:" -e "^model_reason:" tests/predict/pass-write-already-filled.md >"$tmp_miss"
+cp "$tmp_miss" "$tmp_miss.before"
+"${PY[@]}" "$tmp_miss" --json >"$tmpdir/missing-keys.json" 2>/dev/null
+"${PY[@]}" "$tmp_miss" --write >/dev/null 2>&1
+if python3 tests/predict/check-write-preserve.py "$tmp_miss.before" "$tmp_miss" "$tmpdir/missing-keys.json" \
+  && grep -q "^price_table_version: 2026-11-02$" "$tmp_miss" \
+  && grep -q "^model_reason: " "$tmp_miss"; then
+  echo "PASS  --write inserts missing owned keys (unquoted date) without touching unowned lines"
+  passed=$((passed + 1))
+else
+  echo "FAIL  --write missing-key insertion"
   failed=$((failed + 1))
 fi
 
