@@ -1,0 +1,65 @@
+# Trimmed DeepInfra price table and routing rules for the site generator test.
+
+price_table_version: "2026-11-02"
+price_sources:
+  - model: deepseek-ai/DeepSeek-V4-Flash-0731
+    url: https://deepinfra.com/deepseek-ai/DeepSeek-V4-Flash-0731
+    checked_at: "2026-11-02"
+
+models:
+  - id: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider: deepinfra
+    price_in_per_mtok: 0.06
+    price_cached_per_mtok: 0.015
+    price_out_per_mtok: 0.18
+    context: 1048576
+    thinking: configurable
+    status: default
+    notes: Standard tier; reasoning_effort low|high|max per DeepInfra docs.
+
+  - id: deepseek-ai/DeepSeek-V4-Pro-0813
+    provider: deepinfra
+    price_in_per_mtok: 1.30
+    price_cached_per_mtok: 0.10
+    price_out_per_mtok: 2.60
+    context: 1048576
+    thinking: configurable
+    status: escalation
+    notes: Standard tier; /oc spec architect.
+
+routing_rules:
+  - rule: 2
+    description: "/oc spec run on a high-risk issue → V4 Pro (architect)"
+    when:
+      work_type: spec
+      risk: high
+    model: deepseek-ai/DeepSeek-V4-Pro-0813
+
+  - rule: 9
+    description: "/oc spec run on any other issue → V4 Flash"
+    when:
+      work_type: spec
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+
+  - rule: 3
+    description: Default for all other factory worker runs → V4 Flash
+    when: {}
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    tier: standard
+
+checks:
+  - rule: 6
+    description: Predicted cost above issue cap → do not run; split the issue first
+    when:
+      predicted_cost_usd_gt: 1.00
+    action: do_not_run_split_issue
+
+  - rule: 8
+    description: Standard DeepInfra pricing tier only (no Priority 1.5x unless owner asks)
+    when:
+      tier_requested: priority
+    action: reject_unless_owner_approved
+
+budget:
+  deepinfra_monthly_limit_usd: 10
+  issue_cap_usd: 1.00
