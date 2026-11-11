@@ -5,6 +5,9 @@ Pointers only — do not duplicate long docs here. Update paths when you drop th
 | Topic | Path | Notes |
 |---|---|---|
 | Overview / setup | `README.md` | include limitations / non-goals |
+| How a person or agent uses the factory | `ADOPTING.md` | short paths; not a second FACTORY.md |
+| New-repo setup checklist | `docs/SETUP.md` | secrets, labels, protection, config |
+| Release process | `docs/RELEASING.md`, `CHANGELOG.md` | no tag until Michael approves; pinning is planned (#156) |
 | License | `LICENSE` | required on public repos |
 | Security policy | `SECURITY.md` | real contact; monitor it |
 | Contributing / factory | `CONTRIBUTING.md` | copy from `.factory/sketches/CONTRIBUTING.md` |
