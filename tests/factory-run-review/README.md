@@ -126,3 +126,30 @@ contain no keys, tokens, env values or private paths.
 non-null `seconds_per_tool_turn` / `longest_gap_seconds` for run `42951547485`,
 put the denied `ls` in its `blocked_calls`, and populate the spec run's
 `tool_counts` from the log fallback.
+
+## False-positive regression fixture (`falsepos/live/`)
+
+`falsepos/live/` is the regression fixture for #188: it reproduces the two
+workflow-log lines that made `detect_blocked_calls()` report a `blocked_call`
+finding on every live `/oc` run that ran a model, even when no tool call was
+actually denied. Its contents contain no secrets, keys, tokens or env values.
+
+- `pr-head.txt` — `oc/issue-188-43052631438`.
+- `run-list.json` — a single build run `43052631438` (`opencode-spike`,
+  headBranch `main`).
+- `artifacts/43052631438/log.txt` — a real GitHub workflow-log style file with:
+  - the echoed `OC_INSTRUCTION:` env line, which quotes the permission-denial
+    text (`The user has specified a rule which prevents you from using this
+    specific tool call`) and uses the words `denied` / `blocked` / `guardrail`,
+    exactly as an owner instruction that mentions the denial can appear on
+    every step;
+  - the StepSecurity harden-runner config line `"denied_endpoints":""` printed
+    by the `Pre Harden runner (audit egress)` step;
+  - normal agent tool-result lines (`→ Read`, `✱ Glob`, `✗ Bash ...`) with no
+    real denial text on or around them.
+
+`--live-dir falsepos/live` must report `blocked_calls: []` and no `blocked_call`
+finding for run `43052631438`. This is the broken-case guard: if the bare
+`denied` / `blocked` / `guardrail` substring fallback were still active, the
+echoed instruction and the `denied_endpoints` line would produce a non-empty
+`blocked_calls`, and the test fails loudly.

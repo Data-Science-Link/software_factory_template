@@ -16,7 +16,7 @@ Only **`scripts/factory-run-end.sh`** (the run end step on the Actions worker) w
 ## Where records live (decision 1, vision §18)
 
 1. **In the run's PR** — committed on the worker branch as `factory/runs/<run_id>.json` when a PR is opened or updated.
-2. **On the issue** — a copy in a fenced `json` block under the HTML marker `<!-- factory-run-record -->`, posted by **`github-actions[bot]`** only. Failed, rejected, or closed runs still count in financials because `scripts/factory-collect-runs.sh` can ingest issue copies when no PR merged.
+2. **On the issue** — a copy in a fenced `json` block under the HTML marker `<!-- factory-run-record -->`, posted by **`github-actions[bot]`** only. Failed, rejected, or closed runs still count in financials because `scripts/factory-collect-runs.py` can ingest issue copies when no PR merged. The site build collects these records from issue comments via `scripts/factory-collect-runs.py` into `site-data/runs/`.
 
 This directory on `main` holds **only this README** until real runs land; do not commit example records here (fixtures live under `tests/run-records/`).
 
