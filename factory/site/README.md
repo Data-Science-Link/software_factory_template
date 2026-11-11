@@ -5,7 +5,10 @@ A small static four-tab website generated from the factory's own source files:
 - **Architecture** (`index.html`) — the factory loop, roles, merge authority,
   models and prices, routing rules and guard checks, read from `.factory/FACTORY.md`
   and `.factory/models.yaml`.
-- **Financials** (`financials.html`) — not available yet; lands in issue #174.
+- **Financials** (`financials.html`) — a CFO-style view with headline cost cards, budget vs spend charts,
+  per-issue economics, model/work-type breakdown, prediction accuracy, and data freshness.
+  Reads from `site-data/marts/*.json` (from issue #170) only, offline, with no JS and no
+  chart library. Every number is asserted against the fixture values.
 - **Backlog** (`backlog.html`) — not available yet; lands in issue #172.
 - **dbt** (`dbt.html`) — not available yet; lands in issue #173.
 

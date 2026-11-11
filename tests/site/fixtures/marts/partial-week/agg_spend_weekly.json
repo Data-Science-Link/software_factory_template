@@ -1,0 +1,14 @@
+[
+  {
+    "week_start_utc": "2026-11-09",
+    "week_end_utc": "2026-11-11",
+    "iso_year": 2026,
+    "iso_week": 46,
+    "runs": 2,
+    "issues": 1,
+    "spend_usd": 0.01,
+    "budget_usd": 2.5,
+    "budget_used_pct": 0.4,
+    "over_budget": false
+  }
+]
