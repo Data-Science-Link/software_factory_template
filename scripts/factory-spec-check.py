@@ -276,8 +276,9 @@ def files_section_paths(files_md: str) -> list[tuple[str, str]]:
 def check_files_paths(body: str, errors: list[str], base_scripts: Path | None = None) -> None:
     """Every ## Files path must be buildable under scripts/opencode-artifact-scan.sh (#131).
 
-    base_scripts: file listing the scripts/ paths on the base branch; "existing script" is judged
-    against it, not HEAD, so a build PR that adds its own spec's scripts still passes.
+    base_scripts: file listing the scripts/ paths on the base branch; a protected spend/security
+    script is judged against it, not HEAD, so a build PR that adds its own spec's scripts still
+    passes, and a Change to a non-protected existing script is allowed.
     """
     base_args = ["--base-scripts", str(base_scripts)] if base_scripts else []
     for intent, path in files_section_paths(section(body, "Files")):

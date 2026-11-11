@@ -40,8 +40,9 @@ scan_one() {
 # 1. FORBIDDEN_PATTERNS: never created, edited, renamed or deleted.
 # 2. Dot-paths (any path component starting with "."): forbidden, except anything under
 #    .factory/ (minus the owner-only files in 1) and .gitignore files (add lines only).
-# 3. scripts/: new files only, directly in scripts/, hyphenated names. Existing scripts are the
-#    guardrails: no edit, delete, rename-out or mode change.
+# 3. scripts/: new files must sit directly in scripts/ with hyphenated names. Workers may edit
+#    the content of existing scripts except the protected spend/security list (PROTECTED_SCRIPTS).
+#    Deletes, renames and chmod of any existing script stay forbidden.
 # 4. Symlinks, submodules, binary patches, quoted (special-character) paths and ".." are forbidden.
 FORBIDDEN_PATTERNS=(
   '.github' '.github/*'
@@ -57,13 +58,62 @@ FORBIDDEN_PATTERNS=(
 )
 ADD_ONLY_DIR='scripts/'
 EDITABLE_DOT_DIR='.factory/'
+# Protected spend/security scripts (single source of truth; --list-protected / --list-rules;
+# mirrored in .factory/FACTORY.md). Workers may not edit these. Michael, 2026-11-10:
+# "Loosen the rule: workers may edit existing scripts except spend/security ones."
+PROTECTED_SCRIPTS=(
+  scripts/deepinfra-cost.sh
+  scripts/factory-approve-spec.py
+  scripts/factory-check-model.py
+  scripts/factory-classify-failure.py
+  scripts/factory-cost.sh
+  scripts/factory-predict-cost.py
+  scripts/factory-run-body.sh
+  scripts/factory-run-end.sh
+  scripts/factory-run-finish.sh
+  scripts/factory-run-pack.sh
+  scripts/factory-run-record.py
+  scripts/factory-run-start.py
+  scripts/factory-run-start.sh
+  scripts/factory-spec-check.py
+  scripts/factory-usage.py
+  scripts/factory-validate-run.py
+  scripts/install-gitleaks-ci.sh
+  scripts/install-hooks.sh
+  scripts/opencode-agent-fix.sh
+  scripts/opencode-agent-run.sh
+  scripts/opencode-artifact-scan.sh
+  scripts/opencode-capture-usage.sh
+  scripts/opencode-git-push-lease.sh
+  scripts/opencode-git-push-scoped.sh
+  scripts/opencode-install.sh
+  scripts/opencode-publish-fix.sh
+  scripts/opencode-publish-pr.sh
+  scripts/opencode-publish-spec.sh
+  scripts/opencode-run-facts.sh
+  scripts/opencode-run-meter.sh
+  scripts/opencode-spec-draft.py
+  scripts/opencode-spec-run.sh
+  scripts/opencode-usage-report.sh
+  scripts/opencode-verify.sh
+  scripts/pr-check.sh
+  scripts/protect-main.sh
+)
 # Fix runs only (#102): --base-scripts FILE lists the scripts/ paths that exist on the base branch
 # (the trusted default-branch checkout, written by the harness, never by the worker). A scripts/
-# file NOT in that list was added by the PR being fixed, so a fix patch may edit its content.
-# Without the flag (build runs) every existing script stays locked, as before.
+# file NOT in that list was added by the PR being fixed, so a fix patch may edit its content
+# (and chmod between 100644 and 100755). Default-branch scripts may be content-edited only when
+# they are not on PROTECTED_SCRIPTS; delete, rename and chmod stay forbidden for every existing script.
 BASE_SCRIPTS_FILE=''
 in_base_scripts() { # $1 = path; true when it exists on the base branch
   [ -n "$BASE_SCRIPTS_FILE" ] && grep -qxF -- "$1" "$BASE_SCRIPTS_FILE"
+}
+is_protected_script() { # $1 = path
+  local s
+  for s in "${PROTECTED_SCRIPTS[@]}"; do
+    [ "$1" = "$s" ] && return 0
+  done
+  return 1
 }
 
 list_rules() {
@@ -82,13 +132,20 @@ factory/x/.env), with two exceptions:
 - .gitignore files: you may only ADD lines. Never delete or change an existing line, and
   never delete, rename or chmod a .gitignore.
 
-scripts/: you may add new scripts under scripts/ but not edit existing ones.
+scripts/: you may add new hyphenated scripts under scripts/, and you may edit the
+content of existing scripts except the protected spend/security list below.
 - A new file must sit directly in scripts/ (no subdirectories) and have a hyphenated name,
   for example scripts/dbt-seed-check.sh or scripts/factory-report.py. A bare module-style
   name such as scripts/yaml.py or scripts/helpers.sh is rejected (it could shadow imports).
-- You may NOT edit, delete, rename, move out or chmod any existing file under scripts/;
-  existing scripts are the factory's guardrails. If an existing script needs a change,
-  stop and say so in your final message instead.
+- You may NOT delete, rename, move out or chmod any existing file under scripts/.
+- You may NOT edit a protected spend/security script (cost, budget, caps, preflight,
+  price tables, run records, key/token handling, secret scanning, path policy,
+  merge protection, spec approval, or model routing that controls spend). If a
+  protected script needs a change, stop and say so in your final message instead.
+  Protected list (also printed by --list-protected):
+RULES
+  printf -- '- %s\n' "${PROTECTED_SCRIPTS[@]}"
+  cat <<'RULES'
 - New scripts are not run by CI unless a workflow calls them, and workflows are owner-only.
 
 Also forbidden everywhere: symlinks, submodules, binary files, ".." in paths, and file
@@ -104,8 +161,9 @@ RULES
 
 Fix runs only: a script under scripts/ that this PR added (it is not on the default branch)
 may be EDITED in place (content changes; a mode change only between 100644 and 100755). You
-still may not delete or rename it, and every script that exists on the default branch stays
-locked: never edit, delete, rename, re-create or chmod it.
+still may not delete or rename it. A script that exists on the default branch may be
+content-edited only if it is not on the protected spend/security list; delete, rename
+and chmod stay forbidden for every existing script, and protected scripts stay locked.
 RULES
   fi
 }
@@ -194,13 +252,17 @@ check_spec_path() { # $1 = intent (create|modify|read), $2 = repo path
     create | modify)
       if [ "$cls" = scripts ]; then
         if [ "$intent" = modify ] || spec_path_exists "$p"; then
-          spec_path_fail "change to an existing script under scripts/ (only new hyphenated scripts are allowed): $p"
-        fi
-        local rel="${p#"$ADD_ONLY_DIR"}" stem
-        case "$rel" in */*) spec_path_fail "new script must sit directly under scripts/: $p" ;; esac
-        stem="${rel%%.*}"
-        if [[ "$stem" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-          spec_path_fail "new script needs a hyphenated name: $p"
+          if is_protected_script "$p"; then
+            spec_path_fail "change to a protected spend/security script under scripts/: $p"
+          fi
+          # Non-protected existing script: content edits are allowed.
+        else
+          local rel="${p#"$ADD_ONLY_DIR"}" stem
+          case "$rel" in */*) spec_path_fail "new script must sit directly under scripts/: $p" ;; esac
+          stem="${rel%%.*}"
+          if [[ "$stem" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            spec_path_fail "new script needs a hyphenated name: $p"
+          fi
         fi
       fi
       if [ "$cls" = gitignore ] && [ "$intent" = modify ]; then
@@ -274,9 +336,16 @@ finish_section() {
       : # fix run: content edit of a script the PR added (#102); delete/rename/main scripts fall through
     elif [ "$cls" = scripts ]; then
       case "$status" in
-        deleted) fail "patch deletes an existing script (only new files are allowed under scripts/): $old" ;;
-        renamed) fail "patch renames an existing script (only new files are allowed under scripts/): $old" ;;
-        *) fail "patch modifies an existing script (only new files are allowed under scripts/): $old" ;;
+        deleted) fail "patch deletes an existing script (deletes stay forbidden under scripts/): $old" ;;
+        renamed) fail "patch renames an existing script (renames stay forbidden under scripts/): $old" ;;
+        *)
+          if [ "$sec_mode_change" = yes ]; then
+            fail "patch chmods an existing script (mode changes are forbidden under scripts/): $old"
+          elif is_protected_script "$old"; then
+            fail "patch modifies a protected spend/security script: $old"
+          fi
+          # Non-protected existing script: content edit is allowed.
+          ;;
       esac
     fi
     if [ "$cls" = gitignore ]; then
@@ -384,6 +453,11 @@ fi
 
 if [ "${1:-}" = "--list-forbidden" ]; then
   printf '%s\n' "${FORBIDDEN_PATTERNS[@]}"
+  exit 0
+fi
+
+if [ "${1:-}" = "--list-protected" ]; then
+  printf '%s\n' "${PROTECTED_SCRIPTS[@]}"
   exit 0
 fi
 

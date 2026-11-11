@@ -97,18 +97,20 @@ for fixture in "$fixtures_dir"/*.md; do
   esac
 done
 
-# A script already on the branch but not on base (a build PR's own new script) passes; the same
-# script on the base list, or with no list (HEAD), is an existing script and fails.
-case_rc() { # <name> <want: ok|fail> <args...>
-  local name="$1" want="$2" out rc
+# A new script already on the branch but not on base (a build PR's own new script) still passes.
+# A non-protected existing script on the base list may now be listed as a Change. A protected
+# spend/security script on the base list (or tracked on HEAD with no list) still fails.
+case_rc() { # <name> <want: ok|fail> [fail-needle] <args...>
+  local name="$1" want="$2" needle="" out rc
   shift 2
+  if [ "$want" = fail ]; then needle="$1"; shift; fi
   total=$((total + 1))
   set +e
   out="$(python3 scripts/factory-spec-check.py "$@" 2>&1)"
   rc=$?
   set -e
   if { [ "$want" = ok ] && [ "$rc" -eq 0 ]; } \
-    || { [ "$want" = fail ] && [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -Fq "change to an existing script under scripts/"; }; then
+    || { [ "$want" = fail ] && [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -Fq "$needle"; }; then
     echo "PASS  $name"
     passed=$((passed + 1))
   else
@@ -122,8 +124,13 @@ sed 's#`scripts/widget-audit.sh`#`scripts/test-spec-check.sh`#' "$fixtures_dir/p
 grep -qxF 'scripts/test-spec-check.sh' "$base_scripts" || echo 'scripts/test-spec-check.sh' >>"$base_scripts"
 grep -vxF 'scripts/test-spec-check.sh' "$base_scripts" >"$tmp/base-without.txt"
 case_rc "base-scripts: script on branch, not on base -> passes" ok --base-scripts "$tmp/base-without.txt" "$branch_spec"
-case_rc "base-scripts: script on base -> existing script" fail --base-scripts "$base_scripts" "$branch_spec"
-case_rc "no base-scripts: tracked on HEAD -> existing script" fail "$branch_spec"
+case_rc "base-scripts: non-protected script on base -> allowed" ok --base-scripts "$base_scripts" "$branch_spec"
+case_rc "no base-scripts: non-protected script tracked on HEAD -> allowed" ok "$branch_spec"
+prot_spec="$tmp/branch-protected-script.md"
+sed 's#`scripts/widget-audit.sh`#`scripts/factory-predict-cost.py`#' "$fixtures_dir/pass-files-hyphenated-script.md" \
+  | sed 's/Create:/Change:/' >"$prot_spec"
+case_rc "base-scripts: protected script on base -> fails" fail "change to a protected spend/security script" --base-scripts "$base_scripts" "$prot_spec"
+case_rc "no base-scripts: protected script tracked on HEAD -> fails" fail "change to a protected spend/security script" "$prot_spec"
 
 echo ""
 echo "Results: $passed passed, $failed failed, $total total"

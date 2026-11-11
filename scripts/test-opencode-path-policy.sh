@@ -50,17 +50,23 @@ expect() { # $1 = pass|fail  $2 = name  [$3 = substring the failure message must
   else bad "$2 (want $1, rc=$rc: $out)"; fi
 }
 
-# --- scripts/: new files only ---
+# --- scripts/: new files, plus content edits of non-protected existing scripts ---
 new_repo; printf '#!/usr/bin/env bash\necho new\n' >scripts/dbt-seed-check.sh; capture
 expect pass "scripts/: add a new script (100644)"
 new_repo; printf '#!/usr/bin/env bash\necho new\n' >scripts/dbt-seed-check.sh; chmod +x scripts/dbt-seed-check.sh; capture
 expect pass "scripts/: add a new executable script (new file mode 100755)"
 new_repo; printf 'echo more\n' >>scripts/pr-check.sh; capture
-expect fail "scripts/: modify an existing script" "modifies an existing script"
+expect fail "scripts/: modify a protected spend/security script" "protected spend/security script"
+new_repo; printf 'print(\"more\")\n' >>scripts/factory-report.py; capture
+expect pass "scripts/: modify a non-protected existing script"
 new_repo; chmod -x scripts/pr-check.sh; capture
-expect fail "scripts/: chmod an existing script (mode change only)" "modifies an existing script"
+expect fail "scripts/: chmod a protected existing script (mode change only)" "chmods an existing script"
+new_repo; chmod +x scripts/factory-report.py; capture
+expect fail "scripts/: chmod a non-protected existing script still forbidden" "chmods an existing script"
 new_repo; rm scripts/pr-check.sh; capture
-expect fail "scripts/: delete an existing script" "deletes an existing script"
+expect fail "scripts/: delete a protected existing script" "deletes an existing script"
+new_repo; rm scripts/factory-report.py; capture
+expect fail "scripts/: delete a non-protected existing script still forbidden" "deletes an existing script"
 new_repo; g mv scripts/pr-check.sh scripts/pr-check-old.sh; capture
 expect fail "scripts/: rename within scripts/" "renames an existing script"
 new_repo; g mv scripts/pr-check.sh docs/pr-check.sh; capture
@@ -82,7 +88,9 @@ expect fail "scripts/: new package directory (shadow import)" "directly in scrip
 new_repo; ln -s ../.github scripts/link-dir; capture
 expect fail "scripts/: new symlink" "symlink"
 new_repo; printf '#!/usr/bin/env bash\n' >scripts/new-a.sh; printf 'more\n' >>scripts/factory-report.py; capture
-expect fail "scripts/: new file plus an edit to an existing one in the same patch" "modifies an existing script"
+expect pass "scripts/: new file plus an edit to a non-protected existing script in the same patch"
+new_repo; printf '#!/usr/bin/env bash\n' >scripts/new-a.sh; printf 'more\n' >>scripts/pr-check.sh; capture
+expect fail "scripts/: new file plus an edit to a protected script in the same patch" "protected spend/security script"
 
 # --- .factory/ ---
 new_repo; printf '\nMore rules.\n' >>.factory/FACTORY.md; capture
@@ -167,11 +175,23 @@ expect fail "patch that ends inside a hunk is rejected" "ends inside a hunk"
 # --- the prompt carries the same rules ---
 cd "$root"
 rules="$(bash "$scan" --list-rules)"
-if grep -qF 'you may add new scripts under scripts/ but not edit existing ones' <<<"$rules" \
+if grep -qF 'you may add new hyphenated scripts under scripts/, and you may edit the' <<<"$rules" \
+  && grep -qF 'protected spend/security list' <<<"$rules" \
   && grep -qF '.factory/models.yaml' <<<"$rules" && grep -qF 'only ADD lines' <<<"$rules" \
   && grep -qF 'requirements-factory.txt' <<<"$rules"; then
   ok "--list-rules states the scripts/, .factory/ and .gitignore rules"
 else bad "--list-rules wording"; fi
+missing_prot=""
+while IFS= read -r prot; do
+  grep -qxF -- "- $prot" <<<"$rules" || missing_prot="$missing_prot $prot"
+  grep -qF -- "$prot" "$root/.factory/FACTORY.md" || missing_prot="$missing_prot (FACTORY.md lacks $prot)"
+done < <(bash "$scan" --list-protected)
+if [ -z "$missing_prot" ]; then ok "--list-rules and FACTORY.md include every --list-protected path"
+else bad "--list-protected not mirrored:$missing_prot"; fi
+if bash "$scan" --list-protected | grep -qxF 'scripts/opencode-artifact-scan.sh' \
+  && bash "$scan" --list-protected | grep -qxF 'scripts/protect-main.sh'; then
+  ok "--list-protected includes the path-policy script and protect-main.sh"
+else bad "--list-protected missing required entries"; fi
 missing=""
 while IFS= read -r pat; do
   grep -qxF -- "- $pat" <<<"$rules" || missing="$missing $pat"
@@ -206,15 +226,19 @@ expect_fix() { # like expect, but scans in fix mode with the base scripts list
 }
 new_pr_repo; printf 'echo fixed\n' >>scripts/pr-added-check.sh; capture
 expect_fix pass "fix: edit a script the PR added"
-expect fail "build (no --base-scripts): same edit still rejected" "modifies an existing script"
+expect pass "build (no --base-scripts): edit of a non-protected PR-added script is allowed"
 new_pr_repo; chmod +x scripts/pr-added-check.sh; capture
 expect_fix pass "fix: chmod +x a script the PR added"
 new_pr_repo; printf 'echo more\n' >>scripts/pr-check.sh; capture
-expect_fix fail "fix: edit a script that exists on main" "modifies an existing script"
+expect_fix fail "fix: edit a protected script that exists on main" "protected spend/security script"
+new_pr_repo; printf 'print(\"more\")\n' >>scripts/factory-report.py; capture
+expect_fix pass "fix: edit a non-protected script that exists on main"
 new_pr_repo; chmod -x scripts/pr-check.sh; capture
-expect_fix fail "fix: chmod a script that exists on main" "modifies an existing script"
+expect_fix fail "fix: chmod a protected script that exists on main" "chmods an existing script"
+new_pr_repo; chmod +x scripts/factory-report.py; capture
+expect_fix fail "fix: chmod a non-protected main script still forbidden" "chmods an existing script"
 new_pr_repo; g rm -q scripts/pr-check.sh; printf '#!/usr/bin/env bash\necho evil\n' >scripts/pr-check.sh; capture
-expect_fix fail "fix: delete + re-add a main script (one section)" "modifies an existing script"
+expect_fix fail "fix: delete + re-add a protected main script (one section)" "existing script"
 new_pr_repo; g rm -q scripts/pr-check.sh; capture
 expect_fix fail "fix: delete a main script" "deletes an existing script"
 new_pr_repo; g rm -q scripts/pr-check.sh; g commit -qm sneaky; printf '#!/usr/bin/env bash\necho evil\n' >scripts/pr-check.sh; capture

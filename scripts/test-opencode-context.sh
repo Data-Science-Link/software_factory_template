@@ -84,7 +84,7 @@ while IFS= read -r pat; do
 done < <(bash scripts/opencode-artifact-scan.sh --list-forbidden)
 printf 'diff --git a/factory/x/y.py b/factory/x/y.py\n' >"$work/p.patch"
 bash scripts/opencode-artifact-scan.sh "$work/p.patch" >/dev/null 2>&1 || parity="scan blocks factory/x/y.py"
-grep -qF 'you may add new scripts under scripts/ but not edit existing ones' <<<"$prompt" || parity="prompt lacks the scripts/ rule"
+grep -qF 'protected spend/security list' <<<"$prompt" || parity="prompt lacks the scripts/ rule"
 grep -qF 'only ADD lines' <<<"$prompt" || parity="prompt lacks the .gitignore rule"
 if [ "$parity" = ok ]; then ok "forbidden-path list parity (prompt == scan)"; else bad "forbidden-path parity: $parity"; fi
 
