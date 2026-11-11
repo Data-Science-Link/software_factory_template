@@ -135,12 +135,62 @@ else
   tl_ok=1
   grep -q '"run_id": 42295555555' "$tmpdir/out-tokenless.json" || tl_ok=0
   grep -q '"in": null' "$tmpdir/out-tokenless.json" || tl_ok=0
-  grep -q 'unavailable' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q '"longest_gap_seconds": null' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q 'seconds/tool turn: unavailable, longest gap: unavailable' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q 'unavailables' "$tmpdir/out-tokenless.json" && tl_ok=0
   grep -q '"in": 40000' "$tmpdir/out-tokenless.json" && tl_ok=0
+  grep -q '"tool_counts": {}' "$tmpdir/out-tokenless.json" || tl_ok=0
   if [ "$tl_ok" -eq 1 ]; then
-    note "token-less broken case (selected, tokens null, rendered unavailable)"
+    note "token-less broken case (no tool data, tokens/gap null, rendered unavailable, no stray suffix)"
   else
     fail "token-less broken case (fabricated or not reported unavailable)"
+  fi
+fi
+
+# Real-log/session fixture: a live-style run (42951547485) whose artifact
+# carries usage/session-1.json with structured tool parts reports non-empty
+# tool_counts matching the session JSON's per-tool counts, non-null per-turn
+# timing where the part timestamps support it, and the real permission-denied
+# `ls` from its log.txt in blocked_calls. A second run (42951547486) with only a
+# real-format log.txt (→ Read / ✱ Glob / ✗ Bash ... failed, with ANSI codes) and
+# no session JSON still populates tool_counts via the log fallback.
+reallog_dir="$FIX_DIR/reallog/live"
+set +e
+"${REVIEW[@]}" --live-dir "$reallog_dir" > "$tmpdir/out-reallog.json" 2>"$tmpdir/err-reallog.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "real-log/session parser (script exited non-zero)"
+else
+  rl_ok=1
+  # Session-JSON run: per-tool counts match the session JSON (34 read, 10 edit,
+  # 9 write, 4 bash, 3 glob, 3 grep) and per-turn timing is non-null.
+  grep -q '"run_id": 42951547485' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"read": 34' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"edit": 10' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"write": 9' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"bash": 4' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"glob": 3' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"grep": 3' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"seconds_per_tool_turn": 2.0' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"longest_gap_seconds": 2.0' "$tmpdir/out-reallog.json" || rl_ok=0
+  # Real permission-denied `ls` shows up in blocked_calls.
+  grep -q 'ls -la tests/factory-run-review/reallog/live' "$tmpdir/out-reallog.json" || rl_ok=0
+  # Log-fallback run (no session JSON): tool_counts populated from real log lines.
+  grep -q '"run_id": 42951547486' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"read": 2' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"edit": 1' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"write": 1' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"bash": 2' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"glob": 2' "$tmpdir/out-reallog.json" || rl_ok=0
+  grep -q '"grep": 1' "$tmpdir/out-reallog.json" || rl_ok=0
+  # The log-fallback run has no usable timestamps, so its per-turn timing is
+  # JSON null (not fabricated).
+  grep -q '"seconds_per_tool_turn": null' "$tmpdir/out-reallog.json" || rl_ok=0
+  if [ "$rl_ok" -eq 1 ]; then
+    note "real-log/session parser (session tool counts + timing, denied ls, log fallback)"
+  else
+    fail "real-log/session parser (tool counts/timing/blocked calls not populated)"
   fi
 fi
 

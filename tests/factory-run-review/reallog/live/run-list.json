@@ -1,0 +1,21 @@
+[
+  {
+    "databaseId": 42951547485,
+    "workflowName": "opencode-spike",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-11T10:00:00.000Z",
+    "updatedAt": "2026-11-11T10:19:00.000Z",
+    "headBranch": "main"
+  },
+  {
+    "databaseId": 42951547486,
+    "workflowName": "opencode-spec",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-11T09:30:00.000Z",
+    "updatedAt": "2026-11-11T09:31:00.000Z",
+    "headBranch": "main",
+    "displayTitle": "OpenCode: spec run for #166"
+  }
+]

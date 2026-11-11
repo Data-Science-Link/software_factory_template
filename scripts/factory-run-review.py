@@ -41,6 +41,11 @@ COST_OVERRUN_USD = 0.10
 RUN_RECORD_MARKER = "<!-- factory-run-record -->"
 GHA_RUN_RE = re.compile(r"^gha-(\d+)(?:-(\d+))?$")
 USAGE_COST_RE = re.compile(r"OpenCode-reported cost:\s*\$([0-9]+(?:\.[0-9]+)?)", re.I)
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+PERMISSION_DENIED_RE = re.compile(
+    r"the user has specified a rule which prevents you from using this specific tool call",
+    re.I,
+)
 SCAN_PASS_RE = re.compile(r"artifact-scan:\s*passed", re.I)
 SCAN_FAIL_RE = re.compile(r"artifact-scan:\s*FAIL", re.I)
 
@@ -292,10 +297,12 @@ def render_markdown(review):
         )
     )
     lines.append(f"- tool counts: {review['tool_counts']}")
+    gap = review["longest_gap_seconds"]
+    gap_str = "unavailable" if gap is None else f"{gap}s"
     lines.append(
-        "- seconds/tool turn: {t}, longest gap: {g}s".format(
+        "- seconds/tool turn: {t}, longest gap: {g}".format(
             t=_fmt_unavailable(review["seconds_per_tool_turn"]),
-            g=_fmt_unavailable(review["longest_gap_seconds"]),
+            g=gap_str,
         )
     )
     lines.append(f"- scan: {review['scan_result']}; evidence: {review['evidence_label']}")
@@ -486,43 +493,164 @@ def wall_time_seconds(created_at, updated_at):
         return None
 
 
-def parse_tool_events(log_text):
-    """Best-effort parse of tool calls from a run log.
+def strip_ansi(text):
+    """Remove ANSI escape sequences from a string."""
+    if not text:
+        return text
+    return ANSI_RE.sub("", text)
 
-    Matches lines of the form `<tool_name> tool call ...` and captures a
-    command/path where present. Returns a list of {tool, ts, input}. Unknown
-    fields become null; the parse never guesses.
+
+def _tool_input_str(state):
+    """Best-effort string for a tool part's input, for out-of-spec reads."""
+    if not isinstance(state, dict):
+        return None
+    inp = state.get("input")
+    if isinstance(inp, str):
+        return inp
+    if not isinstance(inp, dict):
+        return None
+    for key in ("file_path", "path", "glob", "pattern", "command"):
+        v = inp.get(key)
+        if isinstance(v, str):
+            return v
+    return None
+
+
+def events_from_session(session):
+    """Flatten a session export's tool parts into {tool, ts, input} events.
+
+    The session export (`info.messages[].parts[]` with `type: "tool"`) is the
+    same shape the `opencode-export.json` fixture documents. One event is derived
+    per tool part with the timestamp from `state.time.start` (milliseconds),
+    falling back to the message `info.time.created` when a tool part has no start
+    time. A part with no timestamp keeps a null `ts` so per-turn timing stays
+    null rather than fabricated.
     """
     events = []
-    for line in (log_text.splitlines() or []):
-        low = line.lower()
-        for tool in ("read", "glob", "bash", "edit", "write", "task"):
-            if f"{tool} tool" in low and "tool call" in low:
-                events.append({"tool": tool, "ts": None, "input": None})
-                break
+    if not isinstance(session, dict):
+        return events
+    info = session.get("info") or {}
+    messages = session.get("messages")
+    if not isinstance(messages, list):
+        messages = info.get("messages")
+    for msg in messages or []:
+        if not isinstance(msg, dict):
+            continue
+        msg_ts = None
+        mtime = (msg.get("info") or {}).get("time") or {}
+        created = mtime.get("created")
+        if isinstance(created, (int, float)):
+            msg_ts = created
+        for part in (msg.get("parts") or []):
+            if not isinstance(part, dict) or part.get("type") != "tool":
+                continue
+            tool = part.get("tool")
+            if not isinstance(tool, str):
+                continue
+            state = part.get("state") or {}
+            ts = None
+            stime = state.get("time") or {}
+            if isinstance(stime.get("start"), (int, float)):
+                ts = stime.get("start")
+            elif msg_ts is not None:
+                ts = msg_ts
+            events.append(
+                {"tool": tool, "ts": ts, "input": _tool_input_str(state)}
+            )
     return events
 
 
+def _match_real_log_line(line):
+    """Match one real OpenCode log line into {tool, ts, input}, or None.
+
+    Handles the `→ Read <path>`, `✱ Glob ...` and `✗ <cmd>` forms real OpenCode
+    logs print (ANSI codes must already be stripped), plus the legacy synthetic
+    `<tool> tool call ...` spelling so older fixtures keep passing. Timestamps
+    are not present in plain logs, so `ts` stays null; the parse never guesses.
+    """
+    s = line.strip()
+    low = s.lower()
+    for tool in ("read", "glob", "bash", "edit", "write", "task", "grep"):
+        if f"{tool} tool" in low and "tool call" in low:
+            return {"tool": tool, "ts": None, "input": None}
+    if s.startswith(("→", "✱", "✗")):
+        rest = s[1:].strip()
+    elif s.startswith(("->", "*")):
+        rest = s[1:].strip()
+    else:
+        return None
+    m = re.match(r"^([A-Za-z]+)\s*:\s*(.*)$", rest) or re.match(
+        r"^([A-Za-z]+)\s+(.*)$", rest
+    )
+    if not m:
+        return None
+    tool = m.group(1).lower()
+    if tool not in ("read", "glob", "bash", "edit", "write", "task", "grep"):
+        return None
+    arg = m.group(2).strip()
+    return {"tool": tool, "ts": None, "input": arg or None}
+
+
+def parse_tool_events(log_text):
+    """Best-effort parse of tool calls from a run log.
+
+    Strips ANSI escapes first, then matches the real OpenCode line format
+    (`→ Read <path>`, `✱ Glob ...`, `✗ <cmd> failed`) and the legacy synthetic
+    `<tool> tool call ...` spelling. Returns a list of {tool, ts, input}.
+    """
+    events = []
+    for raw in (log_text.splitlines() or []):
+        line = strip_ansi(raw)
+        if not line.strip():
+            continue
+        ev = _match_real_log_line(line)
+        if ev is not None:
+            events.append(ev)
+    return events
+
+
+def _denied_command(lines, idx):
+    """Best-effort command string for a denied call.
+
+    Returns the nearest preceding `✗` (failed/denied) tool line, else the
+    nearest `→`/`✱` tool line, else the denial line itself. The returned string
+    is a command/path from the log, never a key, token or env value.
+    """
+    lo = max(0, idx - 6)
+    for j in range(lo, idx + 1):
+        s = strip_ansi(lines[j]).strip()
+        if s.startswith("✗"):
+            return s
+    for j in range(lo, idx + 1):
+        s = strip_ansi(lines[j]).strip()
+        if s.startswith(("→", "✱", "->", "*")):
+            return s
+    return strip_ansi(lines[idx]).strip()
+
+
 def detect_blocked_calls(log_text):
-    """Collect guardrail command strings that were denied/blocked in the log."""
+    """Collect guardrail command strings that were denied/blocked in the log.
+
+    The real permission-denial marker (`The user has specified a rule which
+    prevents you from using this specific tool call`) is the primary trigger;
+    the legacy denied/blocked/guardrail vocabulary stays as a fallback so older
+    fixtures still work. The denied command is captured from the surrounding log.
+    """
+    lines = (log_text or "").splitlines()
     blocked = []
-    vocab = [
-        "mkdir",
-        "chmod",
-        "git commit",
-        "git push",
-        "curl",
-        "wget",
-        "env",
-        "printenv",
-    ]
-    for line in (log_text.splitlines() or []):
+    seen = set()
+    for i, raw in enumerate(lines):
+        line = strip_ansi(raw)
         low = line.lower()
-        if any(word in low for word in ("denied", "blocked", "guardrail")):
-            for word in vocab:
-                if word in low:
-                    blocked.append(line.strip())
-                    break
+        denied = bool(PERMISSION_DENIED_RE.search(low)) or any(
+            word in low for word in ("denied", "blocked", "guardrail")
+        )
+        if not denied:
+            continue
+        cmd = _denied_command(lines, i)
+        if cmd and cmd not in seen:
+            blocked.append(cmd)
+            seen.add(cmd)
     return blocked
 
 
@@ -777,12 +905,14 @@ def parse_artifacts(artifacts_dir):
         "spec_files": [],
         "scan": {"result": None, "detail": None},
         "evidence": {"present": None, "label": None},
+        "tool_events": [],
     }
     if not artifacts_dir or not os.path.isdir(artifacts_dir):
         return facts
 
     record = None
     evidence_found = False
+    tool_events = []
     for root in iter_artifact_roots(artifacts_dir):
         rec = _read_json(os.path.join(root, "run-record.json"))
         if isinstance(rec, dict) and rec.get("run_id"):
@@ -812,12 +942,23 @@ def parse_artifacts(artifacts_dir):
         if export is not None:
             facts["opencode_export"] = export
 
+        # Structured session exports (`usage/session-<n>.json`) written by the
+        # run meter are the authoritative source of tool events.
+        usage_dir = os.path.join(root, "usage")
+        if os.path.isdir(usage_dir):
+            for name in sorted(os.listdir(usage_dir)):
+                if name.startswith("session-") and name.endswith(".json"):
+                    session = _read_json(os.path.join(usage_dir, name))
+                    if isinstance(session, dict):
+                        tool_events.extend(events_from_session(session))
+
         cost = parse_usage_metrics_cost(_read_text(os.path.join(root, "usage-metrics.md")))
         if cost is None:
             cost = parse_usage_metrics_cost(_read_text(os.path.join(root, "usage-report.txt")))
         if cost is not None and facts.get("cost_usd") is None:
             facts["cost_usd"] = cost
 
+    facts["tool_events"] = tool_events
     if evidence_found:
         facts["evidence"] = {"present": True, "label": "harness-verified"}
     else:
@@ -978,6 +1119,12 @@ def enrich_from_artifacts(item, run_id, log_text=""):
                     }:
                         item[key] = value
                     continue
+                if key == "tool_events":
+                    # Session exports are authoritative; override the log
+                    # fallback only when they actually contain events.
+                    if value:
+                        item[key] = value
+                    continue
                 if value is not None and value != []:
                     if key in ("model", "cost_usd", "tokens", "gate", "gate_passed"):
                         # Keep a record value already set.
@@ -1108,6 +1255,12 @@ def fetch_runs_live_dir(live_dir):
                 for key, value in parsed.items():
                     if key == "scan":
                         if (value or {}).get("result"):
+                            item[key] = value
+                        continue
+                    if key == "tool_events":
+                        # Session exports are authoritative; only override the
+                        # log fallback when they actually contain events.
+                        if value:
                             item[key] = value
                         continue
                     if value is not None:

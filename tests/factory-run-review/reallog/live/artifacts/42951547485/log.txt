@@ -1,0 +1,6 @@
+[90massistant[0m → [36mRead[0m [32mscripts/factory-run-review.py[0m
+[90massistant[0m → [36mRead[0m [32mscripts/test-factory-run-review.sh[0m
+[90massistant[0m ✱ [36mGlob[0m [32mscripts/*.py[0m
+[90massistant[0m ✗ [31mBash[0m: [33mls -la tests/factory-run-review/reallog/live[0m failed
+The user has specified a rule which prevents you from using this specific tool call. Denied: the shell is restricted to a few read-only git commands.
+[90massistant[0m → [36mRead[0m [32mtests/factory-run-review/README.md[0m
