@@ -61,19 +61,35 @@ if "$PYTHON" scripts/factory-site.py --repo-root "$root2" --out "$out2" --now "2
   ok=1
   grep -q "deepseek-ai/DeepSeek-V4-Pro-0813" "$idx" || ok=0
   grep -q "deepseek-ai/DeepSeek-V4-Flash-0731" "$idx" || ok=0
-  r2=$(grep -c "rule 2" "$idx" || true)
-  r9=$(grep -c "rule 9" "$idx" || true)
-  r3=$(grep -c "rule 3" "$idx" || true)
-  r2_line=$(grep -n "rule 2" "$idx" | head -n1 | cut -d: -f1 || true)
-  r9_line=$(grep -n "rule 9" "$idx" | head -n1 | cut -d: -f1 || true)
-  r3_line=$(grep -n "rule 3" "$idx" | head -n1 | cut -d: -f1 || true)
-  if [ "$ok" = 1 ] && [ "$r2" -ge 1 ] && [ "$r9" -ge 1 ] && [ "$r3" -ge 1 ] \
-     && [ "$r2_line" -lt "$r9_line" ] && [ "$r9_line" -lt "$r3_line" ]; then
+  # The routing-rules table renders each rule as a <tr><th>N</th>...<td>model</td></tr>
+  # row. Verify the rules appear as <th> cells in first-match order (2, 9, 3),
+  # each row carrying its model.
+  if ! "$PYTHON" - "$idx" <<'PY'
+import re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+table = re.search(r"<h2>Routing rules \(first match wins\)</h2>(.*?)</table>", html, re.S)
+if not table:
+    raise SystemExit("no routing rules table")
+rows = re.findall(r"<tr><th>(\d+)</th>(.*?)</tr>", table.group(1), re.S)
+expect = [(2, "deepseek-ai/DeepSeek-V4-Pro-0813"),
+          (9, "deepseek-ai/DeepSeek-V4-Flash-0731"),
+          (3, "deepseek-ai/DeepSeek-V4-Flash-0731")]
+nums = [int(n) for n, _ in rows]
+if nums != [e[0] for e in expect]:
+    raise SystemExit("rule order mismatch: %r" % nums)
+for (n, body), (en, em) in zip(rows, expect):
+    if int(n) != en or em not in body:
+        raise SystemExit("rule %d missing model %s" % (n, em))
+PY
+  then
+    ok=0
+  fi
+  if [ "$ok" = 1 ]; then
     echo "PASS  architecture lists every routing rule in order with its model"
     passed=$((passed + 1))
   else
     echo "FAIL  architecture did not list every routing rule in order"
-    grep -n "rule" "$idx" || true
+    grep -n '<th>' "$idx" || true
     failed=$((failed + 1))
   fi
 else
@@ -197,14 +213,22 @@ fi
 
 # ---- test 8: site HTML has no script src or remote CSS, and only GitHub/dbt links ----
 ok8=1
-if rg -n '<script src=' site/*.html; then
+# Fail loudly if a required tool is missing; never pass by default.
+for t in grep sed; do
+  if ! command -v "$t" >/dev/null 2>&1; then
+    echo "FAIL  required tool '$t' is not installed"
+    failed=$((failed + 1))
+    exit 1
+  fi
+done
+if grep -n '<script src=' site/*.html; then
   ok8=0
 fi
-if rg -n '<link[^>]+stylesheet[^>]+https?://' site/*.html; then
+if grep -n '<link[^>]*stylesheet[^>]*https\?://' site/*.html; then
   ok8=0
 fi
 # Any http(s) link must be to GitHub or dbt docs.
-badlinks="$(rg -no 'https?://[^"'"'"' >]+' site/*.html | \
+badlinks="$(grep -no 'https\?://[^"'"'"' >]*' site/*.html 2>/dev/null | \
   grep -Ev 'github\.com|docs\.getdbt\.com' || true)"
 if [ -n "$badlinks" ]; then
   printf '%s\n' "$badlinks"
