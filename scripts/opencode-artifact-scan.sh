@@ -94,6 +94,7 @@ PROTECTED_SCRIPTS=(
   scripts/opencode-run-meter.sh
   scripts/opencode-spec-draft.py
   scripts/opencode-spec-run.sh
+  scripts/opencode-stage-spec-files.sh
   scripts/opencode-usage-report.sh
   scripts/opencode-verify.sh
   scripts/pr-check.sh

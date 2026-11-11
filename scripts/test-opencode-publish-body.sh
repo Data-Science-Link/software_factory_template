@@ -17,7 +17,7 @@ make_repo() {
   git init -q "$dir"
   mkdir -p "$dir/scripts"
   for s in opencode-publish-pr.sh opencode-artifact-scan.sh opencode-git-push-scoped.sh pr-check.sh opencode-run-facts.sh \
-    opencode-text-block.sh opencode-build-context.py factory-spec-check.py factory-check-model.py; do
+    opencode-text-block.sh opencode-build-context.py factory-spec-check.py factory-check-model.py opencode-stage-spec-files.sh; do
     cp "$root/scripts/$s" "$dir/scripts/$s"
   done
   mkdir -p "$dir/.factory" && cp "$root/.factory/models.yaml" "$dir/.factory/models.yaml"

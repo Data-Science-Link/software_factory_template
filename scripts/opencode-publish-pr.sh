@@ -17,7 +17,7 @@ git show HEAD:scripts/opencode-artifact-scan.sh >"$PRISTINE_DIR/opencode-artifac
 git show HEAD:scripts/opencode-git-push-scoped.sh >"$PRISTINE_DIR/opencode-git-push-scoped.sh"
 git show HEAD:scripts/pr-check.sh >"$PRISTINE_DIR/pr-check.sh"
 git show HEAD:scripts/opencode-run-facts.sh >"$PRISTINE_DIR/opencode-run-facts.sh"
-for f in opencode-text-block.sh opencode-build-context.py factory-spec-check.py; do
+for f in opencode-text-block.sh opencode-build-context.py factory-spec-check.py opencode-stage-spec-files.sh; do
   git show "HEAD:scripts/$f" >"$PRISTINE_DIR/$f"
 done
 chmod +x "$PRISTINE_DIR/opencode-artifact-scan.sh" \
@@ -115,6 +115,13 @@ mark_new_scripts_executable() { # $1 = base commit
   done
 }
 git add -A
+# #197: force-stage spec-listed (or already-in-patch) files that git add -A dropped
+# because they are gitignored; fail loudly if a listed Create path is missing and
+# would have been ignored (dropped from the job A patch).
+if [ "${spec_id_ok:-no}" = yes ] && [ -f "${canonical:-}" ]; then
+  chmod +x "$PRISTINE_DIR/opencode-stage-spec-files.sh"
+  bash "$PRISTINE_DIR/opencode-stage-spec-files.sh" --spec "$canonical" --patch "$patch" --fail-missing-ignored
+fi
 mark_new_scripts_executable HEAD
 
 if git diff --cached --quiet; then
