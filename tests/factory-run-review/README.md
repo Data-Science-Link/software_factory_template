@@ -64,9 +64,12 @@ It mirrors exactly what `--pr`/`--issue` mode sees on the live path:
 
 The test feeds `live/` to `scripts/factory-run-review.py --live-dir` and asserts
 model, cost and scan are populated from the artifacts, and that the run
-selection keeps the build run (headBranch `main`) plus the later `opencode-fix`
-run while excluding unrelated `opencode-spec`/build runs. All fixture contents
-are sanitized: no secrets, keys, tokens or env values.
+selection keeps the build run (headBranch `main`), the later `opencode-fix` run
+and the `opencode-spec` run for the linked issue (headBranch `main`, title
+`OpenCode: spec run for #136` matching the issue) while excluding an unrelated
+`opencode-spike` build run. The spec run's tokens and cost are populated from
+its own downloaded `opencode-export.json`. All fixture contents are sanitized:
+no secrets, keys, tokens or env values.
 
 ## Run-record fixture (`records/`)
 
@@ -83,3 +86,11 @@ the record alone (no `gh`, no workflow artifacts).
 writes them. Cost comes from `usage-metrics.md` (`OpenCode-reported cost: $X`);
 scan comes from the `artifact-scan: passed.` log line. Skipped sibling runs and
 unrelated builds stay excluded.
+
+## Token-less fixture (`tokenless/`)
+
+`tokenless/` is the broken case: an `opencode-spec` run for the linked issue
+with no artifact or `#31` record carrying token data. `--live-dir tokenless`
+must still select the run (its title matches `#136`), keep its `tokens` JSON
+`null`, and render them as "unavailable" in the markdown rather than fabricating
+a value.

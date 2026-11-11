@@ -24,7 +24,8 @@
     "conclusion": "success",
     "createdAt": "2026-11-08T12:00:00.000Z",
     "updatedAt": "2026-11-08T12:03:00.000Z",
-    "headBranch": "main"
+    "headBranch": "main",
+    "displayTitle": "OpenCode: spec run for #136"
   },
   {
     "databaseId": 42293333333,

@@ -265,6 +265,11 @@ def review_run(run):
     return out
 
 
+def _fmt_unavailable(value):
+    """Render a value for the human-readable output; null becomes 'unavailable'."""
+    return "unavailable" if value is None else str(value)
+
+
 def render_markdown(review):
     """Short markdown rendering of one run's review."""
     lines = []
@@ -277,6 +282,22 @@ def render_markdown(review):
         f"{'yes' if review['timeout_hit'] else 'no'}"
     )
     lines.append(f"- cost: ${review['cost_usd']}")
+    tok = review.get("tokens") or {}
+    lines.append(
+        "- tokens: in={t}, cached={c}, out={o}, reasoning={r}".format(
+            t=_fmt_unavailable(tok.get("in")),
+            c=_fmt_unavailable(tok.get("cached")),
+            o=_fmt_unavailable(tok.get("out")),
+            r=_fmt_unavailable(tok.get("reasoning")),
+        )
+    )
+    lines.append(f"- tool counts: {review['tool_counts']}")
+    lines.append(
+        "- seconds/tool turn: {t}, longest gap: {g}s".format(
+            t=_fmt_unavailable(review["seconds_per_tool_turn"]),
+            g=_fmt_unavailable(review["longest_gap_seconds"]),
+        )
+    )
     lines.append(f"- scan: {review['scan_result']}; evidence: {review['evidence_label']}")
     if "gate_passed" in review:
         lines.append(f"- gate_passed: {review['gate_passed']}")
@@ -382,14 +403,20 @@ def issue_number_from_branch(branch):
 
 
 def _title_matches_pr(title, pr_head):
-    """True when a run displayTitle belongs to this PR's issue or build run."""
+    """True when a run displayTitle belongs to this PR's issue or build run.
+
+    Matches on the PR's build run id or its issue number. The issue number is
+    matched either as `issue #<N>` or as a bare `#<N>` (some /oc run titles,
+    e.g. an `opencode-spec` run, carry `#<N>` without the word "issue"), so a
+    spec run whose headBranch is `main` still belongs to the reviewed issue.
+    """
     if not isinstance(title, str) or not title:
         return False
     build_id = build_run_id_from_branch(pr_head)
     pr_issue = issue_number_from_branch(pr_head)
     if build_id and build_id in title:
         return True
-    if pr_issue and re.search(rf"issue\s*#{pr_issue}\b", title, re.I):
+    if pr_issue and re.search(rf"(?:issue\s*)?#{pr_issue}\b", title, re.I):
         return True
     return False
 

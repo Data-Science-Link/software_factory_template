@@ -37,8 +37,10 @@ byte_identical 42297659590
 # Live-path parser: drives the same discovery + artifact parsing logic offline
 # from a recorded, sanitized fixture (no network, no gh). It must populate model,
 # routing rule, cost and scan from the artifact files, and select the build run
-# (headBranch main) plus the later opencode-fix run while excluding unrelated
-# opencode-spec/build runs.
+# (headBranch main) plus the later opencode-fix run and the opencode-spec run for
+# the linked issue (headBranch main, title matching `#136`) while excluding an
+# unrelated build run. The spec run's tokens/cost are populated from its
+# downloaded artifacts.
 live_dir="$FIX_DIR/live"
 set +e
 "${REVIEW[@]}" --live-dir "$live_dir" > "$tmpdir/out-live.json" 2>"$tmpdir/err-live.txt"
@@ -53,12 +55,16 @@ else
   grep -q '"scan_result": "pass"' "$tmpdir/out-live.json" || live_ok=0
   grep -q '"workflow": "opencode-spike"' "$tmpdir/out-live.json" || live_ok=0
   grep -q '"workflow": "opencode-fix"' "$tmpdir/out-live.json" || live_ok=0
-  grep -q '"workflow": "opencode-spec"' "$tmpdir/out-live.json" && live_ok=0
+  grep -q '"workflow": "opencode-spec"' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"run_id": 42291111111' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"cost_usd": 0.0015' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"in": 40000' "$tmpdir/out-live.json" || live_ok=0
+  grep -q '"run_id": 42293333333' "$tmpdir/out-live.json" && live_ok=0
   grep -q '"scan_result": null' "$tmpdir/out-live.json" && live_ok=0
   if [ "$live_ok" -eq 1 ]; then
-    note "live-path parser (model/cost/scan populated)"
+    note "live-path parser (spec run selected, tokens/cost populated from artifacts)"
   else
-    fail "live-path parser (model/cost/scan not populated from artifacts)"
+    fail "live-path parser (spec run selection/tokens/cost not populated from artifacts)"
   fi
 fi
 
@@ -78,10 +84,11 @@ else
   grep -q '"cost_usd": 0.088174' "$tmpdir/out-records.json" || rec_ok=0
   grep -q '"workflow": "opencode-spec"' "$tmpdir/out-records.json" || rec_ok=0
   grep -q '"gate_passed": false' "$tmpdir/out-records.json" || rec_ok=0
+  grep -q '"in": 192940' "$tmpdir/out-records.json" || rec_ok=0
   if [ "$rec_ok" -eq 1 ]; then
-    note "run-record parser (model/cost/gate from comment)"
+    note "run-record parser (model/cost/gate/tokens from comment)"
   else
-    fail "run-record parser (model/cost/gate not populated from record)"
+    fail "run-record parser (model/cost/gate/tokens not populated from record)"
   fi
 fi
 
@@ -110,6 +117,30 @@ else
     note "fallback parser (nested artifacts, usage-metrics, displayTitle)"
   else
     fail "fallback parser (model/cost/scan/selection not populated)"
+  fi
+fi
+
+# Token-less broken case: an opencode-spec run for the linked issue with no
+# artifact or record carrying tokens is still selected, but its tokens stay
+# JSON null and the rendered output says "unavailable" instead of a fabricated
+# number.
+tokenless_dir="$FIX_DIR/tokenless"
+set +e
+"${REVIEW[@]}" --live-dir "$tokenless_dir" > "$tmpdir/out-tokenless.json" 2>"$tmpdir/err-tokenless.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "token-less broken case (script exited non-zero)"
+else
+  tl_ok=1
+  grep -q '"run_id": 42295555555' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q '"in": null' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q 'unavailable' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q '"in": 40000' "$tmpdir/out-tokenless.json" && tl_ok=0
+  if [ "$tl_ok" -eq 1 ]; then
+    note "token-less broken case (selected, tokens null, rendered unavailable)"
+  else
+    fail "token-less broken case (fabricated or not reported unavailable)"
   fi
 fi
 
