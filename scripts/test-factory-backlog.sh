@@ -179,7 +179,7 @@ if 'href="https://github.com/example/factory/issues/5"' not in html:
 m = re.search(r"<h2>Open issues</h2>(.*?)</table>", html, re.S)
 if not m:
     raise SystemExit("no Open issues table")
-rows = re.findall(r"<tr><th>(high|low|none)</th>", m.group(1))
+rows = re.findall(r"<tr>\s*<th>(high|low|none)</th>", m.group(1))
 if rows != ["high", "high", "low", "none"]:
     raise SystemExit("issue table not sorted by priority: %r" % rows)
 PY
