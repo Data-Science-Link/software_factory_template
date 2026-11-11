@@ -166,7 +166,10 @@ else
   # "edit": 1 can never accidentally match "edit": 10 (grep substring matching).
   if python3 - "$tmpdir/out-reallog.json" <<'PY'
 import json, sys
-data = json.load(open(sys.argv[1]))
+# stdout is the JSON document followed by the rendered markdown review, so parse
+# only the first JSON document rather than the whole stream.
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
 runs = {r["run_id"]: r for r in data["runs"]}
 # Session-JSON run: counts match the session JSON, per-turn timing non-null,
 # and the real permission-denied ls is recorded in blocked_calls.
