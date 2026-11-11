@@ -58,3 +58,11 @@ Standing rules are in [`AGENTS.md`](AGENTS.md).
 New repo? Start with the [setup checklist](docs/SETUP.md).
 
 Version tags and the release checklist are in [docs/RELEASING.md](docs/RELEASING.md). **Pinning a product repo to a release tag, reusable workflows, and sync PRs are planned (#156).** Until then, a repo adopts the factory by copying the files in the setup checklist.
+
+## Feedback intake
+
+A factory problem found in a product repo (Perspectiverse first) is filed once, here in the template, with the `from-product` label and a required `Source repo` field, so it can be traced back to where it was found. Use the reusable template at [docs/factory-problem-issue-template.md](docs/factory-problem-issue-template.md).
+
+**Triage rule.** Incoming cross-repo issues are reviewed here, fixed in the template, released as a new tag, and picked up by product repos through a sync PR. Pinning and sync PRs are planned (#156).
+
+**No secrets.** Do not paste secrets, tokens, logs with keys, or private product data in the filing.
