@@ -20,6 +20,7 @@ case "$1 $2" in
   "pr view")
     if [[ "$*" == *headRefOid* ]]; then echo cccccccccccccccccccccccccccccccccccccccc; else cat "$STUB_DIR/pr-body.md"; fi ;;
   "pr edit") cp "${@: -1}" "$STUB_DIR/pr-body-edited.md" ;;
+  "pr diff") cat "$STUB_DIR/pr-files.txt" ;;
   "run list") cat "$STUB_DIR/runs.json" ;;
   "issue view") cat "$STUB_DIR/comments.txt" 2>/dev/null || true ;;
   "issue comment")
@@ -44,8 +45,10 @@ new_case() {
 J
   echo '{"start_usd": 12.0, "end_usd": 12.0017, "concurrent": false}' >"$d/art/key-spend.json"
   echo '[]' >"$d/stub/runs.json"
-  printf '%s\n' '## Evidence' '<!-- factory-run:start -->' 'Run ID: 42400000031' 'Gate: risk high' \
+  printf '%s\n' '## Summary' 'Closes #133' '## Factory loop' '## Safety checklist' \
+    '## Evidence' '<!-- factory-run:start -->' 'Run ID: 42400000031' 'Gate: risk high' \
     '<!-- factory-run:end -->' '' 'Cost: $0.09 on DeepInfra (OpenCode stats)' >"$d/stub/pr-body.md"
+  printf '%s\n' scripts/example.sh factory/specs/issue-133.md >"$d/stub/pr-files.txt"
 }
 run_finish() { # <name> <kind> <agent> <publish> [extra env...]
   local d="$work/$1" kind="$2" a="$3" p="$4"; shift 4
@@ -73,8 +76,11 @@ if [ "$rc" = 0 ] && [ "$(field "$r" outcome)" = pr_opened ] && [ "$(field "$r" p
   && [ "$(posted c1 | head -n 1)" = '<!-- factory-run-record -->' ] && posted c1 | grep -qF '"run_id": "gha-42400000031-1"' \
   && grep -qxF 'Cost: $0.00164 on DeepInfra (factory run record; usage_x_price_table); issue total so far $0.10164' "$work/c1/stub/pr-body-edited.md" \
   && grep -qxF 'Run record: https://github.com/Data-Science-Link/software_factory_template/issues/134#issuecomment-999' "$work/c1/stub/pr-body-edited.md" \
-  && grep -q 'gh pr list .*--head oc/issue-133-42400000031' "$work/c1/stub/gh.log"; then
-  ok "build run: record (pr_opened, PR 142, \$0.00164 match, cap 1.0, PR head sha), posted with marker, PR body rewritten"
+  && grep -q 'gh pr list .*--head oc/issue-133-42400000031' "$work/c1/stub/gh.log" \
+  && [ "$(field "$r" gate_passed)" = True ] \
+  && [ "$(jq -c .gate "$r")" = '{"budget_cap":"pass","cost_recorded":"pass","gitleaks":"skip","no_workflow_changes":"pass","pr_check":"skip","pr_template":"pass","run_record_valid":"pass","spec_present":"pass"}' ] \
+  && grep -qF 'Gate: passed (pass: budget_cap, cost_recorded, no_workflow_changes, pr_template, run_record_valid, spec_present; fail: none; skipped: gitleaks, pr_check); risk' "$work/c1/stub/pr-body-edited.md"; then
+  ok "build run: record (pr_opened, PR 142, \$0.00164 match, cap 1.0, PR head sha, gate passed with gitleaks/pr_check skip), posted with marker, PR body rewritten"
 else bad "build run (rc=$rc)"; cat "$work/c1/out.txt"; fi
 
 # 2. Run start can read the posted comment back as this issue's spend (#91 prior-spend format).
@@ -124,8 +130,10 @@ else bad "no artifact (rc=$rc)"; fi
 new_case c6
 run_finish c6 build failure skipped
 if [ "$rc" = 0 ] && [ "$(field "$work/c6/record.json" outcome)" = failed ] && [ "$(nposted c6)" = 1 ] \
-  && [ ! -f "$work/c6/stub/pr-body-edited.md" ] && ! grep -q 'gh pr ' "$work/c6/stub/gh.log"; then
-  ok "failed build: record posted on the issue (outcome failed), no PR lookup or edit"
+  && [ ! -f "$work/c6/stub/pr-body-edited.md" ] && ! grep -q 'gh pr ' "$work/c6/stub/gh.log" \
+  && [ "$(field "$work/c6/record.json" gate_passed)" = False ] \
+  && [ "$(jq '[.gate[] | select(. != "skip")] | length' "$work/c6/record.json")" = 0 ]; then
+  ok "failed build: record posted on the issue (outcome failed, gate all skip), no PR lookup or edit"
 else bad "failed build (rc=$rc)"; cat "$work/c6/out.txt"; fi
 
 # 7. Spec run: own spec stub (work_type spec, routed risk), outcome no_changes, no PR.
@@ -147,6 +155,47 @@ if [ "$rc" = 0 ] && [ "$(field "$work/c8/record.json" outcome)" = pr_updated ] &
   && grep -q 'gh pr edit 147' "$work/c8/stub/gh.log" && ! grep -q 'gh pr list' "$work/c8/stub/gh.log"; then
   ok "fix run: PR and issue from fix-meta.txt, pr_updated, PR 147 body rewritten"
 else bad "fix run (rc=$rc)"; cat "$work/c8/out.txt"; fi
+
+# 8b (#162). PR diff touches .github/workflows/ and the body lost its template sections: record
+# and PR body still written, gate fails both checks, the job exits 1 loudly.
+new_case c8b
+printf '%s\n' scripts/example.sh .github/workflows/opencode-spike.yml >"$work/c8b/stub/pr-files.txt"
+printf '%s\n' 'Closes #133' '<!-- factory-run:start -->' 'Gate: risk high' '<!-- factory-run:end -->' 'Cost: $0.09' >"$work/c8b/stub/pr-body.md"
+run_finish c8b build success success STUB_PR=142
+r="$work/c8b/record.json"
+if [ "$rc" = 1 ] && [ "$(field "$r" gate_passed)" = False ] && [ "$(jq -r .gate.no_workflow_changes "$r")" = fail ] \
+  && [ "$(jq -r .gate.pr_template "$r")" = fail ] && [ "$(nposted c8b)" = 1 ] && [ -f "$work/c8b/stub/pr-body-edited.md" ] \
+  && grep -qF '::error title=Factory gate::' "$work/c8b/out.txt" \
+  && grep -qF -- '- Gate: not passed (fail: no_workflow_changes, pr_template; skip: gitleaks, pr_check)' "$work/c8b/summary.md"; then
+  ok "gate fail (workflow file in diff, template sections missing): record posted, PR body rewritten, exit 1"
+else bad "gate fail (rc=$rc)"; cat "$work/c8b/out.txt"; fi
+
+# 8c (#162). gh can't read the PR body or diff: those checks stay skip, gate not passed, no failure.
+new_case c8c
+rm -f "$work/c8c/stub/pr-files.txt"
+run_finish c8c build success success STUB_PR=142
+r="$work/c8c/record.json"
+if [ "$rc" = 0 ] && [ "$(field "$r" gate_passed)" = False ] && [ "$(jq -r .gate.no_workflow_changes "$r")" = skip ] \
+  && [ "$(jq -r .gate.cost_recorded "$r")" = pass ]; then
+  ok "PR diff unreadable -> no_workflow_changes skip, gate not passed, exit 0"
+else bad "unreadable diff (rc=$rc)"; cat "$work/c8c/out.txt"; fi
+
+# 8d (#162). Issue spend over the cap and no usage or key spend (cost not measured): budget_cap and
+# cost_recorded fail, exit 1.
+new_case c8d
+echo '{"run_id": "gha-42400000031-1", "model_id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo", "predicted_cost_usd": 0.19, "prior_spend_usd": 1.2, "cap_usd": 1.0}' >"$work/c8d/art/run-start.json"
+run_finish c8d build success success STUB_PR=142
+r="$work/c8d/record.json"
+if [ "$rc" = 1 ] && [ "$(jq -r .gate.budget_cap "$r")" = fail ] && [ "$(jq -r .gate.cost_recorded "$r")" = pass ]; then
+  ok "issue spend over the cap -> budget_cap fail, exit 1"
+else bad "over cap (rc=$rc)"; cat "$work/c8d/out.txt"; fi
+new_case c8e
+rm -rf "$work/c8e/art/usage" "$work/c8e/art/key-spend.json"
+run_finish c8e build success success STUB_PR=142
+r="$work/c8e/record.json"
+if [ "$rc" = 1 ] && [ "$(jq -r .cost_method "$r")" = not_measured ] && [ "$(jq -r .gate.cost_recorded "$r")" = fail ]; then
+  ok "cost not measured -> cost_recorded fail, exit 1"
+else bad "not measured (rc=$rc)"; cat "$work/c8e/out.txt"; fi
 
 # 9. Nothing printed or posted contains the DeepInfra key sentinel.
 if ! cat "$work"/c*/out.txt "$work"/c*/summary.md "$work"/c*/stub/posted-*.md "$work"/c*/stub/pr-body-edited.md 2>/dev/null | grep -qF "$SENTINEL"; then

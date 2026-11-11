@@ -371,11 +371,39 @@ EOF
     "$SCRIPT_DIR/factory-run-body.sh" 31 gha-90000000031-1 > "$TEMP_WORK_DIR/output4.txt" 2>&1 || return 1
   local body; body=$(cat "$TEMP_WORK_DIR/edited_pr_body.txt")
   [ "$(grep -c '^Gate: ' <<<"$body")" = 1 ] || { echo "FAIL: expected one Gate line"; return 1; }
-  grep -qxF 'Gate: not run (no gate checks wired yet); risk normal: owner product gate required' <<<"$body" || { echo "FAIL: Gate line"; grep '^Gate' <<<"$body"; return 1; }
+  grep -qxF 'Gate: not run (every check skipped); risk normal: owner product gate required' <<<"$body" || { echo "FAIL: Gate line"; grep '^Gate' <<<"$body"; return 1; }
   grep -qxF 'Run record: https://github.com/test/repo/issues/31#issuecomment-1' <<<"$body" || { echo "FAIL: Run record line"; return 1; }
   grep -qxF 'Spec: factory/specs/issue-31.md' <<<"$body" || { echo "FAIL: Spec line (pr-check needs the spec path)"; return 1; }
   grep -qxF 'Cost: $0.0037 on DeepInfra (factory run record; usage_x_price_table); issue total so far $0.025' <<<"$body" \
     || { echo "FAIL: Cost line"; grep '^Cost' <<<"$body"; return 1; }
+}
+
+# Test 5 (#162): a PR run whose in-job checks passed names the passed and skipped checks.
+test_mixed_gate_line() {
+  cat > "$TEMP_WORK_DIR/test_pr_body.txt" <<'EOF'
+<!-- factory-run:start -->
+Gate: risk trivial
+<!-- factory-run:end -->
+Cost: $0.00 (placeholder)
+EOF
+  cat > "$TEMP_FACTORY_RUNS_DIR/gha-90000000162-1.json" <<'EOF'
+{
+  "run_id": "gha-90000000162-1", "workflow_run_url": "https://github.com/test/repo/actions/runs/162",
+  "model": "test-model", "tokens_in": 10, "tokens_cached": 5, "tokens_out": 2,
+  "predicted_cost_usd": 0.01, "actual_cost_usd": 0.0037, "issue_spend_to_date_usd": 0.0037,
+  "risk": "trivial", "spec_path": "factory/specs/issue-162.md",
+  "cost_method": "usage_x_price_table", "cost_check": "match", "actions_minutes": 3,
+  "gate": {"gitleaks": "skip", "run_record_valid": "pass", "cost_recorded": "pass", "pr_template": "pass",
+           "pr_check": "skip", "budget_cap": "pass", "no_workflow_changes": "pass", "spec_present": "pass"},
+  "gate_passed": true
+}
+EOF
+  rm -f "$TEMP_WORK_DIR/edited_pr_body.txt"
+  cd "$TEMP_WORK_DIR"
+  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" "$SCRIPT_DIR/factory-run-body.sh" 162 gha-90000000162-1 > "$TEMP_WORK_DIR/output5.txt" 2>&1 || return 1
+  local body; body=$(cat "$TEMP_WORK_DIR/edited_pr_body.txt")
+  grep -qxF 'Gate: passed (pass: budget_cap, cost_recorded, no_workflow_changes, pr_template, run_record_valid, spec_present; fail: none; skipped: gitleaks, pr_check); risk trivial' <<<"$body" \
+    || { echo "FAIL: Gate line"; grep '^Gate' <<<"$body"; return 1; }
 }
 
 # Main test execution
@@ -386,6 +414,7 @@ main() {
   run_test "no key/token/env printed" test_no_secrets_printed
   run_test "missing markers exits 2 with no gh pr edit" test_missing_markers
   run_test "all-skip gates: one Gate line, record URL, issue total (#31)" test_skip_gates_one_line
+  run_test "PR gate: passed and skipped checks named (#162)" test_mixed_gate_line
   
   echo "1..$TEST_COUNT"
   if [ $FAILED -eq 0 ]; then
