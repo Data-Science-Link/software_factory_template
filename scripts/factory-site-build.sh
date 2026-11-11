@@ -72,4 +72,9 @@ fi
 echo "RUN   render"
 "$PYTHON" scripts/factory-site.py --out site --data site-data --repo-root .
 
+# Copy the site stylesheet (and other static assets) into site/ so the pages
+# render with their styling when served or inspected from site/.
+echo "RUN   copy static assets"
+cp factory/site/style.css site/style.css
+
 echo "Built site/ offline"

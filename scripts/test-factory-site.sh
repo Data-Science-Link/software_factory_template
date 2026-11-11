@@ -52,7 +52,16 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 2: architecture lists every routing rule in order with its model ----
+# ---- test 2: build --sample copies style.css into site/ ----
+if [ -f site/style.css ]; then
+  echo "PASS  build --sample copies style.css into site/"
+  passed=$((passed + 1))
+else
+  echo "FAIL  build --sample did not copy style.css into site/"
+  failed=$((failed + 1))
+fi
+
+# ---- test 3: architecture lists every routing rule in order with its model ----
 root2="$tmpdir/root2"
 make_root "$root2" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
 out2="$tmpdir/out2"
@@ -70,7 +79,7 @@ html = open(sys.argv[1], encoding="utf-8").read()
 table = re.search(r"<h2>Routing rules \(first match wins\)</h2>(.*?)</table>", html, re.S)
 if not table:
     raise SystemExit("no routing rules table")
-rows = re.findall(r"<tr><th>(\d+)</th>(.*?)</tr>", table.group(1), re.S)
+rows = re.findall(r"<tr>\s*<th>(\d+)</th>(.*?)</tr>", table.group(1), re.S)
 expect = [(2, "deepseek-ai/DeepSeek-V4-Pro-0813"),
           (9, "deepseek-ai/DeepSeek-V4-Flash-0731"),
           (3, "deepseek-ai/DeepSeek-V4-Flash-0731")]
@@ -97,7 +106,7 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 3: malicious string is html.escape-d (no raw <script>) ----
+# ---- test 4: malicious string is html.escape-d (no raw <script>) ----
 root3="$tmpdir/root3"
 make_root "$root3" tests/site/fixtures/malicious.md tests/site/fixtures/models.yaml
 out3="$tmpdir/out3"
@@ -119,7 +128,7 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 4: renamed FACTORY.md heading shows section-not-found note ----
+# ---- test 5: renamed FACTORY.md heading shows section-not-found note ----
 root4="$tmpdir/root4"
 make_root "$root4" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
 # Rename the "## Loop" heading so the section is no longer found.
@@ -140,7 +149,7 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 5: missing models.yaml key fails softly without FACTORY.md note ----
+# ---- test 6: missing models.yaml key fails softly without FACTORY.md note ----
 root5="$tmpdir/root5"
 no_checks_yaml="$tmpdir/no-checks.yaml"
 # A models.yaml that omits the `checks` key entirely.
@@ -170,7 +179,7 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 6: second render is byte-identical with pinned build time ----
+# ---- test 7: second render is byte-identical with pinned build time ----
 out6a="$tmpdir/out6a"
 out6b="$tmpdir/out6b"
 if "$PYTHON" scripts/factory-site.py --repo-root "$root2" --out "$out6a" --now "2026-11-11 12:00:00" >/dev/null \
@@ -188,7 +197,7 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 7: financials/backlog/dbt tabs show placeholder when data missing ----
+# ---- test 8: financials/backlog/dbt tabs show placeholder when data missing ----
 root7="$tmpdir/root7"
 make_root "$root7" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
 out7="$tmpdir/out7"
@@ -211,7 +220,7 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 8: site HTML has no script src or remote CSS, and only GitHub/dbt links ----
+# ---- test 9: site HTML has no script src or remote CSS, and only GitHub/dbt links ----
 ok8=1
 # Fail loudly if a required tool is missing; never pass by default.
 for t in grep sed; do
