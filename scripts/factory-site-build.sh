@@ -10,6 +10,7 @@
 #   2. seeds         -> factory/dbt/runs_to_seeds.py
 #   3. budget vars + dbt build
 #   4. export        -> scripts/factory-site-data.py
+#   4b. backlog      -> scripts/factory-backlog.py            (fixture in --sample)
 #   5. render        -> scripts/factory-site.py
 #
 # With --sample, committed fixtures under tests/site/fixtures/ and
@@ -66,6 +67,17 @@ if [ "$SAMPLE" = 1 ]; then
     --out site-data/marts
 else
   run_stage "export" "$PYTHON" scripts/factory-site-data.py
+fi
+
+# 4b. backlog
+if [ "$SAMPLE" = 1 ]; then
+  echo "RUN   backlog (--sample, from fixture)"
+  "$PYTHON" scripts/factory-backlog.py \
+    --from-json tests/site/fixtures/issues.json \
+    --out site-data/backlog.json
+else
+  echo "RUN   backlog (live gh issue list)"
+  "$PYTHON" scripts/factory-backlog.py --out site-data/backlog.json
 fi
 
 # 5. render
