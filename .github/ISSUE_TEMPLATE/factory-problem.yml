@@ -1,0 +1,57 @@
+name: Factory problem found in a product repo
+description: Report a factory problem found while using this template in a product repo
+labels: [from-product]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste secrets, tokens, logs with keys, or private product data in this filing.
+
+  - type: input
+    id: source_repo
+    attributes:
+      label: Source repo
+      description: Which product repo was the problem found in?
+      placeholder: Data-Science-Link/perspectiverse
+    validations:
+      required: true
+
+  - type: input
+    id: pinned_factory_tag
+    attributes:
+      label: Pinned factory tag
+      description: Which release tag of the factory template was pinned?
+    validations:
+      required: true
+
+  - type: input
+    id: product_issue_or_pr
+    attributes:
+      label: Product-repo issue or PR
+      description: Link to the product repo's issue or PR where the problem appeared.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: Describe what happened when you hit the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What actually happened?
+    validations:
+      required: true
