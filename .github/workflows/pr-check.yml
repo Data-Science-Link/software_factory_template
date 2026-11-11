@@ -27,6 +27,14 @@ jobs:
       - name: Run run-record fixture tests
         run: bash scripts/test-run-records.sh
 
+      - name: Run factory site tests (#34, #170-#174)
+        run: |
+          bash scripts/test-factory-site.sh
+          bash scripts/test-factory-site-data.sh
+
+      - name: Run spec-files staging tests
+        run: bash scripts/test-opencode-stage-spec-files.sh
+
   pr-check:
     runs-on: ubuntu-latest
     steps:

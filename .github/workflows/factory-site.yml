@@ -1,0 +1,110 @@
+# Factory site (#56, epic #169): builds the static factory site (scripts/factory-site-build.sh
+# -> site/) and publishes it. Visibility is checked at run time (D1): a PUBLIC repo deploys to
+# GitHub Pages (Settings -> Pages -> Source: GitHub Actions); a PRIVATE repo only uploads a
+# downloadable `factory-site` artifact and never touches Pages.
+# GITHUB_TOKEN only: no DeepInfra secret, no model calls. Owner paste (high risk).
+name: factory-site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "factory/**"
+      - "scripts/factory-site*"
+      - "scripts/factory-collect-runs.py"
+      - ".factory/FACTORY.md"
+      - ".factory/models.yaml"
+      - "requirements-factory.txt"
+      - ".github/workflows/factory-site.yml"
+  schedule:
+    # Weekly, Mondays 13:23 UTC (odd minute to dodge the top-of-hour rush).
+    - cron: "23 13 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: factory-site-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # scripts/factory-collect-runs.py reads run-record issue comments with GITHUB_TOKEN.
+      issues: read
+    outputs:
+      public: ${{ steps.vis.outputs.public }}
+    steps:
+      - name: Harden runner (audit egress)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Detect repo visibility
+        id: vis
+        env:
+          VISIBILITY: ${{ github.event.repository.visibility }}
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [ "$VISIBILITY" = public ] || { [ -z "$VISIBILITY" ] && [ "$IS_PRIVATE" = false ]; }; then
+            echo "public=true" >> "$GITHUB_OUTPUT"
+            echo "Repo is public: the site deploys to GitHub Pages."
+          else
+            echo "public=false" >> "$GITHUB_OUTPUT"
+            echo "Repo is not public (${VISIBILITY:-unknown}): artifact only, no Pages deploy."
+          fi
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install factory Python requirements
+        run: python -m pip install -r requirements-factory.txt -r factory/dbt/requirements-dbt.txt
+
+      - name: Build the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/factory-site-build.sh
+
+      - name: Upload Pages artifact (public repo)
+        if: steps.vis.outputs.public == 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+      - name: Upload site artifact (private repo)
+        if: steps.vis.outputs.public != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: factory-site
+          path: site
+          retention-days: 30
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.public == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Harden runner (audit egress)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
