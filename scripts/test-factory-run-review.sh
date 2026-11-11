@@ -198,6 +198,33 @@ PY
   fi
 fi
 
+# False-positive regression: a live-style run (43052631438) whose log.txt echoes
+# the OC_INSTRUCTION env line (which quotes the permission-denial text and uses
+# the words denied/blocked/guardrail) and a StepSecurity harden-runner
+# "denied_endpoints" config line, with no real agent denial, must report
+# blocked_calls: [] and no blocked_call finding.
+falsepos_dir="$FIX_DIR/falsepos/live"
+set +e
+"${REVIEW[@]}" --live-dir "$falsepos_dir" > "$tmpdir/out-falsepos.json" 2>"$tmpdir/err-falsepos.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "false-positive regression (script exited non-zero)"
+elif python3 - "$tmpdir/out-falsepos.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
+runs = {r["run_id"]: r for r in data["runs"]}
+r = runs[43052631438]
+assert r["blocked_calls"] == [], r["blocked_calls"]
+assert not any(f["code"] == "blocked_call" for f in r["findings"]), r["findings"]
+PY
+then
+  note "false-positive regression (echoed OC_INSTRUCTION + harden-runner denied_endpoints produce blocked_calls: [])"
+else
+  fail "false-positive regression (blocked_calls not empty / blocked_call finding present)"
+fi
+
 # No model call, no secret printed: a sentinel in the environment must never
 # appear in the script's output or stderr.
 secret="sentinel-run-review-secret-98765"

@@ -1,0 +1,22 @@
+Run 43052631438
+Attempt 1
+Preparing job 'build'
+...
+OC_INSTRUCTION: Implement the approved spec for #188: edit scripts/factory-run-review.py so detect_blocked_calls() reports a blocked call only from the agent's own tool output. Drop the bare "denied"/"blocked"/"guardrail" substring fallback; the echoed OC_INSTRUCTION env line and the StepSecurity harden-runner "denied_endpoints" config line must never produce a blocked_call finding. A real denial carries the text: The user has specified a rule which prevents you from using this specific tool call.
+...
+Run actions/checkout@v4
+Post job cleanup
+Pre Harden runner (audit egress)
+Requested 4 cores, 16 GB, 32 GB disk
+"denied_endpoints":""
+"egress_policy":"block"
+"allowed_endpoints":""
+...
+[model] opencode agent starting
+assistant → Read .factory/FACTORY.md
+assistant → Read scripts/factory-run-review.py
+assistant ✱ Glob scripts/*.py
+assistant → Bash: git status
+assistant → Read tests/factory-run-review/README.md
+assistant ✗ Bash: git diff
+...
