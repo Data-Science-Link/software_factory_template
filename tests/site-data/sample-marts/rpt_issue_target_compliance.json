@@ -1,0 +1,29 @@
+[
+  {
+    "issue": 42,
+    "runs": 1,
+    "spend_usd": 0.012246,
+    "issue_target_usd": 0.15,
+    "issue_cap_usd": 1.0,
+    "under_target": true,
+    "under_cap": true
+  },
+  {
+    "issue": 43,
+    "runs": 1,
+    "spend_usd": 0.0,
+    "issue_target_usd": 0.15,
+    "issue_cap_usd": 1.0,
+    "under_target": true,
+    "under_cap": true
+  },
+  {
+    "issue": null,
+    "runs": 4,
+    "spend_usd": 0.032112,
+    "issue_target_usd": 0.15,
+    "issue_cap_usd": 1.0,
+    "under_target": true,
+    "under_cap": true
+  }
+]

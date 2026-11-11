@@ -69,3 +69,44 @@ FACTORY_SEEDS_DIR=../../tests/dbt/seeds dbt build --profiles-dir . \
 ```
 
 The financials page (#34) and the remaining seeds/staging models come in follow-ups.
+
+## Budget file (#170)
+
+`factory/budget.yml` is the single committed source of budget numbers. Michael's starting
+values (2026-11-11): $10/month, $2.50/week, per-issue target $0.15, per-issue cap $1.00,
+fixed costs $20/month, 2000 Actions minutes/month and an 80% warn threshold.
+
+`scripts/factory-budget-vars.py` reads and validates that file (all keys present, positive,
+weekly ≤ monthly) and prints a JSON object of dbt vars for `dbt build --vars`, mapping
+`monthly_usd` onto the existing `deepinfra_monthly_budget_usd` var and emitting the new
+`weekly_budget_usd` and `issue_target_usd`:
+
+```bash
+cd factory/dbt
+FACTORY_SEEDS_DIR=../../tests/dbt/seeds dbt build --profiles-dir . \
+  --vars "$(python ../../scripts/factory-budget-vars.py)"
+```
+
+## Weekly / monthly spend and issue compliance marts (#170)
+
+Three marts were added for the site:
+
+- `agg_spend_weekly` — spend, runs, issues, weekly budget, percent used and an over-budget
+  flag by ISO week (UTC) across the reporting window; weeks with no runs show 0 spend.
+- `agg_spend_monthly` — the same fields by calendar month (UTC).
+- `rpt_issue_target_compliance` — per issue: total spend, under-target and under-cap flags
+  and run count, plus one summary row.
+
+`factory/dbt/tests/assert_weekly_budget_math.sql` guards that each weekly row's
+`budget_used_pct` matches spend ÷ budget. Build with `as_of_date` pinned for repeatable
+output.
+
+## Site-data export (#170)
+
+`scripts/factory-site-data.py` exports the marts the site needs to
+`site-data/marts/<model>.json`, deterministically sorted: `rpt_run_rate`, `agg_spend_weekly`,
+`agg_spend_monthly`, `agg_spend_by_issue`, `agg_spend_by_model`, `fct_forecast_vs_actual`
+and `rpt_issue_target_compliance`, plus a whitelisted column subset of `fct_agent_runs`.
+`site-data/` is gitignored; the site generator consumes the JSON without needing dbt or
+DuckDB. `scripts/test-factory-site-data.sh` covers budget-vars validation and export
+determinism using the committed fixtures under `tests/site-data/sample-marts/`.
