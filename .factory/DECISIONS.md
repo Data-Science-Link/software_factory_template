@@ -365,7 +365,7 @@ Append-only. Newest at the bottom.
 - **Revisit:** If PR conflicts on `factory/runs/` become common.
 
 ## 2026-11-02 — Cloud factory: financials dashboard is generated markdown, refreshed weekly and on demand
-- **Status:** Accepted.
+- **Status:** Accepted. **Superseded by 2026-11-11** (factory site, epic #169).
 - **Decision:** The dashboard is a generated markdown page, `factory/financials/README.md` (Mermaid charts allowed), not GitHub Pages. A workflow refreshes it weekly at an odd minute and on demand, and opens a trivial-risk refresh PR. (Vision §18, decisions 2 and 8.)
 - **Decided by:** Owner: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat).
 - **Why:** It works on a private GitHub Free repo (Pages there needs a paid plan) and reads well on GitHub mobile. Keeping it out of run PRs avoids conflicts between parallel PRs.
@@ -579,3 +579,23 @@ Append-only. Newest at the bottom.
 - **Alternatives:** Keep every existing script locked (rejected: blocks the five-build gate and most remaining harness polish); let workers edit every script including spend/security (rejected: a patch could weaken its own guard after merge); put the list only in docs (rejected: enforcement would drift).
 - **Revisit when:** A needed fix is stuck on a script that should not have been protected, or a worker edit of a newly allowed script weakens a guardrail.
 
+### 2026-11-11 — Factory site: hosting, budgets, backlog titles, and #156 gate (#169)
+- **Status:** Accepted (Michael, 2026-11-11 10:09 AM CT).
+- **Decision:** The standalone factory site (epic #169: Architecture, Financials, Backlog, and dbt tabs) is the factory's financial and status surface. It supersedes the 2026-11-02 markdown-dashboard decision. Decided items (D5 refresh cadence stays open):
+  - **D1 Hosting.** Private repo: downloadable Actions artifact only. Public repo: publish to GitHub Pages. Detect visibility at build/deploy time. Paid GitHub Pro/Team can enable Pages from a private repo, but the published site is publicly visible; only Enterprise Cloud supports private Pages. This private template therefore ships a downloadable build only.
+  - **D2 Markdown dashboard superseded.** The 2026-11-02 entry that the financials dashboard is generated markdown (`factory/financials/README.md`), not GitHub Pages (vision §18, decisions 2 and 8), is superseded. The site replaces that page and its weekly refresh PR.
+  - **D3 Budget location.** Budgets live in `factory/budget.yml`, made owner-only after #170 lands.
+  - **D4 Starting budgets.** $10 per month, $2.50 per week.
+  - **D6 Backlog titles.** Always show titles. There is no `--titles on|off` switch. Private repos stay artifact-only, so titles are not published on a public Pages site.
+  - **#156 rollout.** Hold #156 until #174 (the Financials tab, the complex routing test) passes, in addition to the existing five-straight-successful-worker-build gate.
+  - **D5 Refresh cadence** (on every push to `main` vs weekly vs daily) was not decided in this round and stays open.
+- **Decided by:** Michael, 2026-11-11 10:09 AM CT, in Grok Bot chat, verbatim:
+  - D1: "Downloadable build for now, but if we deploy this to another repo and use it and that repo is public then push it to a page. I pay for github. Does that not give me pages on provate repo?"
+  - D2: "Replace the Nov 2 markdown-dashboard decision with the site"
+  - D3: "Budgets in factory/budget.yml, owner-only"
+  - D4: "Budgets: $10 per month, $2.50 per week"
+  - D6: "Backlog: always show titles"
+  - #156: "Hold #156 until #174 passes too"
+- **Why:** A standalone factory site that ships with every install is the financial and status surface Michael wants. On a private repo, Pages would publish the site (and issue titles) publicly; an artifact keeps the same build without that exposure. When the factory is used in a public repo, Pages is the right host.
+- **Alternatives:** Publish Pages from this private repo (rejected: the site would be public); keep the markdown dashboard and weekly refresh PRs (superseded); a titles on/off switch (rejected: always show titles; private installs do not publish the site).
+- **Revisit when:** The template is made public (re-run the #44 security review first), GitHub private Pages becomes available on this plan, or the weekly/monthly budget figures need to change.
