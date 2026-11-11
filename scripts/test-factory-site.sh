@@ -251,6 +251,30 @@ else
   failed=$((failed + 1))
 fi
 
+# ---- test 10: architecture tab has a loop <svg> and no literal ** markers ----
+root9="$tmpdir/root9"
+make_root "$root9" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
+out9="$tmpdir/out9"
+if "$PYTHON" scripts/factory-site.py --repo-root "$root9" --out "$out9" --now "2026-11-11 12:00:00" >/dev/null; then
+  idx9="$out9/index.html"
+  ok9=1
+  grep -q "<svg" "$idx9" || ok9=0
+  if grep -qF "**" "$idx9"; then
+    ok9=0
+  fi
+  if [ "$ok9" = 1 ]; then
+    echo "PASS  architecture tab has a loop <svg> and no literal ** markers"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  architecture tab missing <svg> or contains literal ** markers"
+    grep -n "<svg\|\*\*" "$idx9" || true
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  renderer crashed for architecture svg check"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
