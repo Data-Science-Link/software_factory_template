@@ -1,0 +1,17 @@
+Run 43069209301
+Attempt 1
+Preparing job 'build'
+...
+Run actions/checkout@v4
+Post job cleanup
+Pre Harden runner (audit egress)
+Requested 4 cores, 16 GB, 32 GB disk
+...
+[model] opencode agent starting
+assistant → Read .factory/FACTORY.md
+assistant → Read scripts/factory-run-review.py
+assistant ✱ Glob scripts/*.py
+assistant → Bash: git status
+assistant ✗ Bash: git diff
+...
+Post process cleanup

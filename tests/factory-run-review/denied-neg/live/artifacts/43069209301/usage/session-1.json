@@ -1,0 +1,110 @@
+{
+  "info": {
+    "id": "ses_deniedneg1_43069209301",
+    "slug": "denied-neg-1",
+    "projectID": "global",
+    "directory": "[redacted:session-directory]",
+    "path": "",
+    "title": "[redacted:session-title]",
+    "agent": "build",
+    "model": {
+      "id": "DeepSeek-V4-Flash-0731",
+      "providerID": "deepinfra",
+      "variant": "default"
+    },
+    "version": "1.19.5",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0.01,
+    "tokens": {
+      "input": 1000,
+      "output": 200,
+      "reasoning": 0,
+      "cache": {
+        "read": 0,
+        "write": 0
+      }
+    },
+    "time": {
+      "created": 1769124000000,
+      "updated": 1769124010000
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1769124000100
+        },
+        "agent": "build",
+        "id": "msg_deniedneg1_1",
+        "sessionID": "ses_deniedneg1_43069209301"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "[redacted:text]",
+          "id": "prt_deniedneg1_1",
+          "sessionID": "ses_deniedneg1_43069209301",
+          "messageID": "msg_deniedneg1_1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_deniedneg1_1",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "time": {
+          "created": 1769124000200,
+          "completed": 1769124010000
+        },
+        "finish": "stop",
+        "id": "msg_deniedneg1_2",
+        "sessionID": "ses_deniedneg1_43069209301"
+      },
+      "parts": [
+        {
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-start",
+          "id": "prt_deniedneg1_2",
+          "sessionID": "ses_deniedneg1_43069209301",
+          "messageID": "msg_deniedneg1_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_deniedneg1_1",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "find tests/factory-run-review -type f | sort"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "bash find",
+            "time": {
+              "start": 1769124001000,
+              "end": 1769124001500
+            }
+          },
+          "id": "prt_deniedneg1_3",
+          "sessionID": "ses_deniedneg1_43069209301",
+          "messageID": "msg_deniedneg1_2"
+        },
+        {
+          "reason": "stop",
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-finish",
+          "id": "prt_deniedneg1_4",
+          "sessionID": "ses_deniedneg1_43069209301",
+          "messageID": "msg_deniedneg1_2"
+        }
+      ]
+    }
+  ]
+}

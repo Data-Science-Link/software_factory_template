@@ -140,8 +140,10 @@ else
   grep -q 'unavailables' "$tmpdir/out-tokenless.json" && tl_ok=0
   grep -q '"in": 40000' "$tmpdir/out-tokenless.json" && tl_ok=0
   grep -q '"tool_counts": {}' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q '"artifacts_unavailable": true' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q -- '- artifacts unavailable' "$tmpdir/out-tokenless.json" || tl_ok=0
   if [ "$tl_ok" -eq 1 ]; then
-    note "token-less broken case (no tool data, tokens/gap null, rendered unavailable, no stray suffix)"
+    note "token-less broken case (no tool data, tokens/gap null, rendered unavailable, artifacts-unavailable marker present, no stray suffix)"
   else
     fail "token-less broken case (fabricated or not reported unavailable)"
   fi
@@ -223,6 +225,110 @@ then
   note "false-positive regression (echoed OC_INSTRUCTION + harden-runner denied_endpoints produce blocked_calls: [])"
 else
   fail "false-positive regression (blocked_calls not empty / blocked_call finding present)"
+fi
+
+# Denied session fixture: run 43069209256 whose session export has one errored
+# bash tool part carrying the permission-denial text and the `find` command,
+# while its log.txt is a workflow-style log with no denial text. Only
+# session-export parsing (not the log.txt scan) can surface the denied find.
+denied_dir="$FIX_DIR/denied/live"
+set +e
+"${REVIEW[@]}" --live-dir "$denied_dir" > "$tmpdir/out-denied.json" 2>"$tmpdir/err-denied.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "denied session fixture (script exited non-zero)"
+elif python3 - "$tmpdir/out-denied.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
+runs = {r["run_id"]: r for r in data["runs"]}
+r = runs[43069209256]
+assert any(
+    "find tests/factory-run-review -type f | sort" in c for c in r["blocked_calls"]
+), r["blocked_calls"]
+assert any(f["code"] == "blocked_call" for f in r["findings"]), r["findings"]
+PY
+then
+  note "denied session fixture (run 43069209256 lists the blocked find command in blocked_calls; log.txt has no denial)"
+else
+  fail "denied session fixture (blocked find not reported)"
+fi
+
+# opencode.log fallback: session-less run 43069209257 whose blocked find lives
+# only in oc-artifacts-43069209257/opencode.log. Its log.txt has no denial text.
+denied_log_dir="$FIX_DIR/denied-log/live"
+set +e
+"${REVIEW[@]}" --live-dir "$denied_log_dir" > "$tmpdir/out-denied-log.json" 2>"$tmpdir/err-denied-log.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "opencode.log fallback (script exited non-zero)"
+elif python3 - "$tmpdir/out-denied-log.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
+runs = {r["run_id"]: r for r in data["runs"]}
+r = runs[43069209257]
+assert any(
+    "find tests/factory-run-review -type f | sort" in c for c in r["blocked_calls"]
+), r["blocked_calls"]
+assert any(f["code"] == "blocked_call" for f in r["findings"]), r["findings"]
+PY
+then
+  note "opencode.log fallback (session-less run 43069209257 lists the blocked find command from oc-artifacts-43069209257/opencode.log)"
+else
+  fail "opencode.log fallback (blocked find not reported)"
+fi
+
+# Artifacts-unavailable marker: unavailable/live has no artifacts/ directory, so
+# the review must emit the marker instead of silent empties.
+unavailable_dir="$FIX_DIR/unavailable/live"
+set +e
+"${REVIEW[@]}" --live-dir "$unavailable_dir" > "$tmpdir/out-unavailable.json" 2>"$tmpdir/err-unavailable.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "artifacts-unavailable marker (script exited non-zero)"
+else
+  ua_ok=1
+  grep -q '"run_id": 43069209399' "$tmpdir/out-unavailable.json" || ua_ok=0
+  grep -q '"artifacts_unavailable": true' "$tmpdir/out-unavailable.json" || ua_ok=0
+  grep -q -- '- artifacts unavailable' "$tmpdir/out-unavailable.json" || ua_ok=0
+  if [ "$ua_ok" -eq 1 ]; then
+    note "artifacts-unavailable marker (unavailable/live, missing artifact dir, emits artifacts unavailable)"
+  else
+    fail "artifacts-unavailable marker (not emitted for missing artifact dir)"
+  fi
+fi
+
+# Negative session parts: run 43069209301 (bash tool part with non-error status)
+# and run 43069209302 (error without the permission-denial text) both produce
+# blocked_calls: [] and no blocked_call finding, even though their log.txt files
+# are workflow-style logs with no denial text.
+denied_neg_dir="$FIX_DIR/denied-neg/live"
+set +e
+"${REVIEW[@]}" --live-dir "$denied_neg_dir" > "$tmpdir/out-denied-neg.json" 2>"$tmpdir/err-denied-neg.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "negative session parts (script exited non-zero)"
+elif python3 - "$tmpdir/out-denied-neg.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
+runs = {r["run_id"]: r for r in data["runs"]}
+r1 = runs[43069209301]
+r2 = runs[43069209302]
+assert r1["blocked_calls"] == [], r1["blocked_calls"]
+assert r2["blocked_calls"] == [], r2["blocked_calls"]
+assert not any(f["code"] == "blocked_call" for f in r1["findings"]), r1["findings"]
+assert not any(f["code"] == "blocked_call" for f in r2["findings"]), r2["findings"]
+PY
+then
+  note "negative session parts (run 43069209301 non-error status and run 43069209302 error without denial text both produce blocked_calls: [])"
+else
+  fail "negative session parts (blocked_calls not empty / blocked_call finding present)"
 fi
 
 # No model call, no secret printed: a sentinel in the environment must never

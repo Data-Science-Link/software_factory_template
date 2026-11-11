@@ -1,0 +1,111 @@
+{
+  "info": {
+    "id": "ses_deniedneg2_43069209302",
+    "slug": "denied-neg-2",
+    "projectID": "global",
+    "directory": "[redacted:session-directory]",
+    "path": "",
+    "title": "[redacted:session-title]",
+    "agent": "fix",
+    "model": {
+      "id": "DeepSeek-V4-Flash-0731",
+      "providerID": "deepinfra",
+      "variant": "default"
+    },
+    "version": "1.19.5",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0.01,
+    "tokens": {
+      "input": 1000,
+      "output": 200,
+      "reasoning": 0,
+      "cache": {
+        "read": 0,
+        "write": 0
+      }
+    },
+    "time": {
+      "created": 1769127000000,
+      "updated": 1769127010000
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1769127000100
+        },
+        "agent": "fix",
+        "id": "msg_deniedneg2_1",
+        "sessionID": "ses_deniedneg2_43069209302"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "[redacted:text]",
+          "id": "prt_deniedneg2_1",
+          "sessionID": "ses_deniedneg2_43069209302",
+          "messageID": "msg_deniedneg2_1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_deniedneg2_1",
+        "role": "assistant",
+        "mode": "fix",
+        "agent": "fix",
+        "time": {
+          "created": 1769127000200,
+          "completed": 1769127010000
+        },
+        "finish": "stop",
+        "id": "msg_deniedneg2_2",
+        "sessionID": "ses_deniedneg2_43069209302"
+      },
+      "parts": [
+        {
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-start",
+          "id": "prt_deniedneg2_2",
+          "sessionID": "ses_deniedneg2_43069209302",
+          "messageID": "msg_deniedneg2_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_deniedneg2_1",
+          "state": {
+            "status": "error",
+            "input": {
+              "command": "ls tests/factory-run-review"
+            },
+            "error": "bash: ls: command exited with a non-zero status",
+            "output": "",
+            "title": "bash ls",
+            "time": {
+              "start": 1769127001000,
+              "end": 1769127001500
+            }
+          },
+          "id": "prt_deniedneg2_3",
+          "sessionID": "ses_deniedneg2_43069209302",
+          "messageID": "msg_deniedneg2_2"
+        },
+        {
+          "reason": "stop",
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-finish",
+          "id": "prt_deniedneg2_4",
+          "sessionID": "ses_deniedneg2_43069209302",
+          "messageID": "msg_deniedneg2_2"
+        }
+      ]
+    }
+  ]
+}

@@ -271,6 +271,8 @@ def review_run(run):
         out["gate"] = run.get("gate")
     if "gate_passed" in run:
         out["gate_passed"] = run.get("gate_passed")
+    if run.get("artifacts_unavailable"):
+        out["artifacts_unavailable"] = True
     return out
 
 
@@ -310,6 +312,8 @@ def render_markdown(review):
         )
     )
     lines.append(f"- scan: {review['scan_result']}; evidence: {review['evidence_label']}")
+    if review.get("artifacts_unavailable"):
+        lines.append("- artifacts unavailable")
     if "gate_passed" in review:
         lines.append(f"- gate_passed: {review['gate_passed']}")
     lines.append("- findings:")
@@ -574,6 +578,57 @@ def events_from_session(session):
                 {"tool": tool, "ts": ts, "input": _tool_input_str(state)}
             )
     return events
+
+
+def _denied_command_from_state(state):
+    """Command string for a denied session tool part, or None.
+
+    Prefers the bash `input.command`; otherwise falls back to the generic
+    `_tool_input_str()` value. Never returns a key, token or env value.
+    """
+    inp = state.get("input")
+    if isinstance(inp, dict):
+        cmd = inp.get("command")
+        if isinstance(cmd, str) and cmd:
+            return cmd
+    return _tool_input_str(state)
+
+
+def blocked_calls_from_session(session):
+    """Derive blocked calls from a session export's errored tool parts.
+
+    A `type: "tool"` part whose `state.status` is an error (for example
+    `"error"`/`"failed"`) and whose error/output contains the real OpenCode
+    permission-denial text counts as a blocked call, deduped by command string.
+    """
+    blocked = []
+    seen = set()
+    if not isinstance(session, dict):
+        return blocked
+    info = session.get("info") or {}
+    messages = session.get("messages")
+    if not isinstance(messages, list):
+        messages = info.get("messages")
+    for msg in messages or []:
+        if not isinstance(msg, dict):
+            continue
+        for part in (msg.get("parts") or []):
+            if not isinstance(part, dict) or part.get("type") != "tool":
+                continue
+            state = part.get("state") or {}
+            status = state.get("status")
+            if not isinstance(status, str) or status not in ("error", "failed"):
+                continue
+            err_text = "{} {}".format(
+                state.get("error") or "", state.get("output") or ""
+            )
+            if not PERMISSION_DENIED_RE.search(err_text):
+                continue
+            cmd = _denied_command_from_state(state)
+            if cmd and cmd not in seen:
+                blocked.append(cmd)
+                seen.add(cmd)
+    return blocked
 
 
 def _match_real_log_line(line):
@@ -936,6 +991,7 @@ def parse_artifacts(artifacts_dir):
         "scan": {"result": None, "detail": None},
         "evidence": {"present": None, "label": None},
         "tool_events": [],
+        "blocked_calls": [],
     }
     if not artifacts_dir or not os.path.isdir(artifacts_dir):
         return facts
@@ -943,6 +999,7 @@ def parse_artifacts(artifacts_dir):
     record = None
     evidence_found = False
     tool_events = []
+    blocked_calls = []
     for root in iter_artifact_roots(artifacts_dir):
         rec = _read_json(os.path.join(root, "run-record.json"))
         if isinstance(rec, dict) and rec.get("run_id"):
@@ -973,7 +1030,8 @@ def parse_artifacts(artifacts_dir):
             facts["opencode_export"] = export
 
         # Structured session exports (`usage/session-<n>.json`) written by the
-        # run meter are the authoritative source of tool events.
+        # run meter are the authoritative source of tool events and blocked
+        # calls (an errored tool part carrying the permission-denial text).
         usage_dir = os.path.join(root, "usage")
         if os.path.isdir(usage_dir):
             for name in sorted(os.listdir(usage_dir)):
@@ -981,6 +1039,19 @@ def parse_artifacts(artifacts_dir):
                     session = _read_json(os.path.join(usage_dir, name))
                     if isinstance(session, dict):
                         tool_events.extend(events_from_session(session))
+                        for cmd in blocked_calls_from_session(session):
+                            if cmd not in blocked_calls:
+                                blocked_calls.append(cmd)
+
+        # The opencode.log artifact (layout `oc-artifacts-<id>/opencode.log` /
+        # `oc-fix-artifacts-<id>/opencode.log`) carries real agent tool output,
+        # so a run with a real-format log and no session export still reports
+        # its denial via the existing log scan.
+        log_text = _read_text(os.path.join(root, "opencode.log"))
+        if log_text:
+            for cmd in detect_blocked_calls(log_text):
+                if cmd not in blocked_calls:
+                    blocked_calls.append(cmd)
 
         cost = parse_usage_metrics_cost(_read_text(os.path.join(root, "usage-metrics.md")))
         if cost is None:
@@ -989,6 +1060,7 @@ def parse_artifacts(artifacts_dir):
             facts["cost_usd"] = cost
 
     facts["tool_events"] = tool_events
+    facts["blocked_calls"] = blocked_calls
     if evidence_found:
         facts["evidence"] = {"present": True, "label": "harness-verified"}
     else:
@@ -1155,6 +1227,12 @@ def enrich_from_artifacts(item, run_id, log_text=""):
                     if value:
                         item[key] = value
                     continue
+                if key == "blocked_calls":
+                    # Never let an empty parsed list wipe a log-derived or
+                    # record-derived denial.
+                    if value:
+                        item[key] = value
+                    continue
                 if value is not None and value != []:
                     if key in ("model", "cost_usd", "tokens", "gate", "gate_passed"):
                         # Keep a record value already set.
@@ -1164,6 +1242,8 @@ def enrich_from_artifacts(item, run_id, log_text=""):
                             item[key] = value
                     elif item.get(key) in (None, [], {}):
                         item[key] = value
+        else:
+            item["artifacts_unavailable"] = True
     return item
 
 
@@ -1272,7 +1352,13 @@ def fetch_runs_live_dir(live_dir):
             if run_id in facts_by_id:
                 parsed = parse_artifacts(art) if os.path.isdir(art) else {}
                 item = facts_by_id[run_id]
+                if not os.path.isdir(art):
+                    item["artifacts_unavailable"] = True
                 for key, value in parsed.items():
+                    if key == "blocked_calls":
+                        if value:
+                            item[key] = value
+                        continue
                     if value is not None and item.get(key) in (None, [], {}):
                         item[key] = value
                 scan = parse_scan_from_log(log_text)
@@ -1293,8 +1379,16 @@ def fetch_runs_live_dir(live_dir):
                         if value:
                             item[key] = value
                         continue
+                    if key == "blocked_calls":
+                        # Never let an empty parsed list wipe a log-derived
+                        # denial (this keeps `reallog/live`'s denied ls).
+                        if value:
+                            item[key] = value
+                        continue
                     if value is not None:
                         item[key] = value
+            else:
+                item["artifacts_unavailable"] = True
             facts_by_id[run_id] = item
 
     return [facts_by_id[k] for k in sorted(facts_by_id)]
