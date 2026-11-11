@@ -191,6 +191,10 @@ fi
 g() { git -c core.hooksPath=/dev/null --no-pager "$@"; }
 rm -f gitleaks_*.tar.gz opencode-linux-*.tar.gz 2>/dev/null || true
 g add -A -- . ":(exclude)*.tar.gz" ":(exclude)*.tgz" ":(exclude)*.zip" ":(exclude)gitleaks_*"
+# #197: force-stage spec-listed files that git add -A dropped because they are gitignored.
+if [ -n "$spec_copy" ]; then
+  bash "$trusted/scripts/opencode-stage-spec-files.sh" --spec "$spec_copy"
+fi
 # #101: new scripts/*.sh|*.py that start with "#!" are staged executable (100755), because the
 # worker's git-only shell cannot chmod. Reads the index only (never runs or trusts worker files);
 # only files ADDED relative to $1, directly under scripts/, that are plain 100644 blobs.

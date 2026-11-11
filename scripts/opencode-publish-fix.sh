@@ -25,7 +25,7 @@ note="$OC_ARTIFACT_DIR/worker-note.md"
 PRISTINE_DIR="$(mktemp -d)"
 trap 'rm -rf "$PRISTINE_DIR"' EXIT
 for f in opencode-artifact-scan.sh opencode-git-push-lease.sh opencode-run-facts.sh opencode-build-fix-context.py \
-  opencode-build-context.py factory-spec-check.py opencode-text-block.sh; do
+  opencode-build-context.py factory-spec-check.py opencode-text-block.sh opencode-stage-spec-files.sh; do
   git -C "$trusted" show "HEAD:scripts/$f" >"$PRISTINE_DIR/$f"
 done
 # #102: the default branch's scripts, from this job's trusted checkout (not the PR head or job A).
@@ -127,6 +127,13 @@ mark_new_scripts_executable() { # $1 = base commit
   done
 }
 git add -A
+# #197: force-stage spec-listed (or already-in-patch) files that git add -A dropped
+# because they are gitignored; fail loudly if a listed Create path is missing and
+# would have been ignored (dropped from the job A patch).
+if [ -f "$PRISTINE_DIR/spec-canonical.md" ]; then
+  chmod +x "$PRISTINE_DIR/opencode-stage-spec-files.sh"
+  bash "$PRISTINE_DIR/opencode-stage-spec-files.sh" --spec "$PRISTINE_DIR/spec-canonical.md" --patch "$patch" --fail-missing-ignored
+fi
 mark_new_scripts_executable HEAD
 if git diff --cached --quiet; then
   echo "publish-fix: patch applied but nothing staged" >&2
