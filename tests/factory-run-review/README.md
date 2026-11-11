@@ -96,7 +96,10 @@ must still select the run (its title matches `#136`), keep its `tokens` JSON
 a value. It has no tool data at all, so `tool_counts` stays `{}` and
 `seconds_per_tool_turn` / `longest_gap_seconds` stay JSON `null`; the rendered
 line reads `seconds/tool turn: unavailable, longest gap: unavailable` with no
-stray `s` suffix (never `unavailables`).
+stray `s` suffix (never `unavailables`). Because `tokenless/` has no
+`artifacts/` directory, the review also emits the artifacts-unavailable marker
+(`artifacts_unavailable: true` in the JSON, an `- artifacts unavailable` line in
+the markdown) instead of silent empties.
 
 ## Real-log/session fixture (`reallog/live/`)
 
@@ -153,3 +156,67 @@ finding for run `43052631438`. This is the broken-case guard: if the bare
 `denied` / `blocked` / `guardrail` substring fallback were still active, the
 echoed instruction and the `denied_endpoints` line would produce a non-empty
 `blocked_calls`, and the test fails loudly.
+
+## Denied-session fixture (`denied/live/`)
+
+`denied/live/` reproduces build run 43069209256 from issue #193 (post-merge
+review of PR #190): the worker's `find .../tests/factory-run-review -type f |
+sort` bash call was blocked by the deny rule, but the workflow log carries no
+agent tool output, so only the downloaded session export can surface the denial.
+
+- `pr-head.txt` — `oc/issue-193-43069209256`.
+- `run-list.json` — the build run `43069209256` (`opencode-spike`, headBranch
+  `main`).
+- `artifacts/43069209256/usage/session-1.json` — a structured session export
+  with one `type: "tool"` bash part whose `state.status` is `"error"`, whose
+  error text contains the permission-denial text (`The user has specified a rule
+  which prevents you from using this specific tool call`), and whose
+  `state.input.command` is `find tests/factory-run-review -type f | sort`.
+- `artifacts/43069209256/log.txt` — a workflow-style `gh run view --log`
+  transcript with no permission-denial text and no agent tool-result line that
+  `detect_blocked_calls()` could treat as a denial.
+
+`--live-dir denied/live` must report the blocked `find` command in
+`blocked_calls` and a `blocked_call` finding for run `43069209256`. Today's
+`log.txt`-only scan cannot produce it; only session-export parsing can pass.
+
+## opencode.log fallback fixture (`denied-log/live/`)
+
+`denied-log/live/` is the session-less fallback (synthetic run 43069209257): no
+`usage/session-*.json`. The blocked `find` command appears only in
+`artifacts/43069209257/oc-artifacts-43069209257/opencode.log`, in the real
+OpenCode agent tool-result format with the permission-denial text. Its `log.txt`
+is a workflow-style log with no denial text.
+
+`--live-dir denied-log/live` must report the blocked `find` command in
+`blocked_calls` for run `43069209257` from the `opencode.log` fallback.
+
+## Negative-session fixture (`denied-neg/live/`)
+
+`denied-neg/live/` is the broken-case guard for the session trigger: a naive
+status-only or text-only trigger would fire, but the real code requires both an
+errored `state.status` AND the exact permission-denial text.
+
+- `pr-head.txt` — `oc/issue-193-43069209301`.
+- `run-list.json` — build run `43069209301` (`opencode-spike`, headBranch
+  `main`) plus fix run `43069209302` (`opencode-fix`, headBranch
+  `oc/issue-193-43069209301`).
+- `artifacts/43069209301/usage/session-1.json` — a bash tool part whose
+  `state.status` is `"completed"` (not an error), even though the part mentions a
+  command.
+- `artifacts/43069209302/usage/session-1.json` — a bash tool part whose
+  `state.status` is `"error"` but whose error text does not contain the
+  permission-denial text.
+
+Both runs' `log.txt` files are workflow-style logs with no denial text. Both
+must report `blocked_calls: []` and no `blocked_call` finding.
+
+## Artifacts-unavailable fixture (`unavailable/live/`)
+
+`unavailable/live/` has `run-list.json` and `pr-head.txt` only — no
+`artifacts/` directory. The review must emit the artifacts-unavailable marker
+(`artifacts_unavailable: true` in the JSON, an `- artifacts unavailable` line in
+the markdown) rather than silently returning empty `tool_counts` / evidence /
+routing. The marker fires only when the artifact directory is missing or the
+download fails; an existing artifact directory with no token or tool data is not
+treated as artifacts-unavailable.

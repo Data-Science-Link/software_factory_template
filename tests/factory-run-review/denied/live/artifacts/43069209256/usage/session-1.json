@@ -1,0 +1,131 @@
+{
+  "info": {
+    "id": "ses_denied_43069209256",
+    "slug": "denied-build",
+    "projectID": "global",
+    "directory": "[redacted:session-directory]",
+    "path": "",
+    "title": "[redacted:session-title]",
+    "agent": "build",
+    "model": {
+      "id": "DeepSeek-V4-Flash-0731",
+      "providerID": "deepinfra",
+      "variant": "default"
+    },
+    "version": "1.19.5",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0.033,
+    "tokens": {
+      "input": 15000,
+      "output": 3000,
+      "reasoning": 0,
+      "cache": {
+        "read": 25000,
+        "write": 0
+      }
+    },
+    "time": {
+      "created": 1769121000000,
+      "updated": 1769122140000
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1769121000100
+        },
+        "agent": "build",
+        "id": "msg_denied_1",
+        "sessionID": "ses_denied_43069209256"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "[redacted:text]",
+          "id": "prt_denied_1",
+          "sessionID": "ses_denied_43069209256",
+          "messageID": "msg_denied_1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_denied_1",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "time": {
+          "created": 1769121000200,
+          "completed": 1769122140000
+        },
+        "finish": "stop",
+        "id": "msg_denied_2",
+        "sessionID": "ses_denied_43069209256"
+      },
+      "parts": [
+        {
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-start",
+          "id": "prt_denied_2",
+          "sessionID": "ses_denied_43069209256",
+          "messageID": "msg_denied_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_denied_1",
+          "state": {
+            "status": "error",
+            "input": {
+              "command": "find tests/factory-run-review -type f | sort"
+            },
+            "error": "The user has specified a rule which prevents you from using this specific tool call. Denied: bash is restricted to a few read-only git commands.",
+            "output": "",
+            "title": "bash find",
+            "time": {
+              "start": 1769121001000,
+              "end": 1769121001500
+            }
+          },
+          "id": "prt_denied_3",
+          "sessionID": "ses_denied_43069209256",
+          "messageID": "msg_denied_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_denied_2",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git status"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "bash git status",
+            "time": {
+              "start": 1769121003000,
+              "end": 1769121003500
+            }
+          },
+          "id": "prt_denied_4",
+          "sessionID": "ses_denied_43069209256",
+          "messageID": "msg_denied_2"
+        },
+        {
+          "reason": "stop",
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-finish",
+          "id": "prt_denied_5",
+          "sessionID": "ses_denied_43069209256",
+          "messageID": "msg_denied_2"
+        }
+      ]
+    }
+  ]
+}
