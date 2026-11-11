@@ -14,3 +14,4 @@ The first planned tag is **v0.1.0**. It is unreleased. No tag is cut until Micha
 - [ADOPTING.md](ADOPTING.md): short guide for a person or an agent using the factory.
 - [docs/SETUP.md](docs/SETUP.md): new-repo setup checklist (secrets, labels, branch protection, token scope, per-repo config, site hosting).
 - [docs/RELEASING.md](docs/RELEASING.md): manual release checklist. Reusable workflows, pinned tags in product repos, and sync PRs remain planned (#156).
+- [LICENSE](LICENSE) (MIT) and [SECURITY.md](SECURITY.md) (private vulnerability reporting), required before the repo is public (#185).
