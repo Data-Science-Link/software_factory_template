@@ -55,16 +55,17 @@ if [ -n "$issue_total" ] && [ "$issue_total" != "$actual_cost_usd" ]; then
   cost_line="${cost_line}; issue total so far \$${issue_total}"
 fi
 
-# One Gate line (#31): the old filter printed nothing when every gate was "skip" and one line per
-# pass/fail pair otherwise, which broke the block.
+# One Gate line (#31). #162: skipped checks are named, not counted; an all-skip gate means the
+# run had nothing to gate (no PR) or the record predates #162.
 gate_filter='if (.gate | type) == "object" then
-    ([.gate | to_entries[] | select(.value == "pass") | .key] | join(", ")) as $p
-  | ([.gate | to_entries[] | select(.value == "fail") | .key] | join(", ")) as $f
+    ([.gate | to_entries[] | select(.value == "pass") | .key] | sort | join(", ")) as $p
+  | ([.gate | to_entries[] | select(.value == "fail") | .key] | sort | join(", ")) as $f
+  | ([.gate | to_entries[] | select(.value == "skip") | .key] | sort | join(", ")) as $sk
   | ([.gate | to_entries[] | select(.value == "skip")] | length) as $s
   | ([.gate | to_entries[]] | length) as $n
   | (if (.risk // "") == "" then "" else "; risk \(.risk)" + (if .risk == "trivial" then "" else ": owner product gate required" end) end) as $r
-  | if $n > 0 and $s == $n then "not run (no gate checks wired yet)\($r)"
-    else "\(if .gate_passed == true then "passed" else "not passed" end) (pass: \(if $p == "" then "none" else $p end); fail: \(if $f == "" then "none" else $f end); skipped: \($s))\($r)" end
+  | if $n > 0 and $s == $n then "not run (every check skipped)\($r)"
+    else "\(if .gate_passed == true then "passed" else "not passed" end) (pass: \(if $p == "" then "none" else $p end); fail: \(if $f == "" then "none" else $f end); skipped: \(if $sk == "" then "none" else $sk end))\($r)" end
   else (.gate | tostring) end'
 
 # Generate the new factory-run block content

@@ -115,6 +115,23 @@ PY
   fi
 fi
 
+# #162: gate checks that need the PR (pr_template, no_workflow_changes) go into gate.json for
+# factory-run-record.py, which adds the checks it can decide from the record. A gh error leaves
+# a check "skip" (not passed). pr_check and gitleaks stay "skip": they are the required PR checks.
+if [ -n "$pr" ] && { [ "$outcome" = pr_opened ] || [ "$outcome" = pr_updated ]; }; then
+  pr_template=skip; no_wf=skip
+  if pr_body="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null)"; then
+    pr_template=fail
+    if grep -qxF '<!-- factory-run:start -->' <<<"$pr_body" && grep -qxF '<!-- factory-run:end -->' <<<"$pr_body" \
+      && grep -qx '## Factory loop[[:space:]]*' <<<"$pr_body" && grep -qx '## Safety checklist[[:space:]]*' <<<"$pr_body" \
+      && grep -qiE "^(closes|refs) #${issue}([^0-9]|$)" <<<"$pr_body"; then pr_template=pass; fi
+  fi
+  if pr_files="$(gh pr diff "$pr" --repo "$GITHUB_REPOSITORY" --name-only 2>/dev/null)"; then
+    if grep -q '^\.github/workflows/' <<<"$pr_files"; then no_wf=fail; else no_wf=pass; fi
+  fi
+  printf '{"no_workflow_changes": "%s", "pr_template": "%s"}\n' "$no_wf" "$pr_template" >"$rec/gate.json"
+fi
+
 runs_dir="${FACTORY_RUNS_DIR:-$rec/runs}"
 opencode_version="$(sed -n 's/^OPENCODE_VERSION="\${OPENCODE_VERSION:-\([0-9.]*\)}"$/\1/p' scripts/opencode-install.sh | head -n 1)"
 record_path="$(OC_ARTIFACT_DIR="$rec" FACTORY_RUNS_DIR="$runs_dir" OC_STARTED_AT="$started" OC_ENDED_AT="$ended" \
@@ -162,4 +179,14 @@ fi
   [ -z "$comment_url" ] || echo "- Posted: ${comment_url}"
   [ -z "$pr" ] || echo "- PR: #${pr}"
 } >>"$summary"
-echo "run-finish: recorded ${run_id} (${outcome}, \$${actual}, ${method})"
+gate_line="$(jq -r '(.gate | to_entries) as $g
+  | ([$g[] | select(.value == "fail") | .key] | join(", ")) as $f
+  | ([$g[] | select(.value == "skip") | .key] | join(", ")) as $s
+  | "\(if .gate_passed then "passed" else "not passed" end) (fail: \(if $f == "" then "none" else $f end); skip: \(if $s == "" then "none" else $s end))"' "$record_path")"
+echo "- Gate: ${gate_line}" >>"$summary"
+echo "run-finish: recorded ${run_id} (${outcome}, \$${actual}, ${method}); gate ${gate_line}"
+# Fail loudly (FACTORY.md step 7): a PR run whose gate has a failed check turns this job red.
+if [ "$(jq '[.gate[] | select(. == "fail")] | length' "$record_path")" != 0 ]; then
+  echo "::error title=Factory gate::gate check failed for ${run_id}: ${gate_line}"
+  exit 1
+fi
