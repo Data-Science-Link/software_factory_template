@@ -262,22 +262,120 @@ def financials_html(data_dir):
     return placeholder_html("Financials")
 
 
+PRIORITY_ORDER = {"high": 2, "low": 1, "none": 0}
+RISK_ORDER = ("high", "medium", "low", "unlabeled")
+STATUS_LABELS = {
+    "open": "open",
+    "high": "high priority",
+    "owner-action": "owner-action",
+    "selected": "selected",
+}
+
+
+def _summary_cards(issues):
+    open_count = len(issues)
+    high = sum(1 for i in issues if i.get("priority") == "high")
+    owner_action = sum(1 for i in issues if i.get("status") == "owner-action")
+    selected = sum(1 for i in issues if i.get("status") == "factory:selected")
+    cards = [
+        ("Open", open_count),
+        ("High priority", high),
+        ("Owner-action", owner_action),
+        ("Selected", selected),
+    ]
+    out = ['<div class="cards">']
+    for label, count in cards:
+        out.append(
+            '<div class="card"><span class="card-label">{}</span>'
+            '<span class="card-value">{}</span></div>'.format(esc(label), esc(count))
+        )
+    out.append("</div>")
+    return "\n".join(out)
+
+
+def _priority_risk_table(issues):
+    rows = {risk: {prio: 0 for prio in PRIORITY_ORDER} for risk in RISK_ORDER}
+    for i in issues:
+        prio = i.get("priority", "none")
+        if prio not in PRIORITY_ORDER:
+            prio = "none"
+        risk = i.get("risk", "unlabeled")
+        if risk not in rows:
+            risk = "unlabeled"
+        rows[risk][prio] += 1
+    header = ["Risk \\ Priority", "high", "low", "none"]
+    table = [header]
+    for risk in RISK_ORDER:
+        table.append([risk] + [str(rows[risk][prio]) for prio in PRIORITY_ORDER])
+    return render_table(table)
+
+
+def _epic_list(issues):
+    epics = [i for i in issues if i.get("status") == "epic"]
+    epics.sort(key=lambda i: (i.get("updatedAt") or "", i.get("number") or 0))
+    if not epics:
+        return ""
+    out = ["<h2>Epics</h2>", "<ul class=\"epics\">"]
+    for i in epics:
+        title = i.get("title", "")
+        done = i.get("done", 0)
+        total = i.get("total", 0)
+        url = i.get("url", "")
+        link = '<a href="{}">{}</a>'.format(esc(url), esc(title)) if url else esc(title)
+        out.append("<li>{} — {} / {} done</li>".format(link, esc(done), esc(total)))
+    out.append("</ul>")
+    return "\n".join(out)
+
+
+def _issue_table(issues):
+    ordered = sorted(
+        issues,
+        key=lambda i: (
+            -PRIORITY_ORDER.get(i.get("priority", "none"), 0),
+            i.get("updatedAt") or "",
+            i.get("number") or 0,
+        ),
+    )
+    header = ["Priority", "Status", "Title"]
+    table = [header]
+    for i in ordered:
+        title = i.get("title", "")
+        url = i.get("url", "")
+        link = '<a href="{}">{}</a>'.format(esc(url), esc(title)) if url else esc(title)
+        table.append(
+            [
+                i.get("priority", "none"),
+                STATUS_LABELS.get(i.get("status", "open"), i.get("status", "open")),
+                link,
+            ]
+        )
+    return render_table(table)
+
+
 def backlog_html(data_dir):
     backlog = Path(data_dir) / "backlog.json"
-    if backlog.is_file():
-        try:
-            with open(backlog, encoding="utf-8") as fh:
-                items = json.load(fh)
-        except (ValueError, OSError):
-            items = []
-        if items:
-            out = ["<h2>Backlog</h2>", "<ul>"]
-            for item in items:
-                title = item.get("title") if isinstance(item, dict) else str(item)
-                out.append("<li>{}</li>".format(esc(title)))
-            out.append("</ul>")
-            return "\n".join(out)
-    return placeholder_html("Backlog")
+    if not backlog.is_file():
+        return placeholder_html("Backlog")
+    try:
+        with open(backlog, encoding="utf-8") as fh:
+            items = json.load(fh)
+    except (ValueError, OSError):
+        return placeholder_html("Backlog")
+    if not isinstance(items, list):
+        return placeholder_html("Backlog")
+    issues = [i for i in items if isinstance(i, dict)]
+    out = [
+        "<h2>Backlog</h2>",
+        _summary_cards(issues),
+        "<h2>Open issues by priority and risk</h2>",
+        _priority_risk_table(issues),
+    ]
+    epic = _epic_list(issues)
+    if epic:
+        out.append(epic)
+    out.append("<h2>Open issues</h2>")
+    out.append(_issue_table(issues))
+    return "\n".join(out)
 
 
 def dbt_html(repo_root):
