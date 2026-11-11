@@ -332,24 +332,27 @@ def _issue_table(issues):
         issues,
         key=lambda i: (
             -PRIORITY_ORDER.get(i.get("priority", "none"), 0),
-            i.get("updatedAt") or "",
+            -(i.get("updatedAt") or ""),
             i.get("number") or 0,
         ),
     )
     header = ["Priority", "Status", "Title"]
-    table = [header]
+    out = ["<table><thead><tr>"]
+    for cell in header:
+        out.append("<th>{}</th>".format(esc(cell)))
+    out.append("</tr></thead><tbody>")
     for i in ordered:
         title = i.get("title", "")
         url = i.get("url", "")
         link = '<a href="{}">{}</a>'.format(esc(url), esc(title)) if url else esc(title)
-        table.append(
-            [
-                i.get("priority", "none"),
-                STATUS_LABELS.get(i.get("status", "open"), i.get("status", "open")),
-                link,
-            ]
-        )
-    return render_table(table)
+        status = STATUS_LABELS.get(i.get("status", "open"), i.get("status", "open"))
+        out.append("<tr>")
+        out.append("<th>{}</th>".format(esc(i.get("priority", "none"))))
+        out.append("<td>{}</td>".format(esc(status)))
+        out.append("<td>{}</td>".format(link))
+        out.append("</tr>")
+    out.append("</tbody></table>")
+    return "\n".join(out)
 
 
 def backlog_html(data_dir):
