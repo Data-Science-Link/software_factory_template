@@ -92,6 +92,7 @@ Cloud factory path (selected issues). Detail: `.factory/VISION.md` §4.
 - `scripts/opencode-run-meter.sh`
 - `scripts/opencode-spec-draft.py`
 - `scripts/opencode-spec-run.sh`
+- `scripts/opencode-stage-spec-files.sh`
 - `scripts/opencode-usage-report.sh`
 - `scripts/opencode-verify.sh`
 - `scripts/pr-check.sh`
