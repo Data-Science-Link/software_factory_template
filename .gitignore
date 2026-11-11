@@ -225,3 +225,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 gitleaks_8.30.1_linux_x64.tar.gz
+
+# factory-run-review fixtures: keep the opencode.log artifact trackable despite *.log
+!tests/factory-run-review/**/opencode.log

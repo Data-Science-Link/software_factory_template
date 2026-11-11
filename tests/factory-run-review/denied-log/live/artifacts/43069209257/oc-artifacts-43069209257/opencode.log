@@ -1,0 +1,8 @@
+assistant → Read .factory/FACTORY.md
+assistant → Read scripts/factory-run-review.py
+assistant ✱ Glob scripts/*.py
+assistant ✗ Bash: find tests/factory-run-review -type f | sort failed
+The user has specified a rule which prevents you from using this specific tool call. Denied: bash is restricted to a few read-only git commands.
+assistant → Read tests/factory-run-review/README.md
+assistant → Bash: git status
+assistant ✱ Glob tests/factory-run-review/**/*.json
