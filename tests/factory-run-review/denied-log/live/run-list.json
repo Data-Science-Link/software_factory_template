@@ -1,0 +1,11 @@
+[
+  {
+    "databaseId": 43069209257,
+    "workflowName": "opencode-spike",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-11T12:30:00.000Z",
+    "updatedAt": "2026-11-11T12:49:00.000Z",
+    "headBranch": "main"
+  }
+]
