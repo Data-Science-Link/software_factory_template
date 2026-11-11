@@ -1,0 +1,24 @@
+[
+  {
+    "grain": "issue",
+    "grain_key": "42",
+    "runs": 1,
+    "predicted_usd": 0.011,
+    "actual_usd": 0.012246,
+    "median_tokens_in": 412000,
+    "median_tokens_cached": 350000,
+    "median_tokens_out": 18200,
+    "error_pct": 11.32727
+  },
+  {
+    "grain": "complexity",
+    "grain_key": "simple",
+    "runs": 3,
+    "predicted_usd": 0.065,
+    "actual_usd": 0.024492,
+    "median_tokens_in": 412000,
+    "median_tokens_cached": 350000,
+    "median_tokens_out": 18200,
+    "error_pct": -62.32000
+  }
+]

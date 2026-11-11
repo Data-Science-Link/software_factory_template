@@ -1,0 +1,22 @@
+[
+  {
+    "issue": 42,
+    "runs": 1,
+    "spend_usd": 0.012246,
+    "cap_headroom_usd": 0.987754,
+    "predicted_usd": 0.011,
+    "variance_usd": 0.001246,
+    "last_outcome": "pr_opened",
+    "last_run_at_utc": "2026-11-02T14:03:11Z"
+  },
+  {
+    "issue": 43,
+    "runs": 1,
+    "spend_usd": 0.0,
+    "cap_headroom_usd": 1.0,
+    "predicted_usd": 0.004,
+    "variance_usd": -0.004,
+    "last_outcome": "failed",
+    "last_run_at_utc": "2026-11-02T15:00:00Z"
+  }
+]

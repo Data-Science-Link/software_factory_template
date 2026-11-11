@@ -1,0 +1,12 @@
+[
+  {
+    "model_id": "deepseek-ai/deepseek-v4-flash-0731",
+    "runs": 4,
+    "tokens_in": 1194000,
+    "tokens_cached": 996000,
+    "tokens_out": 40200,
+    "spend_usd": 0.032112,
+    "cache_hit_rate": 0.83417,
+    "gate_pass_rate": 0.25
+  }
+]

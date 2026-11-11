@@ -1,0 +1,12 @@
+# Budget and spend-limit settings for the factory.
+# Single committed source of truth for budget numbers (issue #170); consumed by
+# scripts/factory-budget-vars.py which prints dbt vars for `dbt build --vars`.
+# Values set by Michael on 2026-11-11: "Budgets: $10 per month, $2.50 per week".
+
+monthly_usd: 10
+weekly_usd: 2.50
+issue_target_usd: 0.15
+issue_cap_usd: 1.00
+fixed_costs_monthly_usd: 20
+actions_minutes_month: 2000
+warn_pct: 80

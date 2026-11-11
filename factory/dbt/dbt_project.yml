@@ -59,6 +59,8 @@ models:
 vars:
   issue_cap_usd: 1.00
   deepinfra_monthly_budget_usd: 10
+  weekly_budget_usd: 2.50
+  issue_target_usd: 0.15
   fixed_costs_monthly_usd: 20
   actions_minutes_month: 2000
   warn_pct: 80
