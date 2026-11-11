@@ -1,0 +1,44 @@
+# Auto-approve held CI runs for the factory's own oc/ branches (public-repo
+# "first-time contributor" hold). Runs from the BASE branch (pull_request_target)
+# and never checks out or executes PR code. Forks are never approved.
+name: approve-oc-runs
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: approve-oc-runs-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    if: >-
+      startsWith(github.event.pull_request.head.ref, 'oc/') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Approve held runs for this head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Held runs appear a few seconds after the PR event; poll briefly.
+          for attempt in 1 2 3 4 5 6; do
+            ids=$(gh api "repos/$REPO/actions/runs?head_sha=$HEAD_SHA&status=action_required" \
+              --jq '.workflow_runs[] | select(.head_repository.full_name == env.REPO) | .id')
+            if [ -n "$ids" ]; then
+              for id in $ids; do
+                echo "Approving run $id"
+                gh api -X POST "repos/$REPO/actions/runs/$id/approve"
+              done
+            fi
+            sleep 20
+          done
