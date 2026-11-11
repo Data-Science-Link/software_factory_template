@@ -35,14 +35,34 @@ def utc_timestamp_ok(value):
         return False
 
 
-def load_cost_function():
-    """Load the cost_from_usage function from factory-validate-run.py."""
+def load_validate_module():
+    """Load scripts/factory-validate-run.py as a module."""
     spec = importlib.util.spec_from_file_location(
         "factory_validate_run", "scripts/factory-validate-run.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.cost_from_usage
+    return module
+
+
+def load_cost_function():
+    """Load the cost_from_usage function from factory-validate-run.py."""
+    return load_validate_module().cost_from_usage
+
+
+# #162: the gate is judged only on runs that opened or updated a PR. These checks run in the
+# record job and must all pass; pr_check and gitleaks are the required PR status checks (they
+# can't start from a GITHUB_TOKEN push in-job, #74), so they stay "skip" unless gate.json says
+# otherwise, and a "fail" in any check fails the gate.
+GATE_OUTCOMES = ("pr_opened", "pr_updated")
+GATE_IN_JOB = (
+    "spec_present",
+    "cost_recorded",
+    "budget_cap",
+    "run_record_valid",
+    "pr_template",
+    "no_workflow_changes",
+)
 
 
 def load_models_config(models_path):
@@ -389,11 +409,14 @@ def main():
         "spec_present": "skip",
     }
 
-    # Override with actual gate data
+    # Override with actual gate data (gate.json: written by factory-run-finish.sh for the PR checks)
     gate = gate_defaults.copy()
-    gate.update({k: v for k, v in gate_data.items() if k in gate_defaults})
-
-    gate_passed = all(v == "pass" for v in gate.values())
+    gate.update(
+        {k: v for k, v in gate_data.items() if k in gate_defaults and v in ("pass", "fail", "skip")}
+    )
+    gate_evaluated = os.environ["OC_OUTCOME"] in GATE_OUTCOMES
+    if not gate_evaluated:
+        gate = gate_defaults.copy()
 
     # Determine model prices if start state is trusted
     if start_state_trusted and model != "unknown":
@@ -549,9 +572,21 @@ def main():
         "head_sha": os.environ["OC_HEAD_SHA"],
         "outcome": os.environ["OC_OUTCOME"],
         "gate": gate,
-        "gate_passed": gate_passed,
+        "gate_passed": False,
         "notes": notes,
     }
+
+    # #162: checks the record job can decide from the record itself.
+    if gate_evaluated:
+        gate["spec_present"] = "pass"  # spec.md with factory-spec front matter was read above
+        gate["cost_recorded"] = "fail" if cost_method == "not_measured" else "pass"
+        if budget_cap_usd > 0:
+            gate["budget_cap"] = "pass" if issue_spend_to_date_usd <= budget_cap_usd else "fail"
+        else:
+            gate["budget_cap"] = "skip"  # no cap known; never pass a cap we could not compare
+        errors = load_validate_module().validate_record(record, None)
+        gate["run_record_valid"] = "fail" if errors else "pass"
+        record["gate_passed"] = all(gate[k] == "pass" for k in GATE_IN_JOB) and "fail" not in gate.values()
 
     # Print the record as sorted JSON
     print(json.dumps(record, indent=2, sort_keys=True))
