@@ -46,6 +46,10 @@ PERMISSION_DENIED_RE = re.compile(
     r"the user has specified a rule which prevents you from using this specific tool call",
     re.I,
 )
+# Real OpenCode logs prefix each tool line with a role label (e.g. "assistant ")
+# before the arrow/symbol: `assistant → Read <path>`. The lookahead keeps the
+# arrow so the line still matches the symbol matchers below.
+_ROLE_PREFIX_RE = re.compile(r"^[A-Za-z]+\s+(?=[→✱✗*>\-])")
 SCAN_PASS_RE = re.compile(r"artifact-scan:\s*passed", re.I)
 SCAN_FAIL_RE = re.compile(r"artifact-scan:\s*FAIL", re.I)
 
@@ -500,6 +504,18 @@ def strip_ansi(text):
     return ANSI_RE.sub("", text)
 
 
+def strip_role_prefix(text):
+    """Remove a leading role label (e.g. `assistant `) from a tool log line.
+
+    Real OpenCode logs print `assistant → Read <path>` (the role label comes
+    before the arrow), so the symbol matchers must see the line starting at the
+    arrow. Lines without a role prefix are returned unchanged.
+    """
+    if not text:
+        return text
+    return _ROLE_PREFIX_RE.sub("", text, count=1)
+
+
 def _tool_input_str(state):
     """Best-effort string for a tool part's input, for out-of-spec reads."""
     if not isinstance(state, dict):
@@ -568,7 +584,7 @@ def _match_real_log_line(line):
     `<tool> tool call ...` spelling so older fixtures keep passing. Timestamps
     are not present in plain logs, so `ts` stays null; the parse never guesses.
     """
-    s = line.strip()
+    s = strip_role_prefix(line.strip())
     low = s.lower()
     for tool in ("read", "glob", "bash", "edit", "write", "task", "grep"):
         if f"{tool} tool" in low and "tool call" in low:
@@ -618,11 +634,11 @@ def _denied_command(lines, idx):
     """
     lo = max(0, idx - 6)
     for j in range(lo, idx + 1):
-        s = strip_ansi(lines[j]).strip()
+        s = strip_role_prefix(strip_ansi(lines[j]).strip())
         if s.startswith("✗"):
             return s
     for j in range(lo, idx + 1):
-        s = strip_ansi(lines[j]).strip()
+        s = strip_role_prefix(strip_ansi(lines[j]).strip())
         if s.startswith(("→", "✱", "->", "*")):
             return s
     return strip_ansi(lines[idx]).strip()

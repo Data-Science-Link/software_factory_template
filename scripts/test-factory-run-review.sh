@@ -162,32 +162,33 @@ set -e
 if [ "$rc" -ne 0 ]; then
   fail "real-log/session parser (script exited non-zero)"
 else
-  rl_ok=1
-  # Session-JSON run: per-tool counts match the session JSON (34 read, 10 edit,
-  # 9 write, 4 bash, 3 glob, 3 grep) and per-turn timing is non-null.
-  grep -q '"run_id": 42951547485' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"read": 34' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"edit": 10' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"write": 9' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"bash": 4' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"glob": 3' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"grep": 3' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"seconds_per_tool_turn": 2.0' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"longest_gap_seconds": 2.0' "$tmpdir/out-reallog.json" || rl_ok=0
-  # Real permission-denied `ls` shows up in blocked_calls.
-  grep -q 'ls -la tests/factory-run-review/reallog/live' "$tmpdir/out-reallog.json" || rl_ok=0
-  # Log-fallback run (no session JSON): tool_counts populated from real log lines.
-  grep -q '"run_id": 42951547486' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"read": 2' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"edit": 1' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"write": 1' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"bash": 2' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"glob": 2' "$tmpdir/out-reallog.json" || rl_ok=0
-  grep -q '"grep": 1' "$tmpdir/out-reallog.json" || rl_ok=0
-  # The log-fallback run has no usable timestamps, so its per-turn timing is
-  # JSON null (not fabricated).
-  grep -q '"seconds_per_tool_turn": null' "$tmpdir/out-reallog.json" || rl_ok=0
-  if [ "$rl_ok" -eq 1 ]; then
+  # Parse the JSON with python3 and assert exact per-run values, so a count like
+  # "edit": 1 can never accidentally match "edit": 10 (grep substring matching).
+  if python3 - "$tmpdir/out-reallog.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+runs = {r["run_id"]: r for r in data["runs"]}
+# Session-JSON run: counts match the session JSON, per-turn timing non-null,
+# and the real permission-denied ls is recorded in blocked_calls.
+s = runs[42951547485]
+assert s["tool_counts"] == {
+    "read": 34, "edit": 10, "write": 9, "bash": 4, "glob": 3, "grep": 3
+}, s["tool_counts"]
+assert s["seconds_per_tool_turn"] == 2.0, s["seconds_per_tool_turn"]
+assert s["longest_gap_seconds"] == 2.0, s["longest_gap_seconds"]
+assert any(
+    "ls -la tests/factory-run-review/reallog/live" in c for c in s["blocked_calls"]
+), s["blocked_calls"]
+# Log-fallback run (no session JSON): counts populated from real log lines, and
+# with no usable timestamps its per-turn timing stays JSON null (not fabricated).
+f = runs[42951547486]
+assert f["tool_counts"] == {
+    "read": 2, "edit": 1, "write": 1, "bash": 2, "glob": 2, "grep": 1
+}, f["tool_counts"]
+assert f["seconds_per_tool_turn"] is None, f["seconds_per_tool_turn"]
+assert f["longest_gap_seconds"] is None, f["longest_gap_seconds"]
+PY
+  then
     note "real-log/session parser (session tool counts + timing, denied ls, log fallback)"
   else
     fail "real-log/session parser (tool counts/timing/blocked calls not populated)"
