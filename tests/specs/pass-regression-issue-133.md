@@ -1,4 +1,3 @@
-# spec-check-new-scripts: scripts/factory-usage.py scripts/test-factory-usage.sh
 <!-- factory-spec v1 -->
 ---
 spec_version: 1

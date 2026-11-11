@@ -42,20 +42,48 @@ else
 fi
 [ -s "$base_scripts" ] || { echo "could not list base branch scripts" >&2; exit 2; }
 
+# Derive the scripts a pass fixture plans to Create (its own ## Files Create:/Add:/New: lines),
+# the set that is "new at approval" for that fixture (#145). Only scripts/ paths are candidates.
+derive_new_scripts() { # <fixture>
+  awk '
+    /^##[ \t]+Files[ \t]*$/ { in_files = 1; next }
+    /^##[ \t]/ { in_files = 0 }
+    in_files && /^[ \t]*-[ \t]+(Create|Add|New):/ {
+      line = $0
+      while (match(line, /`[^`]*`/)) {
+        p = substr(line, RSTART + 1, RLENGTH - 2)
+        if (p ~ /^scripts\//) print p
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+  ' "$1"
+}
+
+# Build a fixture's base-scripts list with its own Create:/Add:/New: scripts removed from it.
+derive_fixture_base() { # <fixture> [base-list] -> prints base list path (derived)
+  local fixture="$1" base="${2:-$base_scripts}" name new out
+  name="$(basename "$fixture")"
+  new="$(derive_new_scripts "$fixture")"
+  if [ -z "$new" ]; then
+    printf '%s\n' "$base"
+    return
+  fi
+  out="$tmp/base-$name.txt"
+  printf '%s\n' $new | grep -vxF -f - "$base" >"$out" || true
+  printf '%s\n' "$out"
+}
+
 for fixture in "$fixtures_dir"/*.md; do
   [ -f "$fixture" ] || continue
   total=$((total + 1))
   name="$(basename "$fixture")"
 
   set +e
-  # Regression fixtures are checked as of their approval: scripts the spec created (since merged)
-  # are named in a "# spec-check-new-scripts: a b" first line and removed from this fixture's base.
-  fixture_base="$base_scripts"
-  new_scripts="$(head -n 1 "$fixture" | sed -n 's/^# spec-check-new-scripts: //p')"
-  if [ -n "$new_scripts" ]; then
-    fixture_base="$tmp/base-$name.txt"
-    printf '%s\n' $new_scripts | grep -vxF -f - "$base_scripts" >"$fixture_base" || true
-  fi
+  # Each fixture's own ## Files Create:/Add:/New: scripts are "new at approval" for that fixture
+  # and are removed from its base list. Self-maintaining: once a script the fixture's spec planned
+  # lands on main, the fixture already names it, so it stays green (#145). Removes only a fixture's
+  # own Create:/Add:/New: paths, never Change: paths or paths absent from its own ## Files.
+  fixture_base="$(derive_fixture_base "$fixture")"
   output="$(python3 scripts/factory-spec-check.py --base-scripts "$fixture_base" "$fixture" 2>&1)"
   rc=$?
   set -e
@@ -131,6 +159,29 @@ sed 's#`scripts/widget-audit.sh`#`scripts/factory-predict-cost.py`#' "$fixtures_
   | sed 's/Create:/Change:/' >"$prot_spec"
 case_rc "base-scripts: protected script on base -> fails" fail "change to a protected spend/security script" --base-scripts "$base_scripts" "$prot_spec"
 case_rc "no base-scripts: protected script tracked on HEAD -> fails" fail "change to a protected spend/security script" "$prot_spec"
+
+# Rot test (#145): a regression fixture whose approved spec's Create: scripts already exist on the
+# base list (simulating a merge that landed them) must still pass, because the derivation removes
+# the fixture's own Create: paths from its base list. This is the exact rot that turned pr-check red.
+rot_fixture="$fixtures_dir/pass-regression-issue-30-amended.md"
+rot_base="$tmp/rot-base.txt"
+cat "$base_scripts" >"$rot_base"
+printf '%s\n' scripts/factory-usage.py scripts/factory-run-end.sh scripts/test-run-end.sh >>"$rot_base"
+sort -u -o "$rot_base" "$rot_base"
+rot_derived="$(derive_fixture_base "$rot_fixture" "$rot_base")"
+total=$((total + 1))
+set +e
+rot_out="$(python3 scripts/factory-spec-check.py --base-scripts "$rot_derived" "$rot_fixture" 2>&1)"
+rot_rc=$?
+set -e
+if [ "$rot_rc" -eq 0 ] && printf '%s\n' "$rot_out" | grep -q "^OK $rot_fixture\$"; then
+  echo "PASS  regression rot: fixture passes once its Create: scripts exist on base"
+  passed=$((passed + 1))
+else
+  echo "FAIL  regression rot (expected exit 0, got $rot_rc)"
+  echo "$rot_out" | head -5
+  failed=$((failed + 1))
+fi
 
 echo ""
 echo "Results: $passed passed, $failed failed, $total total"
