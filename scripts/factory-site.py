@@ -330,11 +330,12 @@ def _epic_list(issues):
 def _issue_table(issues):
     ordered = sorted(
         issues,
-        key=lambda i: (
-            -PRIORITY_ORDER.get(i.get("priority", "none"), 0),
-            -(i.get("updatedAt") or ""),
-            i.get("number") or 0,
-        ),
+        key=lambda i: (i.get("updatedAt") or "", i.get("number") or 0),
+        reverse=True,
+    )
+    ordered = sorted(
+        ordered,
+        key=lambda i: -PRIORITY_ORDER.get(i.get("priority", "none"), 0),
     )
     header = ["Priority", "Status", "Title"]
     out = ["<table><thead><tr>"]
