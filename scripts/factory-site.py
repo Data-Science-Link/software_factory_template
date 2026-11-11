@@ -115,29 +115,156 @@ def numbered_steps(text):
     return steps
 
 
+def strip_markdown(text):
+    """Remove inline markdown markers (bold `**`, code backticks) from a string."""
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", str(text))
+    text = re.sub(r"`([^`]*)`", r"\1", text)
+    return text
+
+
 def render_table(rows):
     if not rows:
         return ""
     out = ["<table><thead><tr>"]
     for cell in rows[0]:
-        out.append("<th>{}</th>".format(esc(cell)))
+        out.append("<th>{}</th>".format(esc(strip_markdown(cell))))
     out.append("</tr></thead><tbody>")
     for row in rows[1:]:
         out.append("<tr>")
         for i, cell in enumerate(row):
             tag = "th" if i == 0 else "td"
-            out.append("<{}>{}</{}>".format(tag, esc(cell), tag))
+            out.append("<{}>{}</{}>".format(tag, esc(strip_markdown(cell)), tag))
         out.append("</tr>")
     out.append("</tbody></table>")
     return "\n".join(out)
 
 
-def render_loop_steps(steps):
-    out = ["<ol>"]
-    for _num, text in steps:
-        out.append("<li>{}</li>".format(esc(text)))
-    out.append("</ol>")
+def render_loop_cards(steps):
+    out = ['<div class="loop-cards">']
+    for num, text in steps:
+        body = strip_markdown(text).strip()
+        title = str(num)
+        desc = ""
+        m = re.match(r"^\d+\.\s*(.*?)\s*(?:—|-)\s*(.*)$", body)
+        if m:
+            title = m.group(1).strip()
+            desc = m.group(2).strip()
+        else:
+            m2 = re.match(r"^\d+\.\s*(.*)$", body)
+            if m2:
+                title = m2.group(1).strip()
+        out.append('<div class="loop-card">')
+        out.append('<h3 class="loop-card-title">{}</h3>'.format(esc(title)))
+        if desc:
+            out.append('<p class="loop-card-desc">{}</p>'.format(esc(desc)))
+        out.append("</div>")
+    out.append("</div>")
     return "\n".join(out)
+
+
+def loop_svg():
+    """Inline SVG loop diagram: ideas -> ... -> feedback. Deterministic, offline."""
+    stages = [
+        "ideas", "triage", "spec", "human review", "implement",
+        "review", "verify", "ship", "monitor", "feedback",
+    ]
+    node_w = 96
+    node_h = 38
+    per_row = 5
+    gap = 26
+    arrow = 12
+    x0 = 6
+    y1 = 8
+    y2 = 68
+    parts = ['<svg class="loop-diagram" viewBox="0 0 {} {}" '
+             'role="img" '
+             'aria-label="Factory loop diagram">'.format(
+                 x0 * 2 + per_row * node_w + (per_row - 1) * (gap + arrow),
+                 y2 + node_h + 8,
+             )]
+    positions = []
+    for i, stage in enumerate(stages):
+        row = i // per_row
+        col = i % per_row
+        x = x0 + col * (node_w + gap + arrow)
+        y = y1 if row == 0 else y2
+        positions.append((x, y))
+        parts.append(
+            '<rect x="{}" y="{}" width="{}" height="{}" rx="6" '
+            'fill="#eef0f4" stroke="#1f2430" stroke-width="1.5"/>'.format(
+                x, y, node_w, node_h
+            )
+        )
+        parts.append(
+            '<text x="{}" y="{}" text-anchor="middle" font-size="12" '
+            'fill="#1f2430">{}</text>'.format(
+                x + node_w / 2, y + node_h / 2 + 4, esc(stage)
+            )
+        )
+    for i in range(len(stages) - 1):
+        if i % per_row == per_row - 1:
+            continue
+        x1, y1p = positions[i]
+        x2, _y2p = positions[i + 1]
+        ax = x1 + node_w + 3
+        ay = y1p + node_h / 2
+        bx = x2 - 3
+        parts.append(
+            '<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
+            'stroke-width="2" marker-end="url(#arrow)"/>'.format(ax, ay, bx - arrow, ay)
+        )
+    last = positions[per_row - 1]
+    first_next = positions[per_row]
+    parts.append(
+        '<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
+        'stroke-width="2" marker-end="url(#arrow)"/>'.format(
+            last[0] + node_w / 2, last[1] + node_h,
+            first_next[0] + node_w / 2, first_next[1],
+        )
+    )
+    defs = (
+        '<defs><marker id="arrow" markerWidth="10" markerHeight="10" '
+        'refX="9" refY="3" orient="auto" markerUnits="strokeWidth">'
+        '<path d="M0,0 L0,6 L9,3 z" fill="#1f2430"/></marker></defs>'
+    )
+    return "\n".join([defs] + parts + ["</svg>"])
+
+
+def newcomer_pitch():
+    return (
+        '<div class="pitch">'
+        "<p>Work enters as a GitHub issue, gets triaged into a written spec, and a "
+        "low-cost <code>/oc</code> bot build turns it into a pull request for a human "
+        "to review and ship. Every run tracks its own cost so you always know what "
+        "each change costs.</p>"
+        "</div>"
+    )
+
+
+def human_decides_box():
+    return (
+        '<div class="human-decides">'
+        "<h3>What a human decides</h3>"
+        "<ul>"
+        "<li>Spec approval before hard (standard or complex) work runs.</li>"
+        "<li>Merge approval for normal- and high-risk changes.</li>"
+        "<li>The budget each run is allowed to spend.</li>"
+        "</ul>"
+        "</div>"
+    )
+
+
+def depth_links():
+    return (
+        '<div class="depth-links">'
+        "<h3>For depth</h3>"
+        "<ul>"
+        '<li><a href=".factory/FACTORY.md">.factory/FACTORY.md</a> — the full factory playbook.</li>'
+        '<li><a href="ADOPTING.md">ADOPTING.md</a> — how to adopt and use this factory.</li>'
+        '<li><a href="docs/SETUP.md">docs/SETUP.md</a> — set up a new repo.</li>'
+        "</ul>"
+        "</div>"
+    )
 
 
 def when_text(when):
@@ -153,17 +280,30 @@ def when_text(when):
 def architecture_html(repo_root, models_data, factory_md):
     parts = []
 
-    # Numbered loop steps.
-    parts.append("<h2>Factory loop</h2>")
+    # Newcomer pitch.
+    parts.append(newcomer_pitch())
+
+    # Inline SVG loop diagram.
+    parts.append("<h2>The loop</h2>")
+    parts.append(loop_svg())
+
+    # Loop step cards.
+    parts.append("<h2>Loop steps</h2>")
     loop = section_from_markdown(factory_md, "Loop")
     if loop is None:
         parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Loop)")))
     else:
         steps = numbered_steps(loop)
         if steps:
-            parts.append(render_loop_steps(steps))
+            parts.append(render_loop_cards(steps))
         else:
             parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Loop)")))
+
+    # What a human decides.
+    parts.append(human_decides_box())
+
+    # Depth links.
+    parts.append(depth_links())
 
     # Roles table.
     parts.append("<h2>Roles</h2>")

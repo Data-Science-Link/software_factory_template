@@ -2,9 +2,10 @@
 
 A small static four-tab website generated from the factory's own source files:
 
-- **Architecture** (`index.html`) — the factory loop, roles, merge authority,
-  models and prices, routing rules and guard checks, read from `.factory/FACTORY.md`
-  and `.factory/models.yaml`.
+- **Architecture** (`index.html`) — a newcomer pitch, an inline SVG loop diagram,
+  one card per loop step, a "What a human decides" box and depth links to the docs,
+  followed by the roles, merge authority, models and prices, routing rules and guard
+  checks tables, read from `.factory/FACTORY.md` and `.factory/models.yaml`.
 - **Financials** (`financials.html`) — a CFO-style view with headline cost cards, budget vs spend charts,
   per-issue economics, model/work-type breakdown, prediction accuracy, and data freshness.
   Reads from `site-data/marts/*.json` (from issue #170) only, offline, with no JS and no
