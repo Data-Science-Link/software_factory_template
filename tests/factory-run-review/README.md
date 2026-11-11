@@ -93,4 +93,36 @@ unrelated builds stay excluded.
 with no artifact or `#31` record carrying token data. `--live-dir tokenless`
 must still select the run (its title matches `#136`), keep its `tokens` JSON
 `null`, and render them as "unavailable" in the markdown rather than fabricating
-a value.
+a value. It has no tool data at all, so `tool_counts` stays `{}` and
+`seconds_per_tool_turn` / `longest_gap_seconds` stay JSON `null`; the rendered
+line reads `seconds/tool turn: unavailable, longest gap: unavailable` with no
+stray `s` suffix (never `unavailables`).
+
+## Real-log/session fixture (`reallog/live/`)
+
+`reallog/live/` is built from a real, redacted OpenCode run (the post-#165
+review run `42951547485`) and drives the live-path parser offline. Its contents
+contain no keys, tokens, env values or private paths.
+
+- `pr-head.txt` — `oc/issue-166-42951547485`.
+- `run-list.json` — the build run `42951547485` (`opencode-spike`, headBranch
+  `main`) plus a spec run `42951547486` for `#166` (`opencode-spec`,
+  headBranch `main`, title `OpenCode: spec run for #166`).
+- `artifacts/42951547485/usage/session-1.json` — a structured session export
+  (`info.messages[].parts[]` with `type: "tool"`) the run meter writes, with 34
+  read / 10 edit / 9 write / 4 bash / 3 glob / 3 grep tool parts. Each part has
+  an increasing `state.time.start` so per-turn timing is non-null.
+- `artifacts/42951547485/log.txt` — the real OpenCode log line format (→ Read,
+  ✱ Glob, ✗ Bash ... failed, with ANSI codes) including the real
+  permission-denial text (`The user has specified a rule which prevents you from
+  using this specific tool call`) and its preceding `✗ Bash: ls -la ... failed`
+  line, so the denied `ls` appears in `blocked_calls`.
+- `artifacts/42951547486/log.txt` — a real-format log line set (→ Read, ✱ Glob,
+  ✗ Bash ... failed, with ANSI codes) with no `usage/session-*.json`, proving
+  `tool_counts` still populate via the log fallback when no session JSON is
+  present.
+
+`--live-dir reallog/live` must report the session JSON's per-tool counts and
+non-null `seconds_per_tool_turn` / `longest_gap_seconds` for run `42951547485`,
+put the denied `ls` in its `blocked_calls`, and populate the spec run's
+`tool_counts` from the log fallback.

@@ -135,12 +135,66 @@ else
   tl_ok=1
   grep -q '"run_id": 42295555555' "$tmpdir/out-tokenless.json" || tl_ok=0
   grep -q '"in": null' "$tmpdir/out-tokenless.json" || tl_ok=0
-  grep -q 'unavailable' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q '"longest_gap_seconds": null' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q 'seconds/tool turn: unavailable, longest gap: unavailable' "$tmpdir/out-tokenless.json" || tl_ok=0
+  grep -q 'unavailables' "$tmpdir/out-tokenless.json" && tl_ok=0
   grep -q '"in": 40000' "$tmpdir/out-tokenless.json" && tl_ok=0
+  grep -q '"tool_counts": {}' "$tmpdir/out-tokenless.json" || tl_ok=0
   if [ "$tl_ok" -eq 1 ]; then
-    note "token-less broken case (selected, tokens null, rendered unavailable)"
+    note "token-less broken case (no tool data, tokens/gap null, rendered unavailable, no stray suffix)"
   else
     fail "token-less broken case (fabricated or not reported unavailable)"
+  fi
+fi
+
+# Real-log/session fixture: a live-style run (42951547485) whose artifact
+# carries usage/session-1.json with structured tool parts reports non-empty
+# tool_counts matching the session JSON's per-tool counts, non-null per-turn
+# timing where the part timestamps support it, and the real permission-denied
+# `ls` from its log.txt in blocked_calls. A second run (42951547486) with only a
+# real-format log.txt (→ Read / ✱ Glob / ✗ Bash ... failed, with ANSI codes) and
+# no session JSON still populates tool_counts via the log fallback.
+reallog_dir="$FIX_DIR/reallog/live"
+set +e
+"${REVIEW[@]}" --live-dir "$reallog_dir" > "$tmpdir/out-reallog.json" 2>"$tmpdir/err-reallog.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "real-log/session parser (script exited non-zero)"
+else
+  # Parse the JSON with python3 and assert exact per-run values, so a count like
+  # "edit": 1 can never accidentally match "edit": 10 (grep substring matching).
+  if python3 - "$tmpdir/out-reallog.json" <<'PY'
+import json, sys
+# stdout is the JSON document followed by the rendered markdown review, so parse
+# only the first JSON document rather than the whole stream.
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
+runs = {r["run_id"]: r for r in data["runs"]}
+# Session-JSON run: counts match the session JSON, per-turn timing non-null,
+# and the real permission-denied ls is recorded in blocked_calls.
+s = runs[42951547485]
+assert s["tool_counts"] == {
+    "read": 34, "edit": 10, "write": 9, "bash": 4, "glob": 3, "grep": 3
+}, s["tool_counts"]
+assert s["seconds_per_tool_turn"] == 2.0, s["seconds_per_tool_turn"]
+assert s["longest_gap_seconds"] == 2.0, s["longest_gap_seconds"]
+assert any(
+    "ls -la tests/factory-run-review/reallog/live" in c for c in s["blocked_calls"]
+), s["blocked_calls"]
+# Log-fallback run (no session JSON): counts populated from real log lines, and
+# with no usable timestamps its per-turn timing stays JSON null (not fabricated).
+f = runs[42951547486]
+assert f["tool_counts"] == {
+    "read": 2, "edit": 1, "write": 1, "bash": 2, "glob": 2, "grep": 1
+}, f["tool_counts"]
+assert f["seconds_per_tool_turn"] is None, f["seconds_per_tool_turn"]
+assert f["longest_gap_seconds"] is None, f["longest_gap_seconds"]
+PY
+  then
+    note "real-log/session parser (session tool counts + timing, denied ls, log fallback)"
+  else
+    fail "real-log/session parser (tool counts/timing/blocked calls not populated)"
   fi
 fi
 

@@ -1,0 +1,1350 @@
+{
+  "info": {
+    "id": "ses_reallog_42951547485",
+    "slug": "reallog-build",
+    "projectID": "global",
+    "directory": "[redacted:session-directory]",
+    "path": "",
+    "title": "[redacted:session-title]",
+    "agent": "build",
+    "model": {
+      "id": "DeepSeek-V4-Flash-0731",
+      "providerID": "deepinfra",
+      "variant": "default"
+    },
+    "version": "1.19.5",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0.033,
+    "tokens": {
+      "input": 15000,
+      "output": 3000,
+      "reasoning": 0,
+      "cache": {
+        "read": 25000,
+        "write": 0
+      }
+    },
+    "time": {
+      "created": 1769059000000,
+      "updated": 1769060140000
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1769059000100
+        },
+        "agent": "build",
+        "id": "msg_reallog_1",
+        "sessionID": "ses_reallog_42951547485"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "[redacted:text]",
+          "id": "prt_reallog_1",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_1"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_reallog_1",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "time": {
+          "created": 1769059000200,
+          "completed": 1769060140000
+        },
+        "finish": "stop",
+        "id": "msg_reallog_2",
+        "sessionID": "ses_reallog_42951547485"
+      },
+      "parts": [
+        {
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-start",
+          "id": "prt_reallog_2",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_1",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059001000,
+              "end": 1769059001500
+            }
+          },
+          "id": "prt_reallog_3",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_2",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059003000,
+              "end": 1769059003500
+            }
+          },
+          "id": "prt_reallog_4",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_3",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059005000,
+              "end": 1769059005500
+            }
+          },
+          "id": "prt_reallog_5",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_4",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-usage.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-usage.py",
+            "time": {
+              "start": 1769059007000,
+              "end": 1769059007500
+            }
+          },
+          "id": "prt_reallog_6",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_5",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/opencode-run-meter.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/opencode-run-meter.sh",
+            "time": {
+              "start": 1769059009000,
+              "end": 1769059009500
+            }
+          },
+          "id": "prt_reallog_7",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_6",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": ".factory/FACTORY.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read .factory/FACTORY.md",
+            "time": {
+              "start": 1769059011000,
+              "end": 1769059011500
+            }
+          },
+          "id": "prt_reallog_8",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_7",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": ".factory/DOCS.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read .factory/DOCS.md",
+            "time": {
+              "start": 1769059013000,
+              "end": 1769059013500
+            }
+          },
+          "id": "prt_reallog_9",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_8",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059015000,
+              "end": 1769059015500
+            }
+          },
+          "id": "prt_reallog_10",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_9",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/live/artifacts/42291111111/opencode-export.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read live export fixture",
+            "time": {
+              "start": 1769059017000,
+              "end": 1769059017500
+            }
+          },
+          "id": "prt_reallog_11",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_10",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059019000,
+              "end": 1769059019500
+            }
+          },
+          "id": "prt_reallog_12",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_11",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/reallog/live/artifacts/42951547485/usage/session-1.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read session-1.json",
+            "time": {
+              "start": 1769059021000,
+              "end": 1769059021500
+            }
+          },
+          "id": "prt_reallog_13",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_12",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/reallog/live/artifacts/42951547485/log.txt"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read log.txt",
+            "time": {
+              "start": 1769059023000,
+              "end": 1769059023500
+            }
+          },
+          "id": "prt_reallog_14",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_13",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059025000,
+              "end": 1769059025500
+            }
+          },
+          "id": "prt_reallog_15",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_14",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059027000,
+              "end": 1769059027500
+            }
+          },
+          "id": "prt_reallog_16",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_15",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059029000,
+              "end": 1769059029500
+            }
+          },
+          "id": "prt_reallog_17",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_16",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059031000,
+              "end": 1769059031500
+            }
+          },
+          "id": "prt_reallog_18",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_17",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059033000,
+              "end": 1769059033500
+            }
+          },
+          "id": "prt_reallog_19",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_18",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/expected-42282682618.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read expected-42282682618.json",
+            "time": {
+              "start": 1769059035000,
+              "end": 1769059035500
+            }
+          },
+          "id": "prt_reallog_20",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_19",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/expected-42290238204.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read expected-42290238204.json",
+            "time": {
+              "start": 1769059037000,
+              "end": 1769059037500
+            }
+          },
+          "id": "prt_reallog_21",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_20",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/expected-42297659590.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read expected-42297659590.json",
+            "time": {
+              "start": 1769059039000,
+              "end": 1769059039500
+            }
+          },
+          "id": "prt_reallog_22",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_21",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/run-42282682618.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read run-42282682618.json",
+            "time": {
+              "start": 1769059041000,
+              "end": 1769059041500
+            }
+          },
+          "id": "prt_reallog_23",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_22",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/run-42290238204.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read run-42290238204.json",
+            "time": {
+              "start": 1769059043000,
+              "end": 1769059043500
+            }
+          },
+          "id": "prt_reallog_24",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_23",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/run-42297659590.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read run-42297659590.json",
+            "time": {
+              "start": 1769059045000,
+              "end": 1769059045500
+            }
+          },
+          "id": "prt_reallog_25",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_24",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-usage.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-usage.py",
+            "time": {
+              "start": 1769059047000,
+              "end": 1769059047500
+            }
+          },
+          "id": "prt_reallog_26",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_25",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059049000,
+              "end": 1769059049500
+            }
+          },
+          "id": "prt_reallog_27",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_26",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059051000,
+              "end": 1769059051500
+            }
+          },
+          "id": "prt_reallog_28",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_27",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059053000,
+              "end": 1769059053500
+            }
+          },
+          "id": "prt_reallog_29",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_28",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059055000,
+              "end": 1769059055500
+            }
+          },
+          "id": "prt_reallog_30",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_29",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059057000,
+              "end": 1769059057500
+            }
+          },
+          "id": "prt_reallog_31",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_30",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059059000,
+              "end": 1769059059500
+            }
+          },
+          "id": "prt_reallog_32",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_31",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059061000,
+              "end": 1769059061500
+            }
+          },
+          "id": "prt_reallog_33",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_32",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059063000,
+              "end": 1769059063500
+            }
+          },
+          "id": "prt_reallog_34",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_33",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059065000,
+              "end": 1769059065500
+            }
+          },
+          "id": "prt_reallog_35",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_34",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059067000,
+              "end": 1769059067500
+            }
+          },
+          "id": "prt_reallog_36",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_35",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059069000,
+              "end": 1769059069500
+            }
+          },
+          "id": "prt_reallog_37",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_36",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059071000,
+              "end": 1769059071500
+            }
+          },
+          "id": "prt_reallog_38",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_37",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059073000,
+              "end": 1769059073500
+            }
+          },
+          "id": "prt_reallog_39",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_38",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059075000,
+              "end": 1769059075500
+            }
+          },
+          "id": "prt_reallog_40",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_39",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059077000,
+              "end": 1769059077500
+            }
+          },
+          "id": "prt_reallog_41",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_40",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/reallog/live/artifacts/42951547485/usage/session-1.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write session-1.json",
+            "time": {
+              "start": 1769059079000,
+              "end": 1769059079500
+            }
+          },
+          "id": "prt_reallog_42",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_41",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/reallog/live/artifacts/42951547485/log.txt"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write log.txt",
+            "time": {
+              "start": 1769059081000,
+              "end": 1769059081500
+            }
+          },
+          "id": "prt_reallog_43",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_42",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/reallog/live/run-list.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write run-list.json",
+            "time": {
+              "start": 1769059083000,
+              "end": 1769059083500
+            }
+          },
+          "id": "prt_reallog_44",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_43",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/reallog/live/pr-head.txt"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write pr-head.txt",
+            "time": {
+              "start": 1769059085000,
+              "end": 1769059085500
+            }
+          },
+          "id": "prt_reallog_45",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_44",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/reallog/live/artifacts/42951547486/log.txt"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write log.txt",
+            "time": {
+              "start": 1769059087000,
+              "end": 1769059087500
+            }
+          },
+          "id": "prt_reallog_46",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_45",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059089000,
+              "end": 1769059089500
+            }
+          },
+          "id": "prt_reallog_47",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_46",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059091000,
+              "end": 1769059091500
+            }
+          },
+          "id": "prt_reallog_48",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_47",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059093000,
+              "end": 1769059093500
+            }
+          },
+          "id": "prt_reallog_49",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_reallog_48",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git status"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "bash git status",
+            "time": {
+              "start": 1769059095000,
+              "end": 1769059095500
+            }
+          },
+          "id": "prt_reallog_50",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_reallog_49",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git diff"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "bash git diff",
+            "time": {
+              "start": 1769059097000,
+              "end": 1769059097500
+            }
+          },
+          "id": "prt_reallog_51",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_reallog_50",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git add"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "bash git add",
+            "time": {
+              "start": 1769059099000,
+              "end": 1769059099500
+            }
+          },
+          "id": "prt_reallog_52",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_reallog_51",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "git checkout -b"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "bash git checkout -b",
+            "time": {
+              "start": 1769059101000,
+              "end": 1769059101500
+            }
+          },
+          "id": "prt_reallog_53",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "glob",
+          "callID": "call_reallog_52",
+          "state": {
+            "status": "completed",
+            "input": {
+              "glob": "scripts/*.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "glob scripts/*.py",
+            "time": {
+              "start": 1769059103000,
+              "end": 1769059103500
+            }
+          },
+          "id": "prt_reallog_54",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "glob",
+          "callID": "call_reallog_53",
+          "state": {
+            "status": "completed",
+            "input": {
+              "glob": "tests/factory-run-review/**/*.json"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "glob tests/factory-run-review/**/*.json",
+            "time": {
+              "start": 1769059105000,
+              "end": 1769059105500
+            }
+          },
+          "id": "prt_reallog_55",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "glob",
+          "callID": "call_reallog_54",
+          "state": {
+            "status": "completed",
+            "input": {
+              "glob": "scripts/*.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "glob scripts/*.sh",
+            "time": {
+              "start": 1769059107000,
+              "end": 1769059107500
+            }
+          },
+          "id": "prt_reallog_56",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "grep",
+          "callID": "call_reallog_55",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "tool_events"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "grep tool_events",
+            "time": {
+              "start": 1769059109000,
+              "end": 1769059109500
+            }
+          },
+          "id": "prt_reallog_57",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "grep",
+          "callID": "call_reallog_56",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "blocked_calls"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "grep blocked_calls",
+            "time": {
+              "start": 1769059111000,
+              "end": 1769059111500
+            }
+          },
+          "id": "prt_reallog_58",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "grep",
+          "callID": "call_reallog_57",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "PERMISSION_DENIED_RE"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "grep PERMISSION_DENIED_RE",
+            "time": {
+              "start": 1769059113000,
+              "end": 1769059113500
+            }
+          },
+          "id": "prt_reallog_59",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_58",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059115000,
+              "end": 1769059115500
+            }
+          },
+          "id": "prt_reallog_60",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_59",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059117000,
+              "end": 1769059117500
+            }
+          },
+          "id": "prt_reallog_61",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "call_reallog_60",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "read tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059119000,
+              "end": 1769059119500
+            }
+          },
+          "id": "prt_reallog_62",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_61",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/factory-run-review.py"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/factory-run-review.py",
+            "time": {
+              "start": 1769059121000,
+              "end": 1769059121500
+            }
+          },
+          "id": "prt_reallog_63",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "call_reallog_62",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "scripts/test-factory-run-review.sh"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "edit scripts/test-factory-run-review.sh",
+            "time": {
+              "start": 1769059123000,
+              "end": 1769059123500
+            }
+          },
+          "id": "prt_reallog_64",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "call_reallog_63",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "tests/factory-run-review/README.md"
+            },
+            "output": "[redacted:tool-output]",
+            "title": "write tests/factory-run-review/README.md",
+            "time": {
+              "start": 1769059125000,
+              "end": 1769059125500
+            }
+          },
+          "id": "prt_reallog_65",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        },
+        {
+          "reason": "stop",
+          "snapshot": "[redacted:snapshot]",
+          "type": "step-finish",
+          "id": "prt_reallog_66",
+          "sessionID": "ses_reallog_42951547485",
+          "messageID": "msg_reallog_2"
+        }
+      ]
+    }
+  ]
+}
