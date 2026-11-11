@@ -9,7 +9,10 @@ A small static four-tab website generated from the factory's own source files:
   per-issue economics, model/work-type breakdown, prediction accuracy, and data freshness.
   Reads from `site-data/marts/*.json` (from issue #170) only, offline, with no JS and no
   chart library. Every number is asserted against the fixture values.
-- **Backlog** (`backlog.html`) — not available yet; lands in issue #172.
+- **Backlog** (`backlog.html`) — summary cards, a priority × risk count table, an
+  epic list with done/total, and a sorted issue table linking to each issue, always
+  showing titles (issue #172). The data comes from `site-data/backlog.json`,
+  produced by `scripts/factory-backlog.py`.
 - **dbt** (`dbt.html`) — not available yet; lands in issue #173.
 
 The renderer is `scripts/factory-site.py`. It uses only the Python standard library
@@ -27,7 +30,19 @@ Writes `site/index.html`, `site/financials.html`, `site/backlog.html` and
 `site/dbt.html` into the gitignored `site/` directory, entirely offline, from the
 committed fixtures under `tests/site/fixtures/` and `tests/site-data/sample-marts/`.
 It never invokes `scripts/factory-collect-runs.py` and makes no network calls. The
-full (non-`--sample`) build also runs the collect and export stages in order.
+full (non-`--sample`) build also runs the collect, export and live backlog stages in
+order (the live backlog stage calls `gh issue list` and is only run by the deploy
+job, never in the offline sample build).
+
+## Backlog data
+
+`scripts/factory-backlog.py --from-json tests/site/fixtures/issues.json --out site-data/backlog.json`
+builds the Backlog data offline from the committed fixture (a GitHub API-shaped
+issues list). Live mode runs `gh issue list --state open --limit 500 --json
+number,title,labels,createdAt,updatedAt,url,subIssuesSummary`; pull requests are
+excluded and labels are normalized into `priority`, `risk` and `status`, with
+`title` always included. Epic issues carry `done`/`total` from
+`subIssuesSummary` when present.
 
 For a byte-identical second build, pin the build time:
 

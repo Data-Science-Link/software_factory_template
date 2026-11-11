@@ -1,0 +1,57 @@
+[
+  {
+    "number": 1,
+    "title": "Epic: build the factory site 🏭",
+    "labels": [
+      {"name": "epic"},
+      {"name": "priority: high"},
+      {"name": "risk: high"}
+    ],
+    "createdAt": "2026-11-01T10:00:00Z",
+    "updatedAt": "2026-11-10T09:00:00Z",
+    "url": "https://github.com/example/factory/issues/1",
+    "subIssuesSummary": {"done": 2, "total": 5}
+  },
+  {
+    "number": 2,
+    "title": "Fix the deploy script",
+    "labels": [
+      {"name": "priority: low"},
+      {"name": "priority: high"},
+      {"name": "risk: medium"},
+      {"name": "owner-action"}
+    ],
+    "createdAt": "2026-11-02T11:00:00Z",
+    "updatedAt": "2026-11-11T08:30:00Z",
+    "url": "https://github.com/example/factory/issues/2"
+  },
+  {
+    "number": 3,
+    "title": "A task with no labels",
+    "labels": [],
+    "createdAt": "2026-11-03T12:00:00Z",
+    "updatedAt": "2026-11-09T12:00:00Z",
+    "url": "https://github.com/example/factory/issues/3"
+  },
+  {
+    "number": 4,
+    "title": "chore: add a workflow (pull request)",
+    "labels": [{"name": "priority: low"}],
+    "createdAt": "2026-11-04T13:00:00Z",
+    "updatedAt": "2026-11-08T13:00:00Z",
+    "url": "https://github.com/example/factory/pull/4",
+    "pull_request": {"url": "https://api.github.com/repos/example/factory/pulls/4"}
+  },
+  {
+    "number": 5,
+    "title": "A title with <script>alert(1)</script> & stuff 😀",
+    "labels": [
+      {"name": "priority: low"},
+      {"name": "risk: low"},
+      {"name": "factory:selected"}
+    ],
+    "createdAt": "2026-11-05T14:00:00Z",
+    "updatedAt": "2026-11-11T10:00:00Z",
+    "url": "https://github.com/example/factory/issues/5"
+  }
+]
