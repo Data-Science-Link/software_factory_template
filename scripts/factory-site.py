@@ -408,6 +408,10 @@ def financials_html(data_dir):
     if not marts_dir.is_dir():
         return placeholder_html("Financials")
     
+    # Check if any mart files exist
+    if not any(marts_dir.glob("*.json")):
+        return placeholder_html("Financials")
+    
     # Load budget data
     budget_path = Path(".") / "factory" / "budget.yml"
     try:
@@ -448,6 +452,10 @@ def financials_html(data_dir):
                     marts[mart_file.stem] = []
         except (OSError, ValueError):
             marts[mart_file.stem] = []
+    
+    # If no marts were loaded, show placeholder
+    if not marts:
+        return placeholder_html("Financials")
     
     rpt_run_rate = marts.get("rpt_run_rate", [])
     agg_spend_weekly = marts.get("agg_spend_weekly", [])

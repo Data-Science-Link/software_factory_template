@@ -43,7 +43,7 @@ def svg_chart_weekly(weekly_data, weekly_budget_usd):
     
     # Generate SVG
     svg_parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {chart_width} {chart_height}" '
+        f'<svg viewBox="0 0 {chart_width} {chart_height}" '
         f'width="{chart_width}" height="{chart_height}">',
         '<style>',
         '.bar { fill: #4CAF50; }',
@@ -133,7 +133,7 @@ def svg_chart_monthly(monthly_data, monthly_budget_usd):
     
     # Generate SVG
     svg_parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {chart_width} {chart_height}" '
+        f'<svg viewBox="0 0 {chart_width} {chart_height}" '
         f'width="{chart_width}" height="{chart_height}">',
         '<style>',
         '.bar { fill: #4CAF50; }',
