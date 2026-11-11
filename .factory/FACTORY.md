@@ -8,6 +8,8 @@ Work enters as a GitHub issue. Michael **selects** what gets worked (`factory:se
 
 **Words:** **Complexity** is `simple | standard | complex` (picks the model). **Risk class** is `trivial | normal | high` (sets the merge gate). When Michael says "medium or high complexity" that means **standard or complex**; "medium or high risk" means **normal or high**.
 
+For a short "how do I use this?" path (person or agent) and the new-repo setup checklist, see [`ADOPTING.md`](../ADOPTING.md) and [`docs/SETUP.md`](../docs/SETUP.md). Pinning a product repo to a release tag is planned (#156).
+
 ## Triggers
 
 | Trigger | What happens |

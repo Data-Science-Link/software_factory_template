@@ -23,6 +23,10 @@ It draws on two talks:
 
 Workers (the cloud agents the manager launches) build, test, and review on a branch; they don't merge.
 
+## Using or adopting the factory
+
+For a person or an agent already working in an installed factory, start with [ADOPTING.md](ADOPTING.md). To add the factory to a new repo, follow the [setup checklist](docs/SETUP.md). Version tags and the release process are in [docs/RELEASING.md](docs/RELEASING.md) and [CHANGELOG.md](CHANGELOG.md). Pinning a product repo to a release tag is planned (#156); until then, copy the files as in the checklist below.
+
 ## Quickstart
 
 Get started with this template in under a minute:
@@ -37,6 +41,8 @@ Get started with this template in under a minute:
 For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) section below.
 
 ## How to adopt it in a repo
+
+The full checklist, including the DeepInfra secret, labels, and checks, is in [docs/SETUP.md](docs/SETUP.md). The steps below are the file-copy path until pinning a release tag is available (#156).
 
 1. Copy the `.factory/` folder into the repo root as-is.
 2. Fill in `.factory/DOCS.md` with your repo's real paths (tests, deploy, architecture), the names of the secrets agents can use, your key view, and your headline health numbers.
@@ -77,6 +83,6 @@ Cloud agents use pinned Cursor models from the routing table in `MODEL_ROUTING.m
 
 1. A lesson from a live repo, or a new idea, becomes a PR here first.
 2. The owner reviews and approves it.
-3. Once merged, the change is copied into each project repo's `.factory/` folder.
+3. Once merged, the change is copied into each project repo's `.factory/` folder. **Planned (#156):** product repos will pin a release tag instead, and pick up a fix by merging a sync PR.
 
-`.factory/DECISIONS.md` in this repo is the method's history: why each rule exists and what prompted it. Project repos keep their own separate decision log.
+`.factory/DECISIONS.md` in this repo is the method's history: why each rule exists and what prompted it. Project repos keep their own separate decision log. See [docs/RELEASING.md](docs/RELEASING.md).
