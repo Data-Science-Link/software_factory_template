@@ -9,24 +9,24 @@ with params as (
 weeks as (
     select
         p.as_of_date,
-        generate_series(
+        unnest(generate_series(
             date_trunc('week', date_trunc('month', p.as_of_date)),
-            p.as_of_date,
+            cast(p.as_of_date as timestamp),
             interval '1' week
-        ) as week_start
+        )) as week_start
     from params p
 ),
 
 spend as (
     select
-        date_trunc('week', f.run_date) as week_start,
+        cast(date_trunc('week', f.run_date) as timestamp) as week_start,
         count(*) as runs,
         count(distinct f.issue) as issues,
         sum(f.actual_cost_usd) as spend_usd
     from {{ ref('fct_agent_runs') }} f
     cross join params p
     where f.run_date between date_trunc('month', p.as_of_date) and p.as_of_date
-    group by date_trunc('week', f.run_date)
+    group by cast(date_trunc('week', f.run_date) as timestamp)
 ),
 
 combined as (

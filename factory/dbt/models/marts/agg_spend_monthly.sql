@@ -9,17 +9,17 @@ with params as (
 months as (
     select
         p.as_of_date,
-        generate_series(
+        unnest(generate_series(
             date_trunc('month', p.as_of_date) - interval '2' month,
             date_trunc('month', p.as_of_date),
             interval '1' month
-        ) as month_start
+        )) as month_start
     from params p
 ),
 
 spend as (
     select
-        date_trunc('month', f.run_date) as month_start,
+        cast(date_trunc('month', f.run_date) as timestamp) as month_start,
         count(*) as runs,
         count(distinct f.issue) as issues,
         sum(f.actual_cost_usd) as spend_usd
@@ -27,7 +27,7 @@ spend as (
     cross join params p
     where f.run_date <= p.as_of_date
       and f.run_date >= date_trunc('month', p.as_of_date) - interval '2' month
-    group by date_trunc('month', f.run_date)
+    group by cast(date_trunc('month', f.run_date) as timestamp)
 ),
 
 combined as (
