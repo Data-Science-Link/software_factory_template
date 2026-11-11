@@ -644,24 +644,38 @@ def _denied_command(lines, idx):
     return strip_ansi(lines[idx]).strip()
 
 
+def _is_agent_tool_line(line):
+    """True when a log line is an agent tool-result line (`✗`/`→`/`✱`).
+
+    The real OpenCode denial text only counts when it appears on or right
+    around an agent tool-result line. The echoed `OC_INSTRUCTION:` env line and
+    the StepSecurity harden-runner config JSON (for example `denied_endpoints`)
+    are workflow noise, not tool output, so they never anchor a blocked call.
+    """
+    s = strip_role_prefix(strip_ansi(line)).strip()
+    return s.startswith(("✗", "→", "✱", "->", "*"))
+
+
 def detect_blocked_calls(log_text):
     """Collect guardrail command strings that were denied/blocked in the log.
 
-    The real permission-denial marker (`The user has specified a rule which
-    prevents you from using this specific tool call`) is the primary trigger;
-    the legacy denied/blocked/guardrail vocabulary stays as a fallback so older
-    fixtures still work. The denied command is captured from the surrounding log.
+    A blocked call counts only when the real OpenCode permission-denial marker
+    (`The user has specified a rule which prevents you from using this specific
+    tool call`) appears on an agent tool-result line or immediately around one.
+    The bare `denied` / `blocked` / `guardrail` vocabulary no longer fires on
+    the whole workflow log, so an echoed `OC_INSTRUCTION:` env line or the
+    StepSecurity harden-runner `denied_endpoints` config line cannot produce a
+    false positive. The denied command is captured from the surrounding log.
     """
     lines = (log_text or "").splitlines()
     blocked = []
     seen = set()
     for i, raw in enumerate(lines):
-        line = strip_ansi(raw)
-        low = line.lower()
-        denied = bool(PERMISSION_DENIED_RE.search(low)) or any(
-            word in low for word in ("denied", "blocked", "guardrail")
-        )
-        if not denied:
+        low = strip_ansi(raw).lower()
+        if not PERMISSION_DENIED_RE.search(low):
+            continue
+        lo = max(0, i - 6)
+        if not any(_is_agent_tool_line(lines[j]) for j in range(lo, i + 1)):
             continue
         cmd = _denied_command(lines, i)
         if cmd and cmd not in seen:
