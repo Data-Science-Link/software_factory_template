@@ -1,0 +1,8 @@
+[
+  {
+    "issue_number": 174,
+    "predicted_cost_usd": 0.10,
+    "actual_cost_usd": 1.5,
+    "absolute_error": 1.4
+  }
+]

@@ -1,0 +1,8 @@
+[
+  {
+    "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "work_type": "build",
+    "runs": 10,
+    "spend_usd": 1.5
+  }
+]
