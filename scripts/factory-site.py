@@ -289,7 +289,23 @@ def financials_html(data_dir):
     for mart_file in marts_dir.glob("*.json"):
         try:
             with open(mart_file, encoding="utf-8") as fh:
-                marts[mart_file.stem] = json.load(fh)
+                data = json.load(fh)
+                # Ensure data is a list of dicts
+                if isinstance(data, list):
+                    # Validate that each item in the list is a dict
+                    validated_data = [item for item in data if isinstance(item, dict)]
+                    marts[mart_file.stem] = validated_data
+                elif isinstance(data, dict) and 'rows' in data:
+                    # Handle exported format { "model": "...", "rows": [...] }
+                    rows = data['rows']
+                    if isinstance(rows, list):
+                        # Validate that each item in the rows list is a dict
+                        validated_rows = [item for item in rows if isinstance(item, dict)]
+                        marts[mart_file.stem] = validated_rows
+                    else:
+                        marts[mart_file.stem] = []
+                else:
+                    marts[mart_file.stem] = []
         except (OSError, ValueError):
             marts[mart_file.stem] = []
     
@@ -303,22 +319,40 @@ def financials_html(data_dir):
     fct_agent_runs = marts.get("fct_agent_runs", [])
     
     # Check for negative values and fail loudly
+    # Ensure all items are dictionaries before accessing keys
     for item in rpt_run_rate:
+        if not isinstance(item, dict):
+            raise ValueError(f"Expected dict in rpt_run_rate, got {type(item)}: {item}")
         for key in item:
             if isinstance(item[key], (int, float)) and item[key] < 0:
                 raise ValueError(f"Negative value found in rpt_run_rate: {key} = {item[key]}")
     
     for item in agg_spend_weekly:
+        if not isinstance(item, dict):
+            raise ValueError(f"Expected dict in agg_spend_weekly, got {type(item)}: {item}")
         if item.get("spend_usd", 0) < 0:
             raise ValueError(f"Negative spend found in agg_spend_weekly: {item}")
     
     for item in agg_spend_monthly:
+        if not isinstance(item, dict):
+            raise ValueError(f"Expected dict in agg_spend_monthly, got {type(item)}: {item}")
         if item.get("spend_usd", 0) < 0:
             raise ValueError(f"Negative spend found in agg_spend_monthly: {item}")
     
     for item in agg_spend_by_issue:
+        if not isinstance(item, dict):
+            raise ValueError(f"Expected dict in agg_spend_by_issue, got {type(item)}: {item}")
         if item.get("spend_usd", 0) < 0:
             raise ValueError(f"Negative spend found in agg_spend_by_issue: {item}")
+    
+    # Also check other collections
+    for collection_name, collection in [("rpt_issue_target_compliance", rpt_issue_target_compliance), 
+                                        ("agg_spend_by_model", agg_spend_by_model), 
+                                        ("fct_forecast_vs_actual", fct_forecast_vs_actual), 
+                                        ("fct_agent_runs", fct_agent_runs)]:
+        for item in collection:
+            if not isinstance(item, dict):
+                raise ValueError(f"Expected dict in {collection_name}, got {type(item)}: {item}")
     
     # Generate content sections
     parts = []

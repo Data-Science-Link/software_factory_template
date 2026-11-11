@@ -14,8 +14,16 @@ def svg_chart_weekly(weekly_data, weekly_budget_usd):
     if not weekly_data:
         return '<p>No weekly data available.</p>', '<p>No weekly data available.</p>'
 
+    # Ensure all items are dictionaries
+    valid_data = [item for item in weekly_data if isinstance(item, dict)]
+    if not valid_data:
+        return '<p>No valid weekly data available.</p>', '<p>No valid weekly data available.</p>'
+
     # Sort by ISO week for consistent order
-    sorted_data = sorted(weekly_data, key=lambda x: (x["iso_year"], x["iso_week"]))
+    try:
+        sorted_data = sorted(valid_data, key=lambda x: (x["iso_year"], x["iso_week"]))
+    except KeyError as e:
+        return f'<p>Error: Missing key {e} in weekly data.</p>', '<p>Error processing weekly data.</p>'
     
     # Extract values
     weeks = [f"{item['iso_year']}-W{item['iso_week']:02d}" for item in sorted_data]
@@ -96,8 +104,16 @@ def svg_chart_monthly(monthly_data, monthly_budget_usd):
     if not monthly_data:
         return '<p>No monthly data available.</p>', '<p>No monthly data available.</p>'
 
+    # Ensure all items are dictionaries
+    valid_data = [item for item in monthly_data if isinstance(item, dict)]
+    if not valid_data:
+        return '<p>No valid monthly data available.</p>', '<p>No valid monthly data available.</p>'
+
     # Sort by month for consistent order
-    sorted_data = sorted(monthly_data, key=lambda x: x["month_start_utc"])
+    try:
+        sorted_data = sorted(valid_data, key=lambda x: x["month_start_utc"])
+    except KeyError as e:
+        return f'<p>Error: Missing key {e} in monthly data.</p>', '<p>Error processing monthly data.</p>'
     
     # Extract values
     months = [item["month_start_utc"][:7] for item in sorted_data]  # YYYY-MM
