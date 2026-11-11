@@ -1,4 +1,4 @@
-# spec-check-expect: change to an existing script under scripts/
+# spec-check-expect: change to a protected spend/security script
 <!-- factory-spec v1 -->
 ---
 spec_version: 1

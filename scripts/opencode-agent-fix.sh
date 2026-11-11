@@ -113,8 +113,9 @@ Do not run git push, git commit, gh, curl, wget, env, or printenv.
 
 ${path_rules}
 
-The fix patch is judged against the PR head: a file under scripts/ that already exists on this
-branch, including one the earlier run added, counts as an existing script.
+The fix patch is judged against the PR head. You may edit the content of an existing script
+unless it is on the protected spend/security list in the path policy. Deletes, renames and
+chmod of any existing script stay forbidden, including a script the earlier run added.
 
 ${spec_rule}
 
