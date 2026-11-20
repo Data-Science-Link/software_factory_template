@@ -119,10 +119,13 @@ def has_token_usage(record: dict[str, Any]) -> bool:
 
 
 def actual_cost_usd(record: dict[str, Any]) -> float | None:
-    if "actual_cost_usd" in record and record["actual_cost_usd"] is not None:
-        return float(record["actual_cost_usd"])
-    if "cost_usd" in record and record["cost_usd"] is not None:
-        return float(record["cost_usd"])
+    for key in ("actual_cost_usd", "cost_usd"):
+        if key not in record or record[key] is None:
+            continue
+        try:
+            return float(record[key])
+        except (TypeError, ValueError):
+            return None
     return None
 
 
@@ -164,9 +167,19 @@ def classify_run(
             "delta_usd": None,
         }
 
-    tokens_in = int(record["tokens_in"])
-    tokens_cached = int(record.get("tokens_cached") or 0)
-    tokens_out = int(record["tokens_out"])
+    try:
+        tokens_in = int(record["tokens_in"])
+        tokens_cached = int(record.get("tokens_cached") or 0)
+        tokens_out = int(record["tokens_out"])
+    except (TypeError, ValueError, KeyError):
+        return {
+            "run_id": run_id,
+            "status": "NO_TOKEN_USAGE",
+            "model": record.get("model"),
+            "actual_cost_usd": actual_cost_usd(record),
+            "expected_cost_usd": None,
+            "delta_usd": None,
+        }
     expected = cost_from_usage(
         tokens_in,
         tokens_cached,
@@ -193,6 +206,8 @@ def classify_run(
 def load_run_json(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        die(f"{path}: cannot read file: {exc}")
     except json.JSONDecodeError as exc:
         die(f"{path}: invalid JSON: {exc}")
     if not isinstance(data, dict):
