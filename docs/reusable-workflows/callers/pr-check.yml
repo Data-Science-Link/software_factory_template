@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   factory-pr-check:
-    uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-pr-check.yml@v0.1.0
+    uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-pr-check.yml@v0.1.0
     secrets: inherit
     with:
       factory_ref: v0.1.0
