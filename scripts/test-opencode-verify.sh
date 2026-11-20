@@ -303,6 +303,7 @@ else bad "publish: note section"; echo "$note_sec"; fi
 ev_sec="$(sed -n '/^## Evidence/,/^## Notes for reviewers/p' "$body")"
 if grep -q 'not by the model' <<<"$ev_sec" && grep -qx 'key=unset gh=unset' <<<"$ev_sec" && grep -q '^Run ID: 555' <<<"$ev_sec" \
   && [ "$(grep -c '^```' <<<"$ev_sec")" = 2 ] && grep -q 'exact copy of spec comment 102, checked by publish' "$body" \
+  && grep -qF '<!-- factory-verification:start -->' <<<"$ev_sec" && grep -qF '<!-- factory-verification:end -->' <<<"$ev_sec" \
   && grep -q 'Approve workflows to run' "$body"; then
   ok "publish: Evidence has run facts + fenced harness output; spec file checked; #74 note"
 else bad "publish: evidence section"; echo "$ev_sec"; fi
