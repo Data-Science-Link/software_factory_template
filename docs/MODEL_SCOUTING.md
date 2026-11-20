@@ -36,7 +36,7 @@ Optional flags: `--models <path>`, `--format markdown|json` (default `markdown`)
 | --- | --- | --- |
 | `0` | No meaningful price drift or new value candidates | **Stay silent** — do not open an issue. |
 | `2` | Proposal ready on stdout | Open **one** GitHub issue with the markdown body (title like `Proposed models.yaml update (YYYY-MM-DD)`). Reference the scouting epic in the body if your process uses one. Do not duplicate the same week. |
-| `1` | Catalog or `models.yaml` unreadable | Fix infrastructure or YAML; **no** proposal issue. |
+| `1` | Catalog or `models.yaml` unreadable (`ERROR:` on stderr) | Fix infrastructure or YAML; **no** proposal issue. |
 
 ## What “meaningful” means
 
@@ -60,7 +60,7 @@ Aligned with `model-scouting.md` and issue `#71`:
 bash scripts/test-factory-model-scout.sh
 ```
 
-Fixtures under `tests/model-scout/` (`catalog-no-change.json`, `catalog-price-drop.json`, `catalog-example.json`, etc.).
+Fixtures under `tests/model-scout/` (`catalog-no-change.json`, `catalog-price-drop.json`, `catalog-short-promo.json`, etc.). JSON proposals use `sort_keys=True` for stable diffs.
 
 ## See also
 

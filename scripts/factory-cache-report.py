@@ -13,19 +13,65 @@ from pathlib import Path
 def cache_hit_rate(tokens_in: int | None, tokens_cached: int | None) -> float | None:
     if tokens_in is None or tokens_cached is None:
         return None
-    if tokens_in <= 0:
+    if tokens_in <= 0 or tokens_cached < 0:
         return None
     return tokens_cached / tokens_in
 
 
+def token_count(value: object) -> int | None:
+    """Return a non-negative integer token count, or None if missing/invalid."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    else:
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+    if number < 0:
+        return None
+    return number
+
+
+_TOKEN_KEYS = ("tokens_in", "tokens_cached", "tokens_out", "tokens_reasoning")
+
+
+def _invalid_token_fields(data: dict) -> str | None:
+    for key in _TOKEN_KEYS:
+        if key not in data:
+            continue
+        value = data.get(key)
+        if value is None:
+            continue
+        if token_count(value) is None:
+            return f"invalid {key}={value!r}"
+    return None
+
+
 def load_run(path: Path) -> dict | None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"factory-cache-report: skip {path.name}: {exc}", file=sys.stderr)
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        sys.stderr.write(f"ERROR: skip {path.name}: cannot read file: {exc}\n")
+        return None
+    except UnicodeDecodeError as exc:
+        sys.stderr.write(f"ERROR: skip {path.name}: not valid UTF-8: {exc}\n")
+        return None
+    if not text.strip():
+        sys.stderr.write(f"ERROR: skip {path.name}: file is empty\n")
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(f"ERROR: skip {path.name}: not valid JSON: {exc}\n")
         return None
     if not isinstance(data, dict):
-        print(f"factory-cache-report: skip {path.name}: not an object", file=sys.stderr)
+        sys.stderr.write(f"ERROR: skip {path.name}: not a JSON object\n")
+        return None
+    bad = _invalid_token_fields(data)
+    if bad:
+        sys.stderr.write(f"ERROR: skip {path.name}: {bad}\n")
         return None
     return data
 
@@ -33,18 +79,9 @@ def load_run(path: Path) -> dict | None:
 def sum_tokens(runs: list[dict], key: str) -> int:
     total = 0
     for r in runs:
-        v = r.get(key)
-        if isinstance(v, bool):
-            continue
-        if isinstance(v, int):
-            total += v
-        elif v is None:
-            continue
-        else:
-            try:
-                total += int(v)
-            except (TypeError, ValueError):
-                pass
+        n = token_count(r.get(key))
+        if n is not None:
+            total += n
     return total
 
 
@@ -107,7 +144,7 @@ def main() -> int:
     )
     args = ap.parse_args()
     if not args.runs_dir.is_dir():
-        print(f"factory-cache-report: {args.runs_dir} is not a directory", file=sys.stderr)
+        sys.stderr.write(f"ERROR: {args.runs_dir} is not a directory\n")
         return 2
     return report(args.runs_dir)
 

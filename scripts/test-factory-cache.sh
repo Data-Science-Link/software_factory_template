@@ -92,6 +92,56 @@ PY
 )" 2>&1 || unit=fail
 if [ "$unit" = ok ]; then ok "cache_hit_rate edge cases"; else bad "cache_hit_rate edge cases: $unit"; fi
 
+# edge: missing runs-dir
+set +e
+missing_err="$("$py" scripts/factory-cache-report.py --runs-dir "$work/nope" 2>&1 >/dev/null)"
+missing_rc=$?
+set -e
+if [ "$missing_rc" -eq 2 ] && grep -q '^ERROR: .* is not a directory' <<<"$missing_err"; then
+  ok "cache report: missing runs-dir exits 2 with ERROR"
+else
+  bad "cache report: missing runs-dir"; printf '%s\n' "$missing_err"
+fi
+
+# edge: malformed + negative tokens skipped
+bad_dir="$work/bad-runs"
+mkdir -p "$bad_dir"
+printf 'not json' >"$bad_dir/broken.json"
+printf '\xff\xfe' >"$bad_dir/binary.json"
+printf '{"tokens_in": 100, "tokens_cached": -50, "model": "m1"}' >"$bad_dir/neg.json"
+printf '{"tokens_in": 100, "tokens_cached": 25, "model": "m2", "work_type": "build"}' >"$bad_dir/good.json"
+set +e
+bad_report="$("$py" scripts/factory-cache-report.py --runs-dir "$bad_dir" 2>"$work/bad.err")"
+bad_rc=$?
+set -e
+bad_err="$(cat "$work/bad.err")"
+if [ "$bad_rc" -eq 0 ] \
+   && grep -q '^ERROR: skip broken.json' <<<"$bad_err" \
+   && grep -q '^ERROR: skip' <<<"$bad_err" \
+   && grep -q 'Run records: 1 file(s)' <<<"$bad_report" \
+   && grep -q '^Overall' <<<"$bad_report" && grep -q '25.00%' <<<"$bad_report"; then
+  ok "cache report: skips bad files; negative tokens ignored"
+else
+  bad "cache report: bad file / negative token handling"
+  printf 'stderr:\n%s\nstdout:\n%s\n' "$bad_err" "$bad_report"
+fi
+
+unit2="$("$py" - <<'PY'
+import importlib.util
+from pathlib import Path
+spec = importlib.util.spec_from_file_location(
+    "factory_cache_report", Path("scripts/factory-cache-report.py")
+)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+assert mod.token_count(-5) is None
+assert mod.token_count("abc") is None
+assert mod.cache_hit_rate(100, -1) is None
+print("ok")
+PY
+)" 2>&1 || unit2=fail
+if [ "$unit2" = ok ]; then ok "token_count rejects negative and non-numeric"; else bad "token_count edge: $unit2"; fi
+
 echo
 echo "Results: $passed passed, $failed failed"
 [ "$failed" -eq 0 ]

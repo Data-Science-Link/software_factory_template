@@ -37,12 +37,58 @@ PRIORITY_ORDER = {"high": 2, "low": 1, "none": 0}
 _BODY_REF_RE = re.compile(r"(?:^|[\s(\[]|/issues/)#(\d+)\b", re.MULTILINE)
 
 
+def coerce_nonneg_int(value):
+    """Return a non-negative int, or None when the value cannot be coerced."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        if value < 0 or not value.is_integer():
+            return None
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            n = int(text, 10)
+        except ValueError:
+            return None
+        return n if n >= 0 else None
+    return None
+
+
+def coerce_issue_number(value):
+    """Return an issue number as int, or None when missing or not coercible."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return int(text, 10)
+        except ValueError:
+            return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def is_pull_request(item):
     return "is_pull_request" in item or "pull_request" in item
 
 
 def labels_of(item):
-    labels = item.get("labels") or []
+    labels = item.get("labels")
+    if not labels or not isinstance(labels, list):
+        return []
     names = []
     for label in labels:
         if isinstance(label, str):
@@ -91,13 +137,13 @@ def progress_from_summary(summary):
     """Return (done, total) from subIssuesSummary-shaped dict, or None if absent."""
     if not summary:
         return None
-    total = summary.get("total")
-    done = summary.get("done")
+    total = coerce_nonneg_int(summary.get("total"))
+    done = coerce_nonneg_int(summary.get("done"))
     if done is None:
-        done = summary.get("completed")
+        done = coerce_nonneg_int(summary.get("completed"))
     if total is None and done is None:
         return None
-    return int(done or 0), int(total or 0)
+    return done or 0, total or 0
 
 
 def summary_needs_fallback(summary, progress):
@@ -155,9 +201,9 @@ def build_issues_index(items):
     for item in items:
         if not isinstance(item, dict):
             continue
-        num = item.get("number")
+        num = coerce_issue_number(item.get("number"))
         if num is not None:
-            index[int(num)] = item
+            index[num] = item
     return index
 
 
@@ -185,7 +231,7 @@ def epic_done_total(item, issues_index, sub_issues_by_epic):
     """Resolve done/total for one epic-shaped raw issue item."""
     summary = epic_summary(item)
     progress = progress_from_summary(summary)
-    epic_number = int(item.get("number") or 0)
+    epic_number = coerce_issue_number(item.get("number")) or 0
 
     if progress is not None and not summary_needs_fallback(summary, progress):
         return progress
@@ -258,7 +304,10 @@ def load_fixture(path):
     except OSError as exc:
         sys.stderr.write(f"ERROR: cannot read fixture {path}: {exc}\n")
         sys.exit(1)
-    except ValueError as exc:
+    except UnicodeDecodeError as exc:
+        sys.stderr.write(f"ERROR: fixture {path} is not valid UTF-8: {exc}\n")
+        sys.exit(1)
+    except json.JSONDecodeError as exc:
         sys.stderr.write(f"ERROR: fixture {path} is not valid JSON: {exc}\n")
         sys.exit(1)
     if not isinstance(data, list):
@@ -344,7 +393,7 @@ def collect_live_sub_issues(items, repo):
             continue
         if "epic" not in labels_of(item):
             continue
-        num = item.get("number")
+        num = coerce_issue_number(item.get("number"))
         if num is None:
             continue
         summary = epic_summary(item)
@@ -353,7 +402,7 @@ def collect_live_sub_issues(items, repo):
             continue
         subs = fetch_sub_issues_for_epic(repo, num)
         if subs is not None:
-            by_epic[int(num)] = subs
+            by_epic[num] = subs
     return by_epic
 
 
@@ -414,7 +463,7 @@ def main() -> None:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as fh:
-        json.dump(normalized, fh, indent=2, ensure_ascii=False)
+        json.dump(normalized, fh, indent=2, ensure_ascii=False, sort_keys=True)
         fh.write("\n")
     print(f"Wrote {len(normalized)} open issues to {out}")
 
