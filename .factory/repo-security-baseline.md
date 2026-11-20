@@ -19,8 +19,14 @@ One-time setup per repo: copy the config from this template, then run **`scripts
    ```bash
    bash scripts/harden-repo.sh --required-checks build,pytest,gitleaks,pr-check --repo ORG/REPO
    ```
+   Repos with **no CI checks yet** must not enable required checks (every PR would stay red). Use `--required-checks none` or `--skip-branch-protection` on `harden-repo.sh` until CI exists; `protect-main.sh` accepts `--skip` for the ruleset-only path.
 6. If the full-history gitleaks row reports findings, fix or rotate with the owner **privately** — never paste secrets in issues or PRs.
-7. Run `scripts/protect-main.sh` if you only need the ruleset step on **this** clone's remote (same JSON as `harden-repo.sh`).
+7. Run `scripts/protect-main.sh` if you only need the ruleset step on **this** clone's remote (same JSON as `harden-repo.sh`):
+   ```bash
+   bash scripts/protect-main.sh --dry-run                    # print payload (no gh api)
+   bash scripts/protect-main.sh --checks pr-check,gitleaks  # override check contexts
+   bash scripts/protect-main.sh --verify --repo ORG/REPO  # read-back: strict checks, PR rule, no bypass
+   ```
 
 Dependabot PRs are **not** auto-merged; they must pass the same required checks as other factory PRs ([`.factory/actions-security.md`](actions-security.md) §Dependabot).
 
@@ -56,8 +62,8 @@ Verify limits on [GitHub's plans](https://docs.github.com/en/get-started/learnin
 | `.github/workflows/secret-scan.yml` | CI gitleaks (pinned Actions, least privilege). |
 | `.github/workflows/pr-check.yml` | Factory PR body gate. |
 | `.github/rulesets/protect-main.json` | Required checks + merge rules. |
-| `scripts/protect-main.sh` | Owner applies ruleset to **this** clone's remote. |
-| `scripts/harden-repo.sh` | Owner applies settings + ruleset to **any** `owner/repo` (`--dry-run`, `--repo`, `--required-checks`). |
+| `scripts/protect-main.sh` | Owner applies ruleset (`--dry-run`, `--verify`, `--checks`, `--repo`, `--skip`). |
+| `scripts/harden-repo.sh` | Owner applies settings + ruleset to **any** `owner/repo` (`--dry-run`, `--repo`, `--required-checks`, `--skip-branch-protection`). |
 | `SECURITY.md` | Private vulnerability contact path. |
 | `.factory/actions-security.md` | Threat model for OpenCode / Actions workflows. |
 
