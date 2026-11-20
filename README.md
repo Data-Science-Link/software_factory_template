@@ -54,6 +54,9 @@ Command reference: [docs/CLI.md](docs/CLI.md). Bootstrap detail: [docs/INIT_REPO
 | Backlog triage | [docs/TRIAGE.md](docs/TRIAGE.md) |
 | Owner workflow sync | [docs/OWNER_WORKFLOW_SYNC.md](docs/OWNER_WORKFLOW_SYNC.md) |
 | Reusable workflow pins | [docs/reusable-workflows/](docs/reusable-workflows/README.md) |
+| Examples and fixtures | [examples/README.md](examples/README.md) |
+| Troubleshooting | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
+| Branch hygiene | [docs/BRANCH_HYGIENE.md](docs/BRANCH_HYGIENE.md) |
 
 ## Roles
 
