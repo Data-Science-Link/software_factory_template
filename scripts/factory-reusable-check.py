@@ -27,6 +27,7 @@ USES_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*['\"]?([^'\"#\s]+)", re.IGNORECASE)
 REPOSITORY_LINE_RE = re.compile(
     r"^\s*repository:\s*([A-Za-z0-9][A-Za-z0-9_.${}/-]+)\s*(?:#.*)?$"
 )
+PERSONAL_ORG_SLUG_RE = re.compile(r"Data-Science-Link", re.IGNORECASE)
 PERSONAL_ORG_IN_COMMENT_RE = re.compile(
     r"Data-Science-Link/software_factory_template"
 )
@@ -333,7 +334,7 @@ def check_caller_file(
         return findings
 
     try:
-        caller_data, _caller_text = load_yaml(caller_path)
+        caller_data, caller_text = load_yaml(caller_path)
         reusable_data, _ = load_yaml(reusable_path)
     except Exception as exc:  # noqa: BLE001
         return [
@@ -344,6 +345,33 @@ def check_caller_file(
                 detail=f"YAML parse error: {exc}",
             )
         ]
+
+    org_leaks = 0
+    for i, line in enumerate(caller_text.splitlines(), start=1):
+        if not PERSONAL_ORG_SLUG_RE.search(line):
+            continue
+        org_leaks += 1
+        findings.append(
+            Finding(
+                check="caller_org_leak",
+                status="fail",
+                file=rel,
+                line=i,
+                detail=(
+                    "hardcoded personal org slug; use YOUR_ORG/software_factory_template "
+                    "or {{TEMPLATE_REPO}} placeholders only"
+                ),
+            )
+        )
+    if org_leaks == 0:
+        findings.append(
+            Finding(
+                check="caller_org_leak",
+                status="pass",
+                file=rel,
+                detail="no hardcoded personal org repository slugs",
+            )
+        )
 
     if "permissions" not in caller_data:
         findings.append(
