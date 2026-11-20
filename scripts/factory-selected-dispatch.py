@@ -59,6 +59,14 @@ def load_run_start():
     return mod
 
 
+def load_issue_spend():
+    spec = importlib.util.spec_from_file_location("factory_issue_spend", HERE / "factory-issue-spend.py")
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def gh_json(args: list[str]) -> Any:
     p = subprocess.run(["gh"] + args, capture_output=True, text=True)
     if p.returncode != 0:
@@ -133,11 +141,11 @@ def is_owner_comment(c: dict[str, Any]) -> bool:
 
 
 def prior_spend_usd(issue: int, comments: list[dict[str, Any]], runs_dir: Path) -> float:
-    frs = load_run_start()
+    spend_mod = load_issue_spend()
     spend: dict[str, float] = {}
     warned: list[str] = []
-    frs.load_runs_dir_spend(runs_dir, issue, spend, warned)
-    frs.load_comments_spend(comments, issue, spend, warned)
+    spend_mod.load_runs_dir_spend(runs_dir, issue, spend, warned)
+    spend_mod.load_comments_spend(comments, issue, spend, warned)
     return round(sum(spend.values()), 4)
 
 
@@ -149,13 +157,17 @@ def write_output(path: Path | None, pairs: dict[str, str]) -> None:
             fh.write(f"{k}={v}\n")
 
 
-def spec_preflight_usd(context: Path | None, labels: Path | None, guidance: str, models: Path) -> float:
+def spec_preflight_usd(
+    issue: int, context: Path | None, labels: Path | None, guidance: str, models: Path
+) -> float:
     args = [
         sys.executable,
         str(HERE / "opencode-spec-draft.py"),
         "--models",
         str(models),
         "preflight",
+        "--issue",
+        str(issue),
         "--guidance",
         guidance,
     ]
@@ -278,7 +290,9 @@ def cmd_phase_a(args: argparse.Namespace) -> int:
         return 0
 
     prior = prior_spend_usd(int(args.issue), comments, args.runs_dir)
-    predicted = spec_preflight_usd(args.context, args.labels, args.guidance, args.models)
+    predicted = spec_preflight_usd(
+        int(args.issue), args.context, args.labels, args.guidance, args.models
+    )
     cap = cap_usd(args.models)
     if prior >= cap or (prior + predicted) > cap:
         print(
