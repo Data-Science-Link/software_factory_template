@@ -13,9 +13,10 @@ build cost, spec-run cost, reviewer, checks) is filled here, never by the model.
                                  else exactly {work_type: spec} (rule 9, V4 Flash). Prose in the
                                  issue or guidance ("high-risk", "risk high") never routes.
                                  L defaults to issue-labels.txt beside F (opencode-build-context.py)
-  preflight [--context F] [--labels L] [--guidance G]
-                                 print model, predicted spec-run cost and cap; exit 1 when the
-                                 prediction is above budget.issue_cap_usd (refuse to run)
+  preflight --issue N [--context F] [--labels L] [--guidance G] [--runs-dir DIR]
+                                 [--comments-json FILE ...]
+                                 print model, predicted spec-run cost, prior spend and cap;
+                                 exit 1 when prior plus predicted is above budget.issue_cap_usd
   build --log L --issue N --out-dir D [--usage U] [--run-url URL]
                                  extract the worker's spec from L, normalize the harness-owned
                                  front matter fields, predict the build cost, run the checks and
@@ -59,6 +60,7 @@ GUIDANCE_HIGH_RE = re.compile(r"\Arisk:[ \t]*high(?![\w-])", re.I)
 # Spec-run token prior when models.yaml has no token_priors.spec (owner-only file).
 DEFAULT_SPEC_PRIOR = {"tokens_in": 150000, "tokens_cached_fraction": 0.80, "tokens_out": 12000}
 DEFAULT_TARGET_USD = 0.15
+DEFAULT_RUNS_DIR = ROOT / "factory" / "runs"
 MAX_SPEC_BYTES = 40000
 OWNED_FIELDS = ("issue", "status", "approved_by", "approved_at", "drafted_by", "model", "model_reason",
                 "predicted_tokens_in", "predicted_tokens_cached", "predicted_tokens_out",
@@ -75,6 +77,30 @@ def load(name: str, file: str):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def load_issue_spend():
+    return load("factory_issue_spend", "factory-issue-spend.py")
+
+
+def load_comments_files(paths: list[str] | None) -> tuple[list, list[str]]:
+    """Merge comment arrays from fixture files; return (comments, load errors)."""
+    comments: list = []
+    errors: list[str] = []
+    for path in paths or []:
+        p = Path(path)
+        if not p.is_file():
+            continue
+        try:
+            parsed = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            errors.append(f"invalid comments JSON {p.name}: {exc}")
+            continue
+        if not isinstance(parsed, list):
+            errors.append(f"comments JSON {p.name} must be an array")
+            continue
+        comments.extend(parsed)
+    return comments, errors
 
 
 def models_data(path: Path) -> dict:
@@ -473,12 +499,19 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--models", default=str(ROOT / ".factory" / "models.yaml"))
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("model", "preflight"):
-        sp = sub.add_parser(name)
-        sp.add_argument("--context", help="issue-context.md (no context -> high risk, fail closed)")
-        sp.add_argument("--labels", help="issue-labels.txt, one label per line (default: beside --context); "
-                                         "label risk:high -> high risk; missing -> high (fail closed)")
-        sp.add_argument("--guidance", default="", help="the /oc spec guidance text")
+    sp_model = sub.add_parser("model")
+    sp_model.add_argument("--context", help="issue-context.md (no context -> high risk, fail closed)")
+    sp_model.add_argument("--labels", help="issue-labels.txt, one label per line (default: beside --context)")
+    sp_model.add_argument("--guidance", default="", help="the /oc spec guidance text")
+    sp_preflight = sub.add_parser("preflight")
+    sp_preflight.add_argument("--issue", required=True, help="issue number (digits)")
+    sp_preflight.add_argument("--context", help="issue-context.md (no context -> high risk, fail closed)")
+    sp_preflight.add_argument("--labels", help="issue-labels.txt, one label per line (default: beside --context)")
+    sp_preflight.add_argument("--guidance", default="", help="the /oc spec guidance text")
+    sp_preflight.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR,
+                              help="committed run-record JSON directory (default: factory/runs)")
+    sp_preflight.add_argument("--comments-json", type=Path, action="append", default=None,
+                              help="issue comments JSON (GitHub REST shape); repeatable; missing file ignored")
     b = sub.add_parser("build")
     b.add_argument("--context")
     b.add_argument("--guidance", default="")
@@ -503,12 +536,27 @@ def main() -> int:
         print(spec_model(models_data(Path(a.models)), run_high_risk(a))[0])
         return 0
     if a.cmd == "preflight":
+        if not str(a.issue).isdigit():
+            die("issue must be digits")
+        issue = int(a.issue)
         high = run_high_risk(a)
         model, usd, cap = spec_run_prediction(models_data(Path(a.models)), high)
+        comments, c_err = load_comments_files(
+            [str(p) for p in (a.comments_json or [])]
+        )
+        for msg in c_err:
+            print(f"warning: {msg}", file=sys.stderr)
+        prior, warned = load_issue_spend().issue_prior_spend(issue, Path(a.runs_dir), comments)
+        for w in warned:
+            print(f"warning: {w}", file=sys.stderr)
+        total = round(prior + usd, 4)
         print(f"model={model}\nrisk_class={'high' if high else 'not_high'}\n"
-              f"predicted_spec_run_usd={usd:.4f}\ncap_usd={cap:.2f}")
-        if usd > cap:
-            die(f"predicted spec-run cost ${usd:.4f} is above the ${cap:.2f} cap; refusing to run")
+              f"predicted_spec_run_usd={usd:.4f}\nprior_spend_usd={prior:.4f}\ncap_usd={cap:.2f}")
+        if prior >= cap or total > cap:
+            die(
+                f"prior spend ${prior:.4f} plus predicted spec-run ${usd:.4f} "
+                f"(total ${total:.4f}) is at or over the ${cap:.2f} issue cap; refusing to run"
+            )
         return 0
     return {"build": cmd_build, "check-comment": cmd_check_comment, "approve": cmd_approve}[a.cmd](a)
 

@@ -125,6 +125,15 @@ RUN_ARGS=(--spec tests/run-start/spec-approved-simple-normal.md --issue 91 \
 run_case "case8 same run_id deduped -> prior 0.4000" 0 \
   "prior_spend_usd=0.4000"
 
+# --- Case 8b (#115): prior /oc spec run record counts toward build preflight ---
+mkdir -p "$tmpdir/runs8b"
+printf '%s\n' '{"run_id": "gha-spec-prior-1", "issue": 91, "actual_cost_usd": 0.55, "kind": "spec"}' \
+  >"$tmpdir/runs8b/gha-spec-prior-1.json"
+RUN_ARGS=(--spec tests/run-start/spec-approved-simple-normal.md --issue 91 \
+  --runs-dir "$tmpdir/runs8b")
+run_case "case8b spec run record in runs-dir -> prior 0.5500 for build start" 0 \
+  "prior_spend_usd=0.5500"
+
 # --- Case 9: prior 0.995 + predicted cost -> exit 3 with refused on stderr ---
 mkdir -p "$tmpdir/runs9"
 cp tests/run-start/run-995.json "$tmpdir/runs9/"
