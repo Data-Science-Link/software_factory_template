@@ -13,7 +13,8 @@ Run `python3 scripts/factory-cli.py --help` for a grouped command list with scri
 | Command | Example |
 |---------|---------|
 | `doctor` | `python3 scripts/factory-cli.py doctor --repo-dir .` |
-| `init` | `python3 scripts/factory-cli.py init --dest /path/to/product` |
+| `init` | `python3 scripts/factory-cli.py init --target /path/to/product` |
+| `models-check` | `python3 scripts/factory-cli.py models-check --models-yaml .factory/models.yaml` |
 
 ## Planning & Specs
 
@@ -23,6 +24,7 @@ Run `python3 scripts/factory-cli.py --help` for a grouped command list with scri
 | `spec-lint` | `python3 scripts/factory-cli.py spec-lint factory/specs/issue-1.md` |
 | `spec-check` | `python3 scripts/factory-cli.py spec-check factory/specs/issue-1.md` |
 | `backlog` | `python3 scripts/factory-cli.py backlog --from-json tests/factory-triage/backlog.json --out /tmp/backlog.json` |
+| `decision-log` | `python3 scripts/factory-cli.py decision-log check --file .factory/DECISIONS.md` |
 
 ## Build & Review
 
@@ -39,6 +41,7 @@ Run `python3 scripts/factory-cli.py --help` for a grouped command list with scri
 | Command | Example |
 |---------|---------|
 | `cost-digest` | `python3 scripts/factory-cli.py cost-digest --runs-dir tests/factory-cost-digest/fixture-runs` |
+| `cost-reconcile` | `python3 scripts/factory-cli.py cost-reconcile --runs-dir tests/cost-reconcile --models-yaml tests/cost-reconcile/models-fixture.yaml --json` |
 | `predict-cost` | `python3 scripts/factory-cli.py predict-cost factory/specs/issue-1.md` |
 | `site` | `python3 scripts/factory-cli.py site --out /tmp/site --data /tmp/site-data` |
 | `site-smoke` | `python3 scripts/factory-cli.py site-smoke tests/site-smoke/raw-bold` |
@@ -48,7 +51,10 @@ Run `python3 scripts/factory-cli.py --help` for a grouped command list with scri
 | Command | Example |
 |---------|---------|
 | `prepublic` | `python3 scripts/factory-cli.py prepublic` |
+| `branch-cleanup` | `python3 scripts/factory-cli.py branch-cleanup --branches-json tests/branch-cleanup/branches.json --prs-json tests/branch-cleanup/prs.json` |
 | `release` | `python3 scripts/factory-cli.py release --dry-run` |
 | `sync-repos` | `python3 scripts/factory-cli.py sync-repos --list factory/adopters.txt --dry-run` |
+| `migrate-adopter` | `python3 scripts/factory-cli.py migrate-adopter --repo-dir /path/to/product --tag v0.1.0` |
+| `owner-pack` | `python3 scripts/factory-cli.py owner-pack --version v0.1.0` |
 
 All flags after the subcommand are passed through to the underlying script unchanged.

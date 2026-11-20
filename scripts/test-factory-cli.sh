@@ -51,10 +51,10 @@ data = json.load(open(sys.argv[1], encoding="utf-8"))
 cmds = data["commands"]
 names = {c["name"] for c in cmds}
 expected = {
-    "doctor", "init", "triage", "spec-lint", "spec-check", "backlog",
-    "run-review", "fix-policy", "audit-workflows", "check-docs", "test-all",
-    "cost-digest", "predict-cost", "site", "site-smoke",
-    "prepublic", "release", "sync-repos",
+    "doctor", "init", "models-check", "triage", "spec-lint", "spec-check", "backlog",
+    "decision-log", "run-review", "fix-policy", "audit-workflows", "check-docs", "test-all",
+    "cost-digest", "cost-reconcile", "predict-cost", "site", "site-smoke",
+    "prepublic", "branch-cleanup", "release", "sync-repos", "migrate-adopter", "owner-pack",
 }
 missing = expected - names
 assert not missing, f"missing commands in list: {missing}"
@@ -94,6 +94,60 @@ if grep -qi "usage" "$work/out"; then
   ok "release --help shows usage"
 else
   bad "release --help shows usage"
+fi
+
+# Pass-through: owner-pack --help
+run_cli owner-pack --help
+assert_rc "owner-pack --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "owner-pack --help shows usage"
+else
+  bad "owner-pack --help shows usage"
+fi
+
+# Pass-through: migrate-adopter --help
+run_cli migrate-adopter --help
+assert_rc "migrate-adopter --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "migrate-adopter --help shows usage"
+else
+  bad "migrate-adopter --help shows usage"
+fi
+
+# Pass-through: cost-reconcile --help
+run_cli cost-reconcile --help
+assert_rc "cost-reconcile --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "cost-reconcile --help shows usage"
+else
+  bad "cost-reconcile --help shows usage"
+fi
+
+# Pass-through: models-check --help
+run_cli models-check --help
+assert_rc "models-check --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "models-check --help shows usage"
+else
+  bad "models-check --help shows usage"
+fi
+
+# Pass-through: decision-log --help
+run_cli decision-log --help
+assert_rc "decision-log --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "decision-log --help shows usage"
+else
+  bad "decision-log --help shows usage"
+fi
+
+# Pass-through: branch-cleanup --help
+run_cli branch-cleanup --help
+assert_rc "branch-cleanup --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "branch-cleanup --help shows usage"
+else
+  bad "branch-cleanup --help shows usage"
 fi
 
 # Unknown subcommand suggests close match

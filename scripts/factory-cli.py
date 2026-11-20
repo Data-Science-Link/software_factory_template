@@ -50,6 +50,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Scaffold a product repo to adopt the Software Factory.",
     ),
     CommandSpec(
+        "models-check",
+        "Setup & Health",
+        "factory-models-check.py",
+        "Offline schema, routing, and price sanity check for .factory/models.yaml.",
+    ),
+    CommandSpec(
         "triage",
         "Planning & Specs",
         "factory-issue-triage.py",
@@ -72,6 +78,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Planning & Specs",
         "factory-backlog.py",
         "Normalized open-backlog JSON for the factory site.",
+    ),
+    CommandSpec(
+        "decision-log",
+        "Planning & Specs",
+        "factory-decision-log.py",
+        "Validate, list, and append entries in .factory/DECISIONS.md.",
     ),
     CommandSpec(
         "run-review",
@@ -110,6 +122,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "CFO spend and quality digest from factory run records.",
     ),
     CommandSpec(
+        "cost-reconcile",
+        "Spend & Site",
+        "factory-cost-reconcile.py",
+        "Offline cost reconciliation and run-record drift audit vs models.yaml.",
+    ),
+    CommandSpec(
         "predict-cost",
         "Spend & Site",
         "factory-predict-cost.py",
@@ -140,10 +158,28 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Release-readiness scorecard and changelog draft (read-only).",
     ),
     CommandSpec(
+        "branch-cleanup",
+        "Release & Ops",
+        "factory-branch-cleanup.py",
+        "Dry-run branch hygiene report for factory worker branches (oc/, cursor/).",
+    ),
+    CommandSpec(
         "sync-repos",
         "Release & Ops",
         "factory-sync-repos.py",
         "Open or update sync PRs to bump reusable-workflow pin tags.",
+    ),
+    CommandSpec(
+        "migrate-adopter",
+        "Release & Ops",
+        "factory-migrate-adopter.py",
+        "Dry-run or apply migration from copied template files to pinned callers.",
+    ),
+    CommandSpec(
+        "owner-pack",
+        "Release & Ops",
+        "factory-owner-pack.py",
+        "Unified owner launch-readiness gate (doctor, docs, workflows, release).",
     ),
 )
 
