@@ -11,6 +11,10 @@ models:
     columns:
       - name: run_id
         description: "Unique identifier for the run."
+      - name: model_id
+        description: "Normalized model identifier."
+        data_tests:
+          - not_null
       - name: issue
         description: "Issue number the run belongs to."
       - name: pr
@@ -19,8 +23,6 @@ models:
         description: "Agent harness that executed the run (e.g. opencode-github-action, cursor-cloud)."
       - name: provider
         description: "Model provider backing the run (e.g. deepinfra, cursor)."
-      - name: model_id
-        description: "Normalized model identifier."
       - name: complexity
         description: "Complexity class of the work: simple, standard or complex."
       - name: risk
@@ -150,6 +152,8 @@ models:
           column_name: grain
       - not_null:
           column_name: grain_key
+      - not_null:
+          column_name: runs
     columns:
       - name: grain
         description: "Grouping level: 'issue' or 'complexity'."

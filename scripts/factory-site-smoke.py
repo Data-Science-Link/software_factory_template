@@ -395,6 +395,36 @@ def check_page(site_dir: Path, page: Path, result: SiteSmokeResult) -> None:
         if not resolve_ref(site_dir, page, ref, ids):
             result.add("local_reference", rel, f"broken local reference {ref!r}")
 
+    if 'role="tablist"' not in html:
+        result.add("aria_tabs", rel, 'nav missing role="tablist"')
+    if 'role="tabpanel"' not in html:
+        result.add("aria_tabs", rel, "main missing role=\"tabpanel\"")
+    if 'role="tab"' not in html:
+        result.add("aria_tabs", rel, 'tab links missing role="tab"')
+    if "@media print" not in html:
+        result.add("print_stylesheet", rel, "missing @media print rules in page CSS")
+    if rel == "index.html":
+        if 'id="active-factory-config"' not in html:
+            result.add("active_factory_config", rel, "missing Active Factory Configuration card")
+        if 'id="factory-loop-interactive"' not in html:
+            result.add(
+                "factory_loop_interactive",
+                rel,
+                "missing interactive factory loop container",
+            )
+        if 'id="loop-stage-detail"' not in html:
+            result.add(
+                "factory_loop_interactive",
+                rel,
+                "missing loop stage detail panel",
+            )
+        if "loop-stage-btn" not in html:
+            result.add(
+                "factory_loop_interactive",
+                rel,
+                "missing loop stage buttons",
+            )
+
 
 def validate_site(site_dir: Path) -> SiteSmokeResult:
     site_dir = site_dir.resolve()
@@ -407,6 +437,10 @@ def validate_site(site_dir: Path) -> SiteSmokeResult:
         "personal_name_leak",
         "svg_xml",
         "local_reference",
+        "aria_tabs",
+        "print_stylesheet",
+        "active_factory_config",
+        "factory_loop_interactive",
     ]
     if not site_dir.is_dir():
         result.add("site_dir", str(site_dir), "not a directory")
