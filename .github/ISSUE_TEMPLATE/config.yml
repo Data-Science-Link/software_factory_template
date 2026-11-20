@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security disclosures
+    url: https://github.com/Data-Science-Link/software_factory_template/blob/main/SECURITY.md
+    about: Report vulnerabilities privately — see SECURITY.md (do not use a public issue).
+  - name: Troubleshooting
+    url: https://github.com/Data-Science-Link/software_factory_template/blob/main/docs/TROUBLESHOOTING.md
+    about: Factory setup, CI, and adoption troubleshooting guide.

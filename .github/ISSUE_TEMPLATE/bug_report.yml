@@ -1,0 +1,48 @@
+name: Bug report
+description: Report broken scripts, docs, checks, or adoption steps in this template
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report reproducible problems in **this repository**. Do not paste secrets or full `.env` contents.
+
+        Security vulnerabilities: use [SECURITY.md](../../SECURITY.md) — not a public issue.
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: What you observed (error message, wrong output, failed check).
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands, paths, and inputs from a clean checkout when possible.
+      placeholder: |
+        1. Clone main at …
+        2. Run `python3 scripts/factory-doctor.py --public`
+        3. See …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor_output
+    attributes:
+      label: Output of `python3 scripts/factory-doctor.py` (optional)
+      description: Paste the summary section if you ran the doctor (redact host-specific paths if needed).
+      render: shell
+    validations:
+      required: false
