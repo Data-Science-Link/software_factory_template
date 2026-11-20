@@ -4,7 +4,7 @@ Portable sketch — copy to repo root as `CONTRIBUTING.md` and fill bracketed bi
 
 ## How this repo ships work
 
-We use a lightweight **software factory** (see `.factory/FACTORY.md`):
+We use a lightweight **software factory** (see `.factory/FACTORY.md`). Product repos pin the template at a semver tag (for example `v0.1.0`) on reusable workflow `uses:` lines and `factory_ref` inputs — see your adoption docs and `docs/RELEASING.md` in the template checkout.
 
 1. Work is a **GitHub issue** (not a chat thread).
 2. Hard work gets short product + technical specs; a human approves.

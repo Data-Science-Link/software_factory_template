@@ -110,6 +110,112 @@ else
   printf '%s\n' "$json_out" | head -5
 fi
 
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+# --- missing price_table_version -> non-zero ---
+cat >"$tmpdir/no-ptv.yaml" <<'YAML'
+models:
+  - id: org/No-PTV
+    provider: deepinfra
+    price_in_per_mtok: 0.1
+    price_cached_per_mtok: 0.01
+    price_out_per_mtok: 0.2
+routing_rules:
+  - rule: 3
+    when: {}
+    model: org/No-PTV
+checks: []
+token_priors:
+  simple:
+    tokens_in: 1
+    tokens_cached_fraction: 0.5
+    tokens_out: 1
+budget:
+  issue_cap_usd: 1.0
+YAML
+set +e
+out="$("${CHECK[@]}" --models-yaml "$tmpdir/no-ptv.yaml" --routing-md /dev/null 2>&1)"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -qi 'price_table_version'; then
+  note "missing price_table_version -> exit $rc"
+else
+  fail "missing price_table_version (rc=$rc)"
+  printf '%s\n' "$out" | head -5
+fi
+
+# --- non-numeric price string -> non-zero ---
+cat >"$tmpdir/nan-price.yaml" <<'YAML'
+price_table_version: "2099-01-01"
+models:
+  - id: org/Nan-Price
+    provider: deepinfra
+    price_in_per_mtok: not-a-number
+    price_cached_per_mtok: 0.01
+    price_out_per_mtok: 0.2
+routing_rules:
+  - rule: 3
+    when: {}
+    model: org/Nan-Price
+checks: []
+token_priors:
+  simple:
+    tokens_in: 1
+    tokens_cached_fraction: 0.5
+    tokens_out: 1
+budget:
+  issue_cap_usd: 1.0
+YAML
+set +e
+out="$("${CHECK[@]}" --models-yaml "$tmpdir/nan-price.yaml" --routing-md /dev/null 2>&1)"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -qi 'finite number'; then
+  note "non-numeric price -> exit $rc"
+else
+  fail "non-numeric price (rc=$rc)"
+  printf '%s\n' "$out" | head -5
+fi
+
+# --- invalid UTF-8 YAML path exits cleanly ---
+printf '\xff\xfe' >"$tmpdir/bad-utf8.yaml"
+set +e
+out="$("${CHECK[@]}" --models-yaml "$tmpdir/bad-utf8.yaml" 2>&1)"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && ! printf '%s\n' "$out" | grep -q Traceback \
+  && printf '%s\n' "$out" | grep -qi 'UTF-8'; then
+  note "invalid UTF-8 models yaml exits cleanly"
+else
+  fail "invalid UTF-8 models yaml (rc=$rc)"
+  printf '%s\n' "$out"
+fi
+
+# --- --json sort_keys determinism ---
+"${CHECK[@]}" --json \
+  --models-yaml "$fixtures_dir/minimal-ok.yaml" \
+  --routing-md "$fixtures_dir/routing-md-stub.md" >"$tmpdir/json-a.json"
+"${CHECK[@]}" --json \
+  --models-yaml "$fixtures_dir/minimal-ok.yaml" \
+  --routing-md "$fixtures_dir/routing-md-stub.md" >"$tmpdir/json-b.json"
+if cmp -s "$tmpdir/json-a.json" "$tmpdir/json-b.json"; then
+  note "--json output byte-identical across runs"
+else
+  fail "--json determinism"
+fi
+if "$PYTHON" - "$tmpdir/json-a.json" <<'PY'
+import json, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+assert text.index('"errors"') < text.index('"status"')
+json.loads(text)
+PY
+then
+  note "--json sort_keys key ordering"
+else
+  fail "--json sort_keys ordering"
+fi
+
 printf '\nSummary: %s passed, %s failed\n' "$passed" "$failed"
 if [ "$failed" -ne 0 ]; then
   exit 1
