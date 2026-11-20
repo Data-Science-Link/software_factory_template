@@ -55,6 +55,9 @@ Command reference: [docs/CLI.md](docs/CLI.md). Bootstrap detail: [docs/INIT_REPO
 | Owner workflow sync | [docs/OWNER_WORKFLOW_SYNC.md](docs/OWNER_WORKFLOW_SYNC.md) |
 | Reusable workflow pins | [docs/reusable-workflows/](docs/reusable-workflows/README.md) |
 | Examples and fixtures | [examples/README.md](examples/README.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Independent Critic loop | [docs/CRITIC_REVIEW.md](docs/CRITIC_REVIEW.md) |
+| Model scouting | [docs/MODEL_SCOUTING.md](docs/MODEL_SCOUTING.md) |
 | Troubleshooting | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | Branch hygiene | [docs/BRANCH_HYGIENE.md](docs/BRANCH_HYGIENE.md) |
 
