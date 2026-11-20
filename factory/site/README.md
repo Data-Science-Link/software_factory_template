@@ -6,7 +6,10 @@ A small static four-tab website generated from the factory's own source files:
   one card per loop step, a "What a human decides" box and depth links to the docs,
   followed by the roles, merge authority, models and prices, routing rules and guard
   checks tables, read from `.factory/FACTORY.md` and `.factory/models.yaml`.
-- **Financials** (`financials.html`) — not available yet; lands in issue #174.
+- **Financials** (`financials.html`) — a CFO-style view with headline cost cards, budget vs spend charts,
+  per-issue economics, model/work-type breakdown, prediction accuracy, and data freshness.
+  Reads from `site-data/marts/*.json` (from issue #170) only, offline, with no JS and no
+  chart library. Every number is asserted against the fixture values.
 - **Backlog** (`backlog.html`) — summary cards, a priority × risk count table, an
   epic list with done/total, and a sorted issue table linking to each issue, always
   showing titles (issue #172). The data comes from `site-data/backlog.json`,
