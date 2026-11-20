@@ -95,6 +95,69 @@ else
   failed=$((failed + 1))
 fi
 
+# ---- backlog epic progress: sub_issues API-shaped fixture ----
+epic_out="$tmpdir/epic-sub.json"
+if "$PYTHON" scripts/factory-backlog.py \
+  --from-json tests/site-data/epic-sub-issues.json \
+  --out "$epic_out" >/dev/null \
+  && "$PYTHON" - "$epic_out" <<'PY'
+import json, sys
+items = json.load(open(sys.argv[1], encoding="utf-8"))
+epic = items[0]
+if epic.get("done") != 2 or epic.get("total") != 3:
+    raise SystemExit("sub_issues fixture: expected 2/3, got %s/%s" % (
+        epic.get("done"), epic.get("total")))
+PY
+then
+  echo "PASS  epic progress from sub_issues fixture is 2/3"
+  passed=$((passed + 1))
+else
+  echo "FAIL  epic progress from sub_issues fixture"
+  failed=$((failed + 1))
+fi
+
+# ---- backlog epic progress: body #N fallback ----
+body_out="$tmpdir/epic-body.json"
+if "$PYTHON" scripts/factory-backlog.py \
+  --from-json tests/site-data/epic-body-refs.json \
+  --out "$body_out" >/dev/null \
+  && "$PYTHON" - "$body_out" <<'PY'
+import json, sys
+items = json.load(open(sys.argv[1], encoding="utf-8"))
+epic = [i for i in items if i.get("number") == 900][0]
+if epic.get("done") != 1 or epic.get("total") != 2:
+    raise SystemExit("body refs: expected 1/2, got %s/%s" % (
+        epic.get("done"), epic.get("total")))
+PY
+then
+  echo "PASS  epic progress from body #N fallback is 1/2"
+  passed=$((passed + 1))
+else
+  echo "FAIL  epic progress from body #N fallback"
+  failed=$((failed + 1))
+fi
+
+# ---- backlog epic progress: subIssuesSummary.completed ----
+summary_out="$tmpdir/epic-summary.json"
+if "$PYTHON" scripts/factory-backlog.py \
+  --from-json tests/site-data/epic-summary-completed.json \
+  --out "$summary_out" >/dev/null \
+  && "$PYTHON" - "$summary_out" <<'PY'
+import json, sys
+items = json.load(open(sys.argv[1], encoding="utf-8"))
+epic = items[0]
+if epic.get("done") != 3 or epic.get("total") != 7:
+    raise SystemExit("completed field: expected 3/7, got %s/%s" % (
+        epic.get("done"), epic.get("total")))
+PY
+then
+  echo "PASS  epic progress maps subIssuesSummary.completed to done"
+  passed=$((passed + 1))
+else
+  echo "FAIL  epic progress did not map subIssuesSummary.completed"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then

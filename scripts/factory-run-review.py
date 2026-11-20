@@ -680,47 +680,32 @@ def parse_tool_events(log_text):
     return events
 
 
-def _denied_command(lines, idx):
-    """Best-effort command string for a denied call.
-
-    Returns the nearest preceding `✗` (failed/denied) tool line, else the
-    nearest `→`/`✱` tool line, else the denial line itself. The returned string
-    is a command/path from the log, never a key, token or env value.
-    """
-    lo = max(0, idx - 6)
-    for j in range(lo, idx + 1):
-        s = strip_role_prefix(strip_ansi(lines[j]).strip())
-        if s.startswith("✗"):
-            return s
-    for j in range(lo, idx + 1):
-        s = strip_role_prefix(strip_ansi(lines[j]).strip())
-        if s.startswith(("→", "✱", "->", "*")):
-            return s
-    return strip_ansi(lines[idx]).strip()
-
-
-def _is_agent_tool_line(line):
-    """True when a log line is an agent tool-result line (`✗`/`→`/`✱`).
-
-    The real OpenCode denial text only counts when it appears on or right
-    around an agent tool-result line. The echoed `OC_INSTRUCTION:` env line and
-    the StepSecurity harden-runner config JSON (for example `denied_endpoints`)
-    are workflow noise, not tool output, so they never anchor a blocked call.
-    """
+def _failed_tool_line(line):
+    """Return the stripped agent `✗` failed-tool line, or None."""
     s = strip_role_prefix(strip_ansi(line)).strip()
-    return s.startswith(("✗", "→", "✱", "->", "*"))
+    if s.startswith("✗"):
+        return s
+    return None
+
+
+def _failed_tool_before_denial(lines, idx, lookback=5):
+    """Nearest preceding `✗` failed-tool line before a denial marker, or None."""
+    lo = max(0, idx - lookback)
+    for j in range(idx, lo - 1, -1):
+        failed = _failed_tool_line(lines[j])
+        if failed is not None:
+            return failed
+    return None
 
 
 def detect_blocked_calls(log_text):
     """Collect guardrail command strings that were denied/blocked in the log.
 
     A blocked call counts only when the real OpenCode permission-denial marker
-    (`The user has specified a rule which prevents you from using this specific
-    tool call`) appears on an agent tool-result line or immediately around one.
-    The bare `denied` / `blocked` / `guardrail` vocabulary no longer fires on
-    the whole workflow log, so an echoed `OC_INSTRUCTION:` env line or the
-    StepSecurity harden-runner `denied_endpoints` config line cannot produce a
-    false positive. The denied command is captured from the surrounding log.
+    appears on a line that immediately follows a `✗` failed tool-result line (the
+    usual `✗ <tool> ... failed` then error text shape). Model prose, echoed file
+    contents, successful `→` / `←` tool lines, and workflow noise that merely
+    quote the marker never count. The denied command is the `✗` line itself.
     """
     lines = (log_text or "").splitlines()
     blocked = []
@@ -729,11 +714,10 @@ def detect_blocked_calls(log_text):
         low = strip_ansi(raw).lower()
         if not PERMISSION_DENIED_RE.search(low):
             continue
-        lo = max(0, i - 6)
-        if not any(_is_agent_tool_line(lines[j]) for j in range(lo, i + 1)):
+        cmd = _failed_tool_before_denial(lines, i)
+        if cmd is None:
             continue
-        cmd = _denied_command(lines, i)
-        if cmd and cmd not in seen:
+        if cmd not in seen:
             blocked.append(cmd)
             seen.add(cmd)
     return blocked
