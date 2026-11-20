@@ -21,7 +21,7 @@ try:
     import yaml
 except ImportError:  # pragma: no cover
     sys.stderr.write(
-        "factory-cost-digest: PyYAML required (pip install -r requirements-factory.txt)\n"
+        "ERROR: PyYAML required (pip install -r requirements-factory.txt)\n"
     )
     raise SystemExit(1)
 
@@ -33,6 +33,11 @@ FAIL_OUTCOMES = frozenset(
     {"failed", "cap_exceeded", "gate_failed", "cancelled"}
 )
 APPROACHING_CAP_FRAC = 0.80
+
+
+def die(msg: str, code: int = 2) -> None:
+    sys.stderr.write(f"ERROR: {msg}\n")
+    raise SystemExit(code)
 
 
 def parse_utc_z(value: str) -> datetime | None:
@@ -58,28 +63,69 @@ def parse_as_of(value: str, tz: ZoneInfo) -> datetime:
     return local_end
 
 
+def _budget_field(raw: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key not in raw:
+            continue
+        value = raw[key]
+        if value is None:
+            continue
+        return value
+    return None
+
+
+def _budget_usd(value: Any, default: float) -> float:
+    """Parse a budget scalar; negative and non-numeric values fall back to default."""
+    if isinstance(value, bool):
+        return default
+    if value is None:
+        return default
+    parsed = safe_float(value, default)
+    if parsed < 0:
+        return default
+    return parsed
+
+
 def load_models(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
-    with path.open(encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
-    return data if isinstance(data, dict) else {}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        die(f"models file is not valid UTF-8: {path}")
+    if not text.strip():
+        die(f"models file is empty: {path}")
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        die(f"models file is not valid YAML ({path}): {exc}")
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        die(f"models file root must be a mapping, got {type(data).__name__}: {path}")
+    return data
 
 
 def budget_from_models(models: dict[str, Any]) -> dict[str, float]:
     raw = models.get("budget") or {}
     if not isinstance(raw, dict):
         raw = {}
-    monthly = float(
-        raw.get("deepinfra_monthly_limit_usd")
-        or raw.get("monthly_usd")
-        or raw.get("deepinfra_monthly_budget_usd")
-        or 0.0
+    monthly = _budget_usd(
+        _budget_field(
+            raw,
+            "deepinfra_monthly_limit_usd",
+            "monthly_usd",
+            "deepinfra_monthly_budget_usd",
+        ),
+        0.0,
     )
-    weekly = raw.get("weekly_budget_usd") or raw.get("weekly_usd")
-    weekly_f = float(weekly) if weekly is not None else (monthly / 4.0 if monthly else 0.0)
-    issue_target = float(raw.get("issue_target_usd", 0.15))
-    issue_cap = float(raw.get("issue_cap_usd", 1.0))
+    weekly_raw = _budget_field(raw, "weekly_budget_usd", "weekly_usd")
+    if weekly_raw is None:
+        weekly_f = monthly / 4.0 if monthly > 0 else 0.0
+    else:
+        weekly_f = _budget_usd(weekly_raw, monthly / 4.0 if monthly > 0 else 0.0)
+    issue_target = _budget_usd(raw.get("issue_target_usd"), 0.15)
+    issue_cap = _budget_usd(raw.get("issue_cap_usd"), 1.0)
     return {
         "monthly_usd": monthly,
         "weekly_usd": weekly_f,
@@ -113,6 +159,9 @@ def safe_int(value: Any, default: int = 0) -> int:
 def load_run(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        print(f"factory-cost-digest: skip {path.name}: {exc}", file=sys.stderr)
+        return None
     except (OSError, json.JSONDecodeError) as exc:
         print(f"factory-cost-digest: skip {path.name}: {exc}", file=sys.stderr)
         return None
@@ -625,21 +674,18 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.days < 1:
-        print("factory-cost-digest: --days must be >= 1", file=sys.stderr)
-        return 2
+        die("--days must be >= 1")
 
     try:
         tz = ZoneInfo(args.tz)
     except Exception as exc:  # noqa: BLE001 — stdlib ZoneInfo
-        print(f"factory-cost-digest: invalid --tz: {exc}", file=sys.stderr)
-        return 2
+        die(f"invalid --tz: {exc}")
 
     if args.as_of:
         try:
             as_of_local = parse_as_of(args.as_of, tz)
         except ValueError as exc:
-            print(f"factory-cost-digest: invalid --as-of: {exc}", file=sys.stderr)
-            return 2
+            die(f"invalid --as-of: {exc}")
     else:
         now_local = datetime.now(tz)
         as_of_local = datetime.combine(
@@ -652,18 +698,23 @@ def main() -> int:
             as_of_local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         )
 
-    models = load_models(args.models_file.resolve())
-    all_runs = load_runs(args.runs_dir.resolve())
-    report = build_report(
-        all_runs,
-        args.models_file.resolve(),
-        models,
-        args.runs_dir.resolve(),
-        args.days,
-        as_of_local,
-        args.tz,
-        generated_at,
-    )
+    try:
+        models = load_models(args.models_file.resolve())
+        all_runs = load_runs(args.runs_dir.resolve())
+        report = build_report(
+            all_runs,
+            args.models_file.resolve(),
+            models,
+            args.runs_dir.resolve(),
+            args.days,
+            as_of_local,
+            args.tz,
+            generated_at,
+        )
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 — last-resort guard for callers
+        die(f"unexpected error: {exc}")
 
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

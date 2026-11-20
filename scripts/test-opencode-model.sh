@@ -166,5 +166,73 @@ else bad "agent-fix: PR head models.yaml (rc=$rc)"; fi
 
 if grep -rqF "$FAKE_KEY" "$work"/b1 "$work"/f1 2>/dev/null; then bad "no key in any artifact"; else ok "no key in any artifact"; fi
 
+# --- protected: scripts/factory-check-model.py direct edge cases (script not edited) ---
+CHECK=( "$py" scripts/factory-check-model.py )
+no_tb() { ! grep -q Traceback "$1" 2>/dev/null; }
+
+set +e
+"$py" scripts/factory-check-model.py "$PRO" >/dev/null 2>"$work/cm-ok.err"
+cm_ok=$?
+set -e
+if [ "$cm_ok" -eq 0 ] && no_tb "$work/cm-ok.err"; then
+  ok "check-model: listed deepinfra id passes"
+else bad "check-model: listed id (rc=$cm_ok)"; fi
+
+set +e
+"$py" scripts/factory-check-model.py openai/gpt-5 >"$work/cm-unlisted.out" 2>"$work/cm-unlisted.err"
+cm_un=$?
+set -e
+if [ "$cm_un" -ne 0 ] && no_tb "$work/cm-unlisted.err"; then
+  ok "check-model: unlisted model refused"
+else bad "check-model: unlisted model (rc=$cm_un)"; fi
+
+set +e
+"${CHECK[@]}" --models "$work/missing-models.yaml" "$PRO" >"$work/cm-miss.out" 2>"$work/cm-miss.err"
+cm_miss=$?
+set -e
+if [ "$cm_miss" -ne 0 ] && no_tb "$work/cm-miss.err"; then
+  ok "check-model: missing models file refused"
+else bad "check-model: missing models file (rc=$cm_miss)"; fi
+
+printf '\n' >"$work/cm-empty.yaml"
+set +e
+"${CHECK[@]}" --models "$work/cm-empty.yaml" "$PRO" >"$work/cm-empty.out" 2>"$work/cm-empty.err"
+cm_empty=$?
+set -e
+if [ "$cm_empty" -ne 0 ] && no_tb "$work/cm-empty.err"; then
+  ok "check-model: empty models file refused"
+else bad "check-model: empty models file (rc=$cm_empty)"; fi
+
+printf 'models:\n  - {id: x}\n' >"$work/cm-noprovider.yaml"
+set +e
+"${CHECK[@]}" --models "$work/cm-noprovider.yaml" x >"$work/cm-np.out" 2>"$work/cm-np.err"
+cm_np=$?
+set -e
+if [ "$cm_np" -ne 0 ] && no_tb "$work/cm-np.err"; then
+  ok "check-model: model without deepinfra provider refused"
+else bad "check-model: non-deepinfra entry (rc=$cm_np)"; fi
+
+printf 'not yaml: [' >"$work/cm-badyaml.yaml"
+set +e
+"${CHECK[@]}" --models "$work/cm-badyaml.yaml" "$PRO" >"$work/cm-bad.out" 2>"$work/cm-bad.err"
+cm_bad=$?
+set -e
+if [ "$cm_bad" -ne 0 ] && no_tb "$work/cm-bad.err"; then
+  ok "check-model: malformed models YAML refused (no traceback)"
+else bad "check-model: malformed models YAML (rc=$cm_bad)"; fi
+
+cat >"$work/cm-noids.yaml" <<'YAML'
+models:
+  - provider: deepinfra
+    price_in_per_mtok: 0.1
+YAML
+set +e
+"${CHECK[@]}" --models "$work/cm-noids.yaml" "$PRO" >"$work/cm-noids.out" 2>"$work/cm-noids.err"
+cm_noids=$?
+set -e
+if [ "$cm_noids" -ne 0 ] && no_tb "$work/cm-noids.err"; then
+  ok "check-model: empty model id entries ignored; Pro still unlisted"
+else bad "check-model: missing model ids (rc=$cm_noids)"; fi
+
 echo "Results: ${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]
