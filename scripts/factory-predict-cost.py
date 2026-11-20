@@ -20,7 +20,12 @@ from typing import Any
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+from factory_spec_front_matter import normalize_front_matter_raw  # noqa: E402
+
+ROOT = HERE.parent
 DEFAULT_MODELS = ROOT / ".factory" / "models.yaml"
 
 SPECIAL_MODELS = frozenset({"use_different_model_than_builder"})
@@ -55,7 +60,7 @@ def split_front_matter(text: str) -> tuple[dict[str, Any] | None, str]:
     if len(parts) < 3:
         return None, text
     try:
-        data = yaml.safe_load(parts[1])
+        data = yaml.safe_load(normalize_front_matter_raw(parts[1]))
     except yaml.YAMLError as exc:
         raise SystemExit(f"invalid spec front matter YAML: {exc}") from exc
     if not isinstance(data, dict):

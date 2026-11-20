@@ -76,6 +76,12 @@ Create only **new** files; never edit any existing `scripts/*` (blocked by the p
 - [ ] A cache-heavy run records `tokens_cached` correctly and its cost reflects cached pricing within validator tolerance.
 - [ ] Bad inputs are covered: absent start state, unparseable usage, mismatched `run_id`, and key-spend unavailable each degrade to `not_measured`/`skipped_unavailable` without crashing.
 
+## Bad inputs and edge cases
+- Absent start state → `not_measured`; covered by `tests/run-end/` missing-start fixture in `scripts/test-run-end.sh`.
+- Unparseable usage → exit 3, empty stdout; covered by `tests/run-end/` bad-usage fixture.
+- Mismatched `run_id` → error; covered by `tests/run-end/` run-id mismatch fixture.
+- Key-spend unavailable → `cost_check: skipped_unavailable`; covered by `tests/run-end/` no-key-spend fixture.
+
 ## Verification
 
 ```bash

@@ -17,7 +17,7 @@ git show HEAD:scripts/opencode-artifact-scan.sh >"$PRISTINE_DIR/opencode-artifac
 git show HEAD:scripts/opencode-git-push-scoped.sh >"$PRISTINE_DIR/opencode-git-push-scoped.sh"
 git show HEAD:scripts/pr-check.sh >"$PRISTINE_DIR/pr-check.sh"
 git show HEAD:scripts/opencode-run-facts.sh >"$PRISTINE_DIR/opencode-run-facts.sh"
-for f in opencode-text-block.sh opencode-build-context.py factory-spec-check.py opencode-stage-spec-files.sh; do
+for f in opencode-text-block.sh opencode-build-context.py factory_spec_front_matter.py factory-spec-check.py opencode-stage-spec-files.sh; do
   git show "HEAD:scripts/$f" >"$PRISTINE_DIR/$f"
 done
 chmod +x "$PRISTINE_DIR/opencode-artifact-scan.sh" \

@@ -77,9 +77,13 @@ the first draft of #135 wasted $0.12 on two of them):
   output. Do not hide failures: never pipe a checked command into head, tail, or grep -q
   unless the block also has set -o pipefail (prefer printing full output instead).
 - Front matter: issue: ${OC_ISSUE_NUMBER}, status: draft, drafted_by: oc-spec-run, plain or
-  single-quoted values, never backslash-escaped quotes. Pick complexity (simple|standard|complex),
-  risk (trivial|normal|high) and work_type (code|docs|data) honestly. Leave model, model_reason,
-  predicted_* and price_table_version as in the template: the harness fills them.
+  single-quoted values, never backslash-escaped quotes. Quote any value that contains a colon
+  (for example title: 'Site data: collect records') so YAML does not break. Pick complexity
+  (simple|standard|complex), risk (trivial|normal|high) and work_type (code|docs|data) honestly.
+  Leave model, model_reason, predicted_* and price_table_version as in the template: the harness
+  fills them.
+- When risk is normal or high, "## Bad inputs and edge cases" is required: list each bad input or
+  edge case, what the code must do (exit code or message), and which test covers it.
 - "## Files": only exact repository paths the build creates, changes, or reads first, one
   backticked path per bullet (e.g. "- Create: \`scripts/new-check.sh\`"). No exclusion
   sentences and no directories or files the worker must not touch: the checker reads every path
