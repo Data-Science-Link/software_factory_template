@@ -3,7 +3,7 @@
 - **Status:** Proposed, 2026-11-01; the ten design decisions in [§18](#18-decisions-2026-11-02) were **accepted on 2026-11-02**: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat). The vision PR itself still waits for Michael's review. Nothing here is live until the child issues of the epic land.
 - **Owner:** Michael Link (CEO). **Drafted by:** the Software Factory Builder (Grok Bot) from Michael's notes of 2026-11-01.
 - **Epic:** [#38](https://github.com/Data-Science-Link/software_factory_template/issues/38) · **Lives at:** `.factory/VISION.md` (method docs live in `.factory/`, per the README).
-- **Replaces as the default path:** the Local open-weights harness (desktop Cursor + DeepInfra) described in `MODEL_ROUTING.md` and `skills/local-open-weights-run.md`. See [What's retired](#14-whats-retired-and-whats-kept).
+- **Replaces as the default path:** the Local open-weights harness (desktop Cursor + DeepInfra) described in `MODEL_ROUTING.md` and `skills/local-open-weights-run.md`. See [What's retired](#15-whats-retired-and-whats-kept).
 
 > Words used here match the rest of `.factory/`. **Complexity** is `simple | standard | complex` (it picks the model). **Risk class** is `trivial | normal | high` (it sets the merge gate). When Michael says "medium or high complexity" that means **standard or complex**; "medium or high risk" means **normal or high**.
 
