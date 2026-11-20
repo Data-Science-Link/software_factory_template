@@ -1,0 +1,30 @@
+# Thin product-repo workflow: paste into .github/workflows/factory-site.yml (owner paste).
+name: factory-site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "factory/**"
+      - "scripts/factory-site*"
+      - "scripts/factory-collect-runs.py"
+      - ".factory/FACTORY.md"
+      - ".factory/models.yaml"
+      - "requirements-factory.txt"
+      - ".github/workflows/factory-site.yml"
+  schedule:
+    - cron: "23 13 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: factory-site-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  factory-site:
+    uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-factory-site.yml@v0.1.0
+    secrets: inherit
+    with:
+      factory_ref: v0.1.0
