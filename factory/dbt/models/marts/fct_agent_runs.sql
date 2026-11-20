@@ -9,6 +9,8 @@ select
     run_id,
     issue,
     pr,
+    harness,
+    provider,
     model_id,
     complexity,
     risk,

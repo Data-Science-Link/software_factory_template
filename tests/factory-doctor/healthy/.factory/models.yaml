@@ -1,0 +1,9 @@
+models:
+  - id: example/vendor-model
+    provider: deepinfra
+    price_in_per_mtok: 0.1
+    price_out_per_mtok: 0.2
+budget:
+  deepinfra_monthly_limit_usd: 10
+  issue_cap_usd: 1.0
+  issue_target_usd: 0.15

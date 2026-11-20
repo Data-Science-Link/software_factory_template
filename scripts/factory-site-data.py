@@ -28,6 +28,8 @@ AGENT_RUNS_COLUMNS = (
     "run_id",
     "issue",
     "pr",
+    "harness",
+    "provider",
     "model_id",
     "complexity",
     "risk",
