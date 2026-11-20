@@ -50,6 +50,18 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Scaffold a product repo to adopt the Software Factory.",
     ),
     CommandSpec(
+        "models-check",
+        "Setup & Health",
+        "factory-models-check.py",
+        "Offline schema, routing, and price sanity check for .factory/models.yaml.",
+    ),
+    CommandSpec(
+        "model-scout",
+        "Setup & Health",
+        "factory-model-scout.py",
+        "Compare DeepInfra catalog prices to models.yaml and propose updates (proposal-only).",
+    ),
+    CommandSpec(
         "triage",
         "Planning & Specs",
         "factory-issue-triage.py",
@@ -72,6 +84,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Planning & Specs",
         "factory-backlog.py",
         "Normalized open-backlog JSON for the factory site.",
+    ),
+    CommandSpec(
+        "decision-log",
+        "Planning & Specs",
+        "factory-decision-log.py",
+        "Validate, list, and append entries in .factory/DECISIONS.md.",
     ),
     CommandSpec(
         "run-review",
@@ -98,6 +116,18 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Markdown links, heading anchors, and script reference audit.",
     ),
     CommandSpec(
+        "critic-context",
+        "Build & Review",
+        "factory-critic-context.py",
+        "Pack PR diff, spec, and harness verification for the Independent Critic reviewer.",
+    ),
+    CommandSpec(
+        "critic-run",
+        "Build & Review",
+        "factory-critic-run.py",
+        "Run the Independent Critic model (or dry-run) on a critic-input bundle.",
+    ),
+    CommandSpec(
         "test-all",
         "Build & Review",
         "test-all.sh",
@@ -120,6 +150,18 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Spend & Site",
         "factory-predict-cost.py",
         "Route a model and predict run cost from a spec + models.yaml.",
+    ),
+    CommandSpec(
+        "routing-report",
+        "Spend & Site",
+        "factory-routing-report.py",
+        "Offline routing quality report from factory run records and models.yaml.",
+    ),
+    CommandSpec(
+        "cache-report",
+        "Spend & Site",
+        "factory-cache-report.py",
+        "DeepInfra prompt-cache hit rates from factory run records.",
     ),
     CommandSpec(
         "site",
@@ -146,10 +188,22 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Release-readiness scorecard and changelog draft (read-only).",
     ),
     CommandSpec(
+        "branch-cleanup",
+        "Release & Ops",
+        "factory-branch-cleanup.py",
+        "Dry-run branch hygiene report for factory worker branches (oc/, cursor/).",
+    ),
+    CommandSpec(
         "sync-repos",
         "Release & Ops",
         "factory-sync-repos.py",
         "Open or update sync PRs to bump reusable-workflow pin tags.",
+    ),
+    CommandSpec(
+        "reusable-check",
+        "Release & Ops",
+        "factory-reusable-check.py",
+        "Offline contract check for docs/reusable-workflows templates and callers.",
     ),
     CommandSpec(
         "migrate-adopter",

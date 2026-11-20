@@ -126,6 +126,129 @@ assert_json_schema "template repo json schema" "$work/out"
 grep -q '"category": "workflow_hygiene"' "$work/out" || bad "template json includes workflow_hygiene"
 grep -q '"category": "protected_scripts"' "$work/out" || bad "template json includes protected_scripts"
 grep -q '"category": "docs_links"' "$work/out" || bad "template json includes docs_links"
+grep -q '"category": "models_config"' "$work/out" || bad "template json includes models_config"
+grep -q '"category": "decision_log"' "$work/out" || bad "template json includes decision_log"
+grep -q '"category": "reusable_workflows"' "$work/out" || bad "template json includes reusable_workflows"
+
+# reusable_workflows: skip when script or docs tree absent
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --strict
+grep -q "reusable_workflows" "$work/out" && grep -q "skip" "$work/out" && ok "reusable_workflows skips on minimal fixture" \
+  || bad "reusable_workflows skip when script or docs missing"
+
+# reusable_workflows: pass with bundled script and live docs tree
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-reusable-check.py" "$work/repo/scripts/"
+mkdir -p "$work/repo/docs"
+cp -a "$root/docs/reusable-workflows" "$work/repo/docs/"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "reusable_workflows live tree strict" 0
+grep -q "reusable_workflows" "$work/out" || bad "reusable_workflows id present"
+grep -q "reusable-check: clean" "$work/out" && ok "reusable_workflows pass on live docs" \
+  || bad "reusable_workflows pass on live docs"
+
+# reusable_workflows: fail on contract violations
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-reusable-check.py" "$work/repo/scripts/"
+fail_root="$work/fail-contract"
+mkdir -p "$fail_root/callers"
+cat >"$fail_root/reusable-demo.yml" <<'YML'
+name: reusable-demo
+on:
+  workflow_call:
+    inputs:
+      factory_ref:
+        type: string
+        required: true
+    secrets:
+      DEMO_SECRET:
+        required: true
+permissions:
+  contents: read
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+YML
+cat >"$fail_root/callers/demo.yml" <<'YML'
+name: demo-caller
+on:
+  workflow_dispatch:
+permissions: write-all
+jobs:
+  call:
+    uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-demo.yml@v0.1.0
+    secrets:
+      WRONG_SECRET: ${{ secrets.DEMO_SECRET }}
+    with:
+      factory_ref: v0.1.0
+      unknown_input: oops
+YML
+mkdir -p "$work/repo/docs"
+cp -a "$fail_root" "$work/repo/docs/reusable-workflows"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "reusable_workflows broken fixture strict" 1
+grep -q "reusable_workflows" "$work/out" || bad "reusable_workflows fail row"
+
+# models_config: skip when factory-models-check.py absent in target repo
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --strict
+grep -q "models_config" "$work/out" && grep -q "skip" "$work/out" && ok "models_config skips without check script" \
+  || bad "models_config skip when script missing"
+
+# models_config: pass with bundled script and minimal models.yaml
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-models-check.py" "$work/repo/scripts/"
+cp "$root/tests/models-check/minimal-ok.yaml" "$work/repo/.factory/models.yaml"
+python3 - <<'PY' "$work/repo/.factory/models.yaml"
+import sys
+from pathlib import Path
+import yaml
+path = Path(sys.argv[1])
+data = yaml.safe_load(path.read_text(encoding="utf-8"))
+budget = data.setdefault("budget", {})
+budget.setdefault("deepinfra_monthly_limit_usd", 10)
+budget.setdefault("issue_target_usd", 0.15)
+path.write_text(yaml.dump(data, sort_keys=False), encoding="utf-8")
+PY
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "models_config healthy fixture" 0
+grep -q "models_config" "$work/out" || bad "models_config id present"
+grep -q "models-check: clean" "$work/out" && ok "models_config pass on minimal-ok" \
+  || bad "models_config pass on minimal-ok"
+
+# models_config: fail on duplicate model id
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-models-check.py" "$work/repo/scripts/"
+cp "$root/tests/models-check/duplicate-id.yaml" "$work/repo/.factory/models.yaml"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "models_config duplicate id strict" 1
+grep -q "models_config" "$work/out" || bad "models_config fail row"
+
+# decision_log: skip when factory-decision-log.py absent in target repo
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --strict
+grep -q "decision_log" "$work/out" && grep -q "skip" "$work/out" && ok "decision_log skips without check script" \
+  || bad "decision_log skip when script missing"
+
+# decision_log: pass with bundled script and small log
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-decision-log.py" "$work/repo/scripts/"
+cp "$root/tests/decision-log/small-log.md" "$work/repo/.factory/DECISIONS.md"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "decision_log healthy fixture" 0
+grep -q "decision_log" "$work/out" || bad "decision_log id present"
+grep -q "decision-log check: clean" "$work/out" && ok "decision_log pass on small-log" \
+  || bad "decision_log pass on small-log"
+
+# decision_log: fail on duplicate id
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-decision-log.py" "$work/repo/scripts/"
+cp "$root/tests/decision-log/duplicate-id.md" "$work/repo/.factory/DECISIONS.md"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "decision_log duplicate id strict" 1
+grep -q "decision_log" "$work/out" || bad "decision_log fail row"
 
 # docs_links: skip when factory-check-docs.py absent in target repo
 copy_healthy "$work/repo"

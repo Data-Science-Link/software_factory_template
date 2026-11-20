@@ -3,17 +3,6 @@ version: 2
 models:
   - name: stg_agent_runs
     description: "Deduplicated agent runs from the agent_runs seed, with normalized model and UTC timestamps."
-    columns:
-      - name: run_id
-        description: "Unique identifier for the run."
-      - name: model_id
-        description: "Normalized model identifier from the harness model name."
-      - name: actual_cost_usd
-        description: "Measured or inferred actual cost of the run in USD."
-      - name: complexity
-        description: "Complexity class of the work."
-      - name: outcome
-        description: "How the run ended (PR opened, failed, cap exceeded, and so on)."
     data_tests:
       - unique:
           column_name: run_id
@@ -45,3 +34,84 @@ models:
           column_name: harness
       - not_null:
           column_name: provider
+      - not_null:
+          column_name: model_id
+    columns:
+      - name: run_id
+        description: "Unique identifier for the run."
+      - name: repo
+        description: "Repository slug the run was recorded against."
+      - name: issue
+        description: "Primary issue number for the run."
+      - name: pr
+        description: "Pull request number when the run opened or updated a PR."
+      - name: trigger
+        description: "GitHub event that started the run."
+      - name: triggered_by
+        description: "Actor or automation that triggered the run."
+      - name: harness
+        description: "Agent harness that executed the run."
+      - name: provider
+        description: "Model provider backing the run."
+      - name: model
+        description: "Raw model name from the harness."
+      - name: model_id
+        description: "Normalized model identifier from the harness model name."
+      - name: escalated_from
+        description: "Earlier model when the run was escalated mid-flight."
+      - name: complexity
+        description: "Complexity class of the work."
+      - name: risk
+        description: "Risk class of the work."
+      - name: work_type
+        description: "Type of work performed (code, docs, spec, review, data)."
+      - name: price_table_version
+        description: "Version stamp of the price table used for costing."
+      - name: price_in_per_mtok
+        description: "Input token price in USD per million tokens."
+      - name: price_cached_per_mtok
+        description: "Cached input token price in USD per million tokens."
+      - name: price_out_per_mtok
+        description: "Output token price in USD per million tokens."
+      - name: requests
+        description: "Number of provider API requests in the run."
+      - name: tokens_in
+        description: "Input tokens, including cached."
+      - name: tokens_cached
+        description: "Cached input tokens."
+      - name: tokens_out
+        description: "Output tokens."
+      - name: tokens_reasoning
+        description: "Reasoning tokens when reported separately."
+      - name: predicted_cost_usd
+        description: "Forecast cost in USD before the run completed."
+      - name: actual_cost_usd
+        description: "Measured or inferred actual cost of the run in USD."
+      - name: cost_method
+        description: "How actual_cost_usd was derived."
+      - name: key_spend_delta_usd
+        description: "Spend delta from provider key metering when used."
+      - name: cost_check
+        description: "Validator outcome comparing predicted vs actual cost."
+      - name: budget_cap_usd
+        description: "Per-issue spend cap in USD at run time."
+      - name: issue_spend_to_date_usd
+        description: "Cumulative issue spend in USD before this run ended."
+      - name: started_at
+        description: "Run start timestamp as stored in the seed."
+      - name: started_at_utc
+        description: "Run start time normalized to UTC."
+      - name: ended_at
+        description: "Run end timestamp as stored in the seed."
+      - name: ended_at_utc
+        description: "Run end time normalized to UTC."
+      - name: duration_s
+        description: "Wall-clock run duration in seconds."
+      - name: actions_minutes
+        description: "GitHub Actions minutes attributed to the run."
+      - name: runner
+        description: "GitHub-hosted or self-hosted runner label."
+      - name: outcome
+        description: "How the run ended (PR opened, failed, cap exceeded, and so on)."
+      - name: gate_passed
+        description: "Whether the run passed the pre-spin-down gate."

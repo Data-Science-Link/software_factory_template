@@ -1,9 +1,8 @@
 # Factory dbt project (dbt-duckdb)
 
-Slice 1 of issue #32: an offline `dbt build` over a DuckDB file, seeded from validated
-run records (`factory/runs/*.json`). One seed (`agent_runs`), one staging view
-(`stg_agent_runs`), and its tests. Marts and the other seeds come in follow-ups
-(slice 2 of #32, then #34).
+Offline `dbt build` over a DuckDB file under `target/`, seeded from validated run records
+(`factory/runs/*.json` or fixtures). Budget numbers come from `factory/budget.yml` via
+`scripts/factory-budget-vars.py`.
 
 ## Setup (venv)
 
@@ -11,102 +10,107 @@ run records (`factory/runs/*.json`). One seed (`agent_runs`), one staging view
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r factory/dbt/requirements-dbt.txt
-export DBT_SEND_ANONYMOUS_USAGE_STATS=false   # disable dbt anonymous usage stats
+export DBT_SEND_ANONYMOUS_USAGE_STATS=false
 ```
 
-## Regenerate the seeds
+Use Python 3.13 or older: dbt 1.11 is not compatible with Python 3.14 (#148).
 
-Sample seeds from committed fixtures (`tests/run-records/pass-*.json`):
+## Regenerate seeds
+
+Committed fixtures (`tests/run-records/pass-*.json` → `tests/dbt/seeds`):
 
 ```bash
 python factory/dbt/runs_to_seeds.py --runs 'tests/run-records/pass-*.json' --out tests/dbt/seeds
 ```
 
-Real seeds from today's run records (defaults; `factory/runs/` is empty on `main`, so
-this writes a header-only CSV):
+Example adopter runs (synthetic, under `examples/sample-runs/`):
+
+```bash
+python factory/dbt/runs_to_seeds.py --runs 'examples/sample-runs/*.json' --out /tmp/sample-dbt-seeds
+```
+
+Live run records (default `factory/runs/`; may be empty on `main`):
 
 ```bash
 python factory/dbt/runs_to_seeds.py
 ```
 
-## Build
+`seed-paths` reads `FACTORY_SEEDS_DIR` (default `seeds` inside this directory).
 
-`seed-paths` reads `FACTORY_SEEDS_DIR` (default `seeds`, i.e. `factory/dbt/seeds`).
-Point it at the sample seeds or run on the real seeds:
+## Build
 
 ```bash
 cd factory/dbt
-FACTORY_SEEDS_DIR=../../tests/dbt/seeds dbt build --profiles-dir .   # sample seeds
-dbt build --profiles-dir .                                           # real seeds
+FACTORY_SEEDS_DIR=../../tests/dbt/seeds dbt build --profiles-dir . \
+  --vars "$(python ../../scripts/factory-budget-vars.py | python -c 'import json,sys; v=json.load(sys.stdin); v["as_of_date"]="2026-11-20"; print(json.dumps(v))')"
 ```
 
-## Notes
+Pin `as_of_date` for reproducible CFO windows and run-rate output.
 
-- dbt is pinned only in `factory/dbt/requirements-dbt.txt` (issue #64); `requirements-factory.txt`
-  no longer installs it, so run jobs that never invoke dbt don't. A dbt CI job (or any dbt
-  user) installs `-r factory/dbt/requirements-dbt.txt`. Run dbt on Python 3.13 or older:
-  dbt 1.11 crashes on 3.14 (#148).
-- `profiles.yml` is in-repo with a relative DuckDB path under `target/` (gitignored):
-  no warehouse, no credentials, works offline.
-- `logs/` and `*.duckdb` are gitignored via `factory/dbt/.gitignore`.
+## Model inventory
 
-## Marts (#33)
+| Layer | Model | Role |
+|-------|--------|------|
+| seed | `agent_runs` | Validated runs CSV |
+| staging | `stg_agent_runs` | Deduped runs, normalized `model_id`, UTC timestamps |
+| mart | `fct_agent_runs` | One row per run with variance, cache rate, gate flags |
+| mart | `agg_spend_daily` | Spend and tokens by UTC day |
+| mart | `agg_spend_by_issue` | Spend and cap headroom per issue |
+| mart | `agg_spend_by_model` | Spend and gate rate per model |
+| mart | `agg_spend_weekly` | ISO week spend vs weekly budget |
+| mart | `agg_spend_monthly` | Calendar month spend vs monthly budget |
+| mart | `fct_forecast_vs_actual` | Forecast error by issue and complexity |
+| mart | `rpt_run_rate` | Month-to-date run rate and projections |
+| mart | `rpt_issue_target_compliance` | Per-issue target/cap compliance + summary row |
+| mart | `mart_model_efficiency` | Gate and cost efficiency by model × harness × provider |
+| mart | `mart_monthly_cfo` | Three-month CFO rollup (spend, budget %, pass rate) |
+| mart | `mart_spend_by_work_type` | Spend share by normalized work type |
 
-Six mart tables under `models/marts/`: `fct_agent_runs` (one row per run with cost
-variance, cache hit rate and first-time gate pass), `agg_spend_daily`, `agg_spend_by_issue`,
-`agg_spend_by_model`, `fct_forecast_vs_actual` (per issue and per complexity) and
-`rpt_run_rate` (month-to-date spend, trailing 7/30-day spend per day, projected month-end,
-budget and Actions minutes usage). They read `stg_agent_runs` through `fct_agent_runs`.
+Schema metadata: `models/staging/schema.yml`, `models/marts/schema.yml`, `models/marts/schema_cfo.yml`.
 
-The budget numbers (per-issue cap, monthly DeepInfra budget, fixed costs, Actions minutes
-quota, warn threshold) are `vars` in `dbt_project.yml`, not seeds, so they're easy to
-override and to swap for `stg_budget` / `stg_fixed_costs` when those land. `rpt_run_rate`
-defaults to today (UTC) and can be pinned for repeatable builds:
+## Singular tests (`tests/`)
+
+| Test | Checks |
+|------|--------|
+| `assert_actual_cost_non_negative` | No negative `actual_cost_usd` in facts |
+| `assert_no_negative_run_costs` | Staging/fact costs stay non-negative |
+| `assert_cost_recomputes` | Price table × tokens matches measured cost |
+| `assert_token_counts_non_negative` | Token counts ≥ 0; cached ≤ input when present |
+| `assert_issue_spend_within_cap` | Issue spend within configured cap |
+| `assert_weekly_budget_math` / `assert_monthly_budget_math` | `budget_used_pct` matches spend ÷ budget |
+| `assert_deepinfra_budget_under_warn` | MTD spend under warn threshold when applicable |
+| `assert_actions_minutes_under_warn` | Actions minutes under warn threshold |
+| `assert_forecast_error_within_100pct` | Forecast error bounds |
+| `assert_forecast_grain_unique` | One row per `(grain, grain_key)` in forecast mart |
+| `assert_model_efficiency_bounds` | Efficiency rates and costs in valid ranges; `run_count > 0` |
+| `assert_model_efficiency_counts_match_runs` | Efficiency mart run totals match `fct_agent_runs` |
+| `assert_cfo_monthly_matches_runs` | `mart_monthly_cfo` spend reconciles to facts (±0.0001 USD) |
+| `assert_work_type_spend_matches_runs` | Work-type mart totals match facts |
+
+Generic `unique` / `not_null` / `accepted_values` tests are declared in the schema YAML files.
+
+## Verification (repo root)
 
 ```bash
-FACTORY_SEEDS_DIR=../../tests/dbt/seeds dbt build --profiles-dir . \
-  --vars '{as_of_date: "2026-11-02"}'
+bash scripts/test-dbt-budget-math.sh
 ```
 
-The financials page (#34) and the remaining seeds/staging models come in follow-ups.
+When dbt is installed, that script runs `dbt build` on the budget-math week fixture, `tests/dbt/seeds`,
+`examples/sample-runs` (via a temp seed dir), and `factory/runs` (temp dir; may be header-only).
+
+## Site export
+
+`scripts/factory-site-data.py` exports whitelisted mart columns to `site-data/marts/*.json` after a build.
+`profiles.yml` uses a relative DuckDB path under `target/` (gitignored); no warehouse credentials.
 
 ## Budget file (#170)
 
-`factory/budget.yml` is the single committed source of budget numbers. Michael's starting
-values (2026-11-11): $10/month, $2.50/week, per-issue target $0.15, per-issue cap $1.00,
-fixed costs $20/month, 2000 Actions minutes/month and an 80% warn threshold.
-
-`scripts/factory-budget-vars.py` reads and validates that file (all keys present, positive,
-weekly ≤ monthly) and prints a JSON object of dbt vars for `dbt build --vars`, mapping
-`monthly_usd` onto the existing `deepinfra_monthly_budget_usd` var and emitting the new
-`weekly_budget_usd` and `issue_target_usd`:
+`factory/budget.yml` is the committed budget source. Starting template values (2026-11-11):
+$10/month variable, $2.50/week, $0.15 issue target, $1.00 issue cap, $20/month fixed costs,
+2000 Actions minutes/month, 80% warn threshold.
 
 ```bash
 cd factory/dbt
 FACTORY_SEEDS_DIR=../../tests/dbt/seeds dbt build --profiles-dir . \
   --vars "$(python ../../scripts/factory-budget-vars.py)"
 ```
-
-## Weekly / monthly spend and issue compliance marts (#170)
-
-Three marts were added for the site:
-
-- `agg_spend_weekly` — spend, runs, issues, weekly budget, percent used and an over-budget
-  flag by ISO week (UTC) across the reporting window; weeks with no runs show 0 spend.
-- `agg_spend_monthly` — the same fields by calendar month (UTC).
-- `rpt_issue_target_compliance` — per issue: total spend, under-target and under-cap flags
-  and run count, plus one summary row.
-
-`factory/dbt/tests/assert_weekly_budget_math.sql` guards that each weekly row's
-`budget_used_pct` matches spend ÷ budget. Build with `as_of_date` pinned for repeatable
-output.
-
-## Site-data export (#170)
-
-`scripts/factory-site-data.py` exports the marts the site needs to
-`site-data/marts/<model>.json`, deterministically sorted: `rpt_run_rate`, `agg_spend_weekly`,
-`agg_spend_monthly`, `agg_spend_by_issue`, `agg_spend_by_model`, `fct_forecast_vs_actual`
-and `rpt_issue_target_compliance`, plus a whitelisted column subset of `fct_agent_runs`.
-`site-data/` is gitignored; the site generator consumes the JSON without needing dbt or
-DuckDB. `scripts/test-factory-site-data.sh` covers budget-vars validation and export
-determinism using the committed fixtures under `tests/site-data/sample-marts/`.

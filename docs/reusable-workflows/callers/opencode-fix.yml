@@ -16,7 +16,7 @@ jobs:
       startsWith(github.event.comment.body, '/oc fix') &&
       github.event.comment.user.login == 'YOUR_OWNER_GITHUB_LOGIN' &&
       github.event.comment.author_association == 'OWNER'
-    uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-opencode-fix.yml@v0.1.0
+    uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-opencode-fix.yml@v0.1.0
     secrets: inherit
     with:
       factory_ref: v0.1.0

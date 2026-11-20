@@ -18,7 +18,32 @@ python3 scripts/factory-owner-pack.py --version v0.1.0 --json     # CI / logs
 
 Fix anything **FAIL** using the remediation command printed in the scorecard. **WARN** rows are acceptable for a dry run; use `--strict` before you flip visibility.
 
+Optional flags:
+
+```bash
+python3 scripts/factory-owner-pack.py --version v0.1.0 --skip-site   # faster; skip site build
+python3 scripts/factory-owner-pack.py --version v0.1.0 --out /tmp/owner-pack.md
+```
+
 Offline tests: `bash scripts/test-factory-owner-pack.sh`.
+
+### Owner-pack gate table (automation on `main`)
+
+| Gate id | Check | Owner doc pointer |
+| --- | --- | --- |
+| `doctor` | `factory-doctor.py` repo health | — |
+| `prepublic` | `factory-prepublic-check.py` hygiene scan | `docs/OWNER_WORKFLOW_SYNC.md` |
+| `models_config` | `factory-models-check.py --json` | `docs/MODEL_SCOUTING.md` |
+| `decision_log` | `factory-decision-log.py check --json` | — |
+| `check_docs` | `factory-check-docs.py` links + script refs | — |
+| `audit_workflows` | `factory-audit-workflows.py` workflow drift | `docs/OWNER_WORKFLOW_SYNC.md` |
+| `shell_hygiene` | `test-shell-hygiene.sh` portable shell tests | — |
+| `examples_smoke` | `test-examples.sh` golden `examples/` validators | — |
+| `reusable_check` | `factory-reusable-check.py` *(skipped if not yet on disk)* | — |
+| `site_smoke` | `factory-site-smoke.py --build` HTML smoke | — |
+| `release` | `factory-release.py` tag / changelog gate | `docs/CRITIC_REVIEW.md` |
+
+The Markdown scorecard ends with pass / warn / fail / skip counts and links to `docs/OWNER_WORKFLOW_SYNC.md`, `docs/CRITIC_REVIEW.md`, and `docs/MODEL_SCOUTING.md`.
 
 ---
 

@@ -78,11 +78,23 @@ def phase_from_record(record: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool) or value is None:
+        return default
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def cache_hit_rate(record: dict[str, Any]) -> float | None:
-    tokens_in = int(record.get("tokens_in") or 0)
+    tokens_in = _safe_int(record.get("tokens_in"), 0)
     if tokens_in <= 0:
         return None
-    return record.get("tokens_cached", 0) / tokens_in
+    tokens_cached = _safe_int(record.get("tokens_cached"), 0)
+    return tokens_cached / tokens_in
 
 
 def docs_cutoff_hit(notes: str) -> bool:
@@ -93,7 +105,13 @@ def docs_cutoff_hit(notes: str) -> bool:
 def attach_issue_sequences(records: list[dict[str, Any]]) -> None:
     by_issue: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
-        by_issue[int(rec["issue"])].append(rec)
+        issue = rec.get("issue")
+        if issue is None:
+            continue
+        try:
+            by_issue[int(issue)].append(rec)
+        except (TypeError, ValueError):
+            continue
     for issue, rows in by_issue.items():
         rows.sort(
             key=lambda r: (
@@ -226,7 +244,11 @@ def load_runs(runs_dir: Path, load_record, validate_record) -> tuple[list[dict],
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             skipped.append(f"{path.name}: {exc}")
             continue
-        errors = validate_record(record, path)
+        try:
+            errors = validate_record(record, path)
+        except Exception as exc:  # noqa: BLE001 — validator/data edge cases
+            skipped.append(f"{path.name}: validation error: {exc}")
+            continue
         if errors:
             skipped.append(f"{path.name}: " + "; ".join(errors[:3]))
             continue

@@ -34,7 +34,7 @@ Aligned with [`.factory/VISION.md`](../VISION.md) §4.
 | **6. Run** | Post `/oc run` (owner account) or tell owner to; watch concurrency and cap. |
 | **7. Gate** | Read run record / PR `Gate:` line; on fail, triage once (escalation) or report; on pass, continue. |
 | **8. PR** | Ensure template + factory-run block; kick `pr-check` / `gitleaks` on bot PRs if needed (`scripts/factory-kick-checks.sh`). |
-| **9. Review** | One **`Factory review`** comment per round (`review-local-pr.md`). |
+| **9. Review** | When wired: read **Factory Critic review**; one **`Factory review`** comment per round (`review-local-pr.md`). |
 | **10. Approval by risk** | Trivial: merge after green CI + gate. Normal/high: **owner gate** on PR body, then merge. |
 | **11. Merge** | Update branch to default; green head; merge commit only; within authority table in `FACTORY.md`. |
 | **12. Logging** | Confirm run record on issue/PR; failed runs still logged. |
@@ -174,8 +174,9 @@ Batch owner decisions at natural pauses — **one chat message**, multiple choic
 
 1. **Gate:** From run record or PR body — all required in-job checks `pass` for reviewable PRs. Any `fail` → triage; PR not ready.
 2. **Bot PR checks:** If `pr-check` / `gitleaks` sit in “waiting for approval”, owner approves workflows on the PR **or** manager runs `bash scripts/factory-kick-checks.sh <PR>` from owner `gh`, then `gh pr checks <PR> --watch`.
-3. **Factory review:** Post one comment per round using `review-local-pr.md` (scope, done checks, template, CI). Tell owner: pass, or fix count + PR link.
-4. **Fix rounds:** Owner says “fix the review on #P” → manager posts `/oc fix` with the numbered list. Before each fix, run `python3 scripts/factory-fix-policy.py` on the issue/PR facts (complexity, issue spend, failed fix rounds, last Verification status). **Simple/standard within budget:** cap at **two** fix rounds per PR, then escalate. **Complex / multi-section / over-target spend:** if the **first** `/oc fix` still fails harness Verification, **do not** start a second fix round — recommendation `stop_and_escalate` (stronger model, cloud agent, or owner). Each fix run is metered; same $1 issue cap applies.
+3. **Independent Critic (when wired, #41):** CI runs `scripts/factory-critic-context.py` then `scripts/factory-critic-run.py` on a separate read-only runner; publish posts **Factory Critic review** (see `docs/CRITIC_REVIEW.md`, `docs/OWNER_WORKFLOW_SYNC.md` §5). **Summarize for the owner:** verdict (`pass` / `needs fixes`), harness verification line, finding count, reviewer vs coder model ids from `critic-meta.txt` / run record; if `needs fixes`, surface the numbered list in the batched checkpoint before offering `/oc fix`. Critic output is **advisory** — still post your **`Factory review`** (`review-local-pr.md`).
+4. **Factory review:** Post one comment per round using `review-local-pr.md` (scope, done checks, template, CI). Tell owner: pass, or fix count + PR link.
+5. **Fix rounds:** Owner says “fix the review on #P” → manager posts `/oc fix` with the numbered list (Critic and/or `Factory review`). Before each fix, run `python3 scripts/factory-fix-policy.py` (JSON or flags: complexity, `--major-sections`, `--issue-spend-usd`, `--failed-fix-rounds`, `--verification-failed-after-last-fix`, `--proposed-fix-round`). **Simple/standard within budget:** cap at **two** fix rounds per PR, then escalate. **Complex / multi-section / over-target spend:** if the **first** `/oc fix` still fails harness Verification, **do not** start a second fix round — `recommendation: stop_and_escalate`. Each fix and **review** run is metered (`work_type: review` in critic records); same **$1** issue cap applies.
 
 ---
 
@@ -215,6 +216,7 @@ Set these up in the manager bot’s scheduler after this skill lands (owner manu
 | Input | Action | Output |
 |---|---|---|
 | Latest factory **site** / marts (`site-data/`, dbt marts) | MTD spend, weekly burn vs `weekly_usd`, forecast error (`fct_forecast_vs_actual`), top issues by spend, Actions minutes | Spend report message to owner (short, phone-readable) |
+| `scripts/factory-model-scout.py` (see `docs/MODEL_SCOUTING.md`, skill `model-scouting.md`) | `--fetch` when online, else `--catalog tests/model-scout/catalog-example.json` offline | **Exit 0:** stay silent. **Exit 2:** open **one** proposal issue with stdout (default markdown); **never** auto-edit `.factory/models.yaml` — owner merges routing changes by hand. **Exit 1:** infra/YAML error only; fix and retry, do not open a proposal |
 
 ### Monthly
 
@@ -259,7 +261,10 @@ The **factory site** (Architecture, Financials, Backlog, dbt tabs) is the financ
 | `factory-approve-spec.py` | Approve draft → posted approved spec |
 | `factory-kick-checks.sh` | Bot PR missing pr-check/gitleaks on head |
 | `factory-run-review.py` | Post-merge cost/review audit (when present) |
+| `factory-critic-context.py` | Build Critic bundle from builder artifacts (CI or offline fixtures) |
+| `factory-critic-run.py` | Run independent reviewer model; `critic-review.md` + review run record |
 | `factory-fix-policy.py` | Before each `/oc fix`: complex-build 1-fix-round circuit breaker |
+| `factory-model-scout.py` | Weekly DeepInfra price / candidate proposals (proposal-only; see `docs/MODEL_SCOUTING.md`) |
 
 ---
 
@@ -269,3 +274,7 @@ The **factory site** (Architecture, Financials, Backlog, dbt tabs) is the financ
 - [`liability-gates.md`](liability-gates.md) — hard stops.
 - [`giver.md`](giver.md) — ledger, decision drafts, challenge (optional).
 - [`local-open-weights-run.md`](local-open-weights-run.md) — fallback when Actions cannot run.
+- [`critic-review.md`](critic-review.md) — Critic artifacts and offline tests.
+- [`model-scouting.md`](model-scouting.md) — scout exit codes and proposal rules.
+- [`../../docs/CRITIC_REVIEW.md`](../../docs/CRITIC_REVIEW.md) — operator guide for the Critic loop.
+- [`../../docs/MODEL_SCOUTING.md`](../../docs/MODEL_SCOUTING.md) — operator guide for weekly scouting.

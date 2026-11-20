@@ -176,10 +176,10 @@ if 'href="https://github.com/example/factory/issues/2"' not in html:
 if 'href="https://github.com/example/factory/issues/5"' not in html:
     raise SystemExit("issue link missing")
 # Sorted issue table: high priority (1,2) before low (5) before none (3).
-m = re.search(r"<h2>Open issues</h2>(.*?)</table>", html, re.S)
-if not m:
-    raise SystemExit("no Open issues table")
-rows = re.findall(r"<tr[^>]*>\s*<th>(high|low|none)</th>", m.group(1))
+tbl = re.search(r'<table id="backlog-issues-table">(.*?)</table>', html, re.S)
+if not tbl:
+    raise SystemExit("no backlog issues table")
+rows = re.findall(r"<tr[^>]*>\s*<th>(high|low|none)</th>", tbl.group(1))
 if rows != ["high", "high", "low", "none"]:
     raise SystemExit("issue table not sorted by priority: %r" % rows)
 PY

@@ -13,6 +13,7 @@ factory/site/base.html.
 import argparse
 import datetime
 import html
+import importlib.util
 import json
 import os
 import re
@@ -32,6 +33,114 @@ TAB_LABELS = (
     ("dbt.html", "dbt"),
 )
 
+FACTORY_LOOP_STAGES = (
+    {
+        "id": "idea",
+        "label": "Idea",
+        "description": (
+            "Work is captured as a GitHub issue that states the desired outcome "
+            "in one sentence."
+        ),
+        "inputs": "Issue title, body, and optional labels.",
+        "outputs": "A tracked issue ready for factory triage.",
+        "guardrails": "No secrets in issue text; one clear outcome per issue.",
+    },
+    {
+        "id": "triage",
+        "label": "Triage",
+        "description": (
+            "The Factory Manager classifies risk, complexity, and whether the "
+            "issue is selected for a run."
+        ),
+        "inputs": "Open issue, labels, and backlog priority.",
+        "outputs": "Risk class, complexity, and selection decision.",
+        "guardrails": "Unselected issues stop; high-risk paths need human gates.",
+    },
+    {
+        "id": "spec",
+        "label": "Spec",
+        "description": (
+            "An approved spec defines scope, files, verification commands, and "
+            "predicted cost before any build runs."
+        ),
+        "inputs": "Selected issue and FACTORY.md conventions.",
+        "outputs": "Machine-readable spec with routing hints.",
+        "guardrails": "Spec lists allowed paths; forbidden paths block the worker.",
+    },
+    {
+        "id": "human-review",
+        "label": "Human Review",
+        "description": (
+            "A human approves the spec (and merge plan) before standard or "
+            "complex work starts."
+        ),
+        "inputs": "Draft spec and predicted cost.",
+        "outputs": "Recorded approval on the issue or PR.",
+        "guardrails": "No build on standard/complex work without approval.",
+    },
+    {
+        "id": "build",
+        "label": "Build",
+        "description": (
+            "A worker agent implements the spec on a feature branch and opens "
+            "or updates a pull request."
+        ),
+        "inputs": "Approved spec, default branch, and toolchain registry.",
+        "outputs": "PR with diff, verification output, and AI disclosure.",
+        "guardrails": "Workers never merge; spend stays under per-issue cap.",
+    },
+    {
+        "id": "verify",
+        "label": "Verify",
+        "description": (
+            "CI and factory scripts run: tests, pr-check, gitleaks, and "
+            "run-record gates."
+        ),
+        "inputs": "Head commit on the PR branch.",
+        "outputs": "Green required checks or a fix loop.",
+        "guardrails": "No bypass hooks; failing gates block merge.",
+    },
+    {
+        "id": "merge",
+        "label": "Merge",
+        "description": (
+            "Merge authority follows risk class: trivial may auto-merge; "
+            "normal and high need a human product gate."
+        ),
+        "inputs": "Green PR, review comments, and merge authority table.",
+        "outputs": "Merged commit on the default branch.",
+        "guardrails": "High-risk and workflow changes need explicit human merge.",
+    },
+    {
+        "id": "monitor",
+        "label": "Monitor",
+        "description": (
+            "Spend, run records, and CI health are tracked against weekly and "
+            "monthly budgets."
+        ),
+        "inputs": "Run records, dbt marts, and budget.yml caps.",
+        "outputs": "Financials tab metrics and budget warnings.",
+        "guardrails": "Warn threshold triggers before hard budget overrun.",
+    },
+    {
+        "id": "feedback",
+        "label": "Feedback",
+        "description": (
+            "Retrospectives update DECISIONS.md, routing, and the backlog for "
+            "the next loop."
+        ),
+        "inputs": "Merged PR, actual cost vs prediction, and review notes.",
+        "outputs": "New issues, spec tweaks, and documented decisions.",
+        "guardrails": "Decisions stay repo-agnostic in published site copy.",
+    },
+)
+
+
+def _page_stem(filename):
+    if filename == "index.html":
+        return "architecture"
+    return filename.replace(".html", "")
+
 
 def esc(value):
     return html.escape(str(value), quote=True)
@@ -50,9 +159,24 @@ def format_percentage(value):
 def build_tabs(active):
     parts = []
     for filename, label in TAB_LABELS:
-        cls = ' class="active"' if filename == active else ""
+        stem = _page_stem(filename)
+        tab_id = "tab-{}".format(stem)
+        panel_id = "panel-{}".format(stem)
+        is_active = filename == active
+        cls = ' class="active"' if is_active else ""
+        selected = "true" if is_active else "false"
+        tabindex = "0" if is_active else "-1"
         parts.append(
-            '<a href="{}"{}>{}</a>'.format(esc(filename), cls, esc(label))
+            '<a href="{}" id="{}" role="tab" aria-selected="{}" '
+            'aria-controls="{}" tabindex="{}"{}>{}</a>'.format(
+                esc(filename),
+                esc(tab_id),
+                selected,
+                esc(panel_id),
+                tabindex,
+                cls,
+                esc(label),
+            )
         )
     return "\n      ".join(parts)
 
@@ -201,10 +325,17 @@ def render_loop_cards(steps):
 
 
 def loop_svg():
-    """Inline SVG loop diagram: ideas -> ... -> feedback. Deterministic, offline."""
+    """Inline SVG loop diagram for the nine factory stages. Deterministic, offline."""
     stages = [
-        "ideas", "triage", "spec", "human review", "implement",
-        "review", "verify", "ship", "monitor", "feedback",
+        "idea",
+        "triage",
+        "spec",
+        "review",
+        "build",
+        "verify",
+        "merge",
+        "monitor",
+        "feedback",
     ]
     node_w = 96
     node_h = 38
@@ -642,6 +773,137 @@ tr:nth-child(even) td { background: var(--fs-row-alt); }
 }
 .sortable-table th.sortable[data-sort-dir="asc"]::after { content: " \\2191"; }
 .sortable-table th.sortable[data-sort-dir="desc"]::after { content: " \\2193"; }
+.dbt-filter {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+}
+.dbt-search {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.3rem;
+  background: var(--fs-bg);
+  color: var(--fs-text);
+  font: inherit;
+}
+.dbt-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+.dbt-filter-count { font-size: 0.85rem; color: var(--fs-muted); margin: 0.35rem 0 0; }
+.dbt-meta-badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-accent-soft);
+  color: var(--fs-text);
+}
+#dbt-models-table tbody tr.is-filtered-out { display: none; }
+.dbt-model.is-filtered-out { display: none; }
+.dbt-lineage .dbt-lineage-node { cursor: pointer; }
+.dbt-lineage.is-muted .dbt-lineage-node,
+.dbt-lineage.is-muted .dbt-lineage-edge { opacity: 0.22; }
+.dbt-lineage.is-muted .dbt-lineage-node.is-lineage-focus,
+.dbt-lineage.is-muted .dbt-lineage-node.is-lineage-related,
+.dbt-lineage.is-muted .dbt-lineage-edge.is-lineage-focus { opacity: 1; }
+.dbt-lineage-node.is-lineage-focus rect { stroke: var(--fs-accent); stroke-width: 2.2; }
+.dbt-lineage-node.is-lineage-related rect { stroke: var(--fs-accent); stroke-width: 1.6; }
+.config-summary.card {
+  margin: 1rem 0 1.25rem;
+  padding: 1rem 1.15rem;
+  border-radius: 0.35rem;
+  box-shadow: var(--fs-shadow);
+}
+.config-summary h3 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+.config-dl { margin: 0; display: grid; grid-template-columns: 9rem 1fr; gap: 0.45rem 1rem; }
+.config-dl dt { margin: 0; font-weight: 600; color: var(--fs-muted); }
+.config-dl dd { margin: 0; }
+.note-inline { color: var(--fs-muted); font-style: italic; }
+.config-tier-list { margin: 0.25rem 0 0; padding-left: 1.25rem; }
+.factory-loop-interactive { margin: 0.75rem 0 1.5rem; }
+.loop-stage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.loop-stage-btn {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-surface);
+  color: var(--fs-text);
+  cursor: pointer;
+}
+.loop-stage-btn:hover { border-color: var(--fs-accent); }
+.loop-stage-btn:focus-visible {
+  outline: 2px solid var(--fs-accent);
+  outline-offset: 2px;
+}
+.loop-stage-btn.is-active {
+  background: var(--fs-accent-soft);
+  border-color: var(--fs-accent);
+  font-weight: 600;
+}
+.loop-stage-detail {
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  padding: 0.85rem 1rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+  margin-bottom: 0.85rem;
+}
+.loop-stage-detail h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.loop-stage-detail dl { margin: 0.35rem 0 0; }
+.loop-stage-detail dt { font-weight: 600; margin-top: 0.35rem; }
+.loop-stage-detail dd { margin: 0.15rem 0 0 0; color: var(--fs-text); }
+.loop-stage-placeholder { margin: 0; color: var(--fs-muted); }
+nav.tabs a[role="tab"]:focus-visible {
+  outline: 2px solid var(--fs-accent);
+  outline-offset: 2px;
+}
+@media print {
+  #theme-toggle,
+  .copy-btn,
+  .btn-secondary,
+  .backlog-filter,
+  .dbt-filter,
+  .filter-pills,
+  .loop-stage-bar,
+  .financials-runs-toolbar { display: none !important; }
+  body { background: #fff; color: #000; }
+  .site-header {
+    background: #fff;
+    color: #000;
+    box-shadow: none;
+    border-bottom: 1px solid #ccc;
+  }
+  .site-header h1 { color: #000; }
+  .tabs a {
+    background: #eee;
+    color: #000;
+    border: 1px solid #bbb;
+  }
+  .tabs a.active { background: #fff; font-weight: 700; }
+  .content { max-width: none; margin: 0; padding: 0.5rem 0; }
+  table, .card, .loop-stage-detail, .config-summary {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  a[href]::after { content: none !important; }
+}
 </style>"""
 
 
@@ -841,14 +1103,178 @@ def site_enhancement_script():
       });
     });
   }
+
+  var dbtFilter = document.getElementById("dbt-filter-bar");
+  var dbtSvg = document.querySelector("svg.dbt-lineage");
+  var dbtGraphEl = document.getElementById("dbt-lineage-graph");
+  var dbtClear = document.getElementById("dbt-lineage-clear");
+  var dbtSearch = document.getElementById("dbt-model-search");
+  var dbtCount = document.getElementById("dbt-filter-count");
+  var dbtGraph = null;
+  if (dbtGraphEl && dbtGraphEl.textContent) {
+    try { dbtGraph = JSON.parse(dbtGraphEl.textContent); } catch (e) {}
+  }
+  function dbtApplySearch() {
+    if (!dbtFilter) return;
+    var q = (dbtSearch && dbtSearch.value || "").trim().toLowerCase();
+    var rows = dbtFilter.querySelectorAll(".dbt-model-row");
+    var sections = document.querySelectorAll(".dbt-model");
+    var shown = 0;
+    rows.forEach(function (row) {
+      var blob = (row.getAttribute("data-search") || "").toLowerCase();
+      var match = !q || blob.indexOf(q) !== -1;
+      row.classList.toggle("is-filtered-out", !match);
+      if (match) shown += 1;
+    });
+    sections.forEach(function (sec) {
+      var blob = (sec.getAttribute("data-search") || "").toLowerCase();
+      var match = !q || blob.indexOf(q) !== -1;
+      sec.classList.toggle("is-filtered-out", !match);
+    });
+    if (dbtCount) {
+      dbtCount.textContent = "Showing " + shown + " of " + rows.length + " models";
+    }
+  }
+  function dbtClearLineage() {
+    if (!dbtSvg) return;
+    dbtSvg.classList.remove("is-muted");
+    dbtSvg.querySelectorAll(".is-lineage-focus, .is-lineage-related").forEach(function (el) {
+      el.classList.remove("is-lineage-focus", "is-lineage-related");
+    });
+    dbtSvg.querySelectorAll(".dbt-lineage-edge").forEach(function (el) {
+      el.classList.remove("is-lineage-focus");
+    });
+  }
+  function dbtHighlightLineage(modelName) {
+    if (!dbtSvg || !dbtGraph || !modelName) return;
+  dbtClearLineage();
+    var meta = (dbtGraph.nodes || {})[modelName];
+    if (!meta) return;
+    var related = {};
+    related[modelName] = true;
+    (dbtGraph.upstream[modelName] || []).forEach(function (n) { related[n] = true; });
+    (dbtGraph.downstream[modelName] || []).forEach(function (n) { related[n] = true; });
+    dbtSvg.classList.add("is-muted");
+    dbtSvg.querySelectorAll(".dbt-lineage-node").forEach(function (g) {
+      var name = g.getAttribute("data-model") || "";
+      if (name === modelName) g.classList.add("is-lineage-focus");
+      else if (related[name]) g.classList.add("is-lineage-related");
+    });
+    dbtSvg.querySelectorAll(".dbt-lineage-edge").forEach(function (line) {
+      var from = line.getAttribute("data-from") || "";
+      var to = line.getAttribute("data-to") || "";
+      if (from === modelName || to === modelName) line.classList.add("is-lineage-focus");
+      else if (related[from] && related[to]) line.classList.add("is-lineage-focus");
+    });
+  }
+  if (dbtSearch) dbtSearch.addEventListener("input", dbtApplySearch);
+  if (dbtFilter) dbtApplySearch();
+  if (dbtSvg && dbtGraph) {
+    dbtSvg.querySelectorAll(".dbt-lineage-node").forEach(function (g) {
+      g.addEventListener("click", function () {
+        dbtHighlightLineage(g.getAttribute("data-model") || "");
+      });
+    });
+  }
+  if (dbtClear) {
+    dbtClear.addEventListener("click", dbtClearLineage);
+  }
+
+  var tabNav = document.querySelector('nav.tabs[role="tablist"]');
+  if (tabNav) {
+    var headerTabs = Array.prototype.slice.call(
+      tabNav.querySelectorAll('a[role="tab"]')
+    );
+    tabNav.addEventListener("keydown", function (ev) {
+      if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+      var idx = headerTabs.indexOf(document.activeElement);
+      if (idx < 0) return;
+      ev.preventDefault();
+      var next = ev.key === "ArrowRight" ? idx + 1 : idx - 1;
+      if (next < 0) next = headerTabs.length - 1;
+      if (next >= headerTabs.length) next = 0;
+      headerTabs[next].focus();
+    });
+  }
+
+  var loopRoot = document.getElementById("factory-loop-interactive");
+  if (loopRoot) {
+    var dataEl = document.getElementById("loop-stages-data");
+    var detail = document.getElementById("loop-stage-detail");
+    var stageMap = {};
+    if (dataEl && dataEl.textContent) {
+      try {
+        (JSON.parse(dataEl.textContent) || []).forEach(function (s) {
+          if (s && s.id) stageMap[s.id] = s;
+        });
+      } catch (e) {}
+    }
+    var loopButtons = Array.prototype.slice.call(
+      loopRoot.querySelectorAll(".loop-stage-btn")
+    );
+    function loopDetailHtml(stage) {
+      return (
+        "<h3>" + stage.label + "</h3>" +
+        "<p>" + stage.description + "</p>" +
+        "<dl><dt>Inputs</dt><dd>" + stage.inputs + "</dd>" +
+        "<dt>Outputs</dt><dd>" + stage.outputs + "</dd>" +
+        "<dt>Guardrails</dt><dd>" + stage.guardrails + "</dd></dl>"
+      );
+    }
+    function selectLoopStage(btn) {
+      loopButtons.forEach(function (b) {
+        var on = b === btn;
+        b.classList.toggle("is-active", on);
+        b.setAttribute("aria-selected", on ? "true" : "false");
+        b.tabIndex = on ? 0 : -1;
+      });
+      var sid = btn.getAttribute("data-stage");
+      var stage = sid ? stageMap[sid] : null;
+      if (stage && detail) {
+        detail.innerHTML = loopDetailHtml(stage);
+      }
+    }
+    loopButtons.forEach(function (btn, index) {
+      btn.addEventListener("click", function () { selectLoopStage(btn); });
+      btn.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          selectLoopStage(btn);
+          return;
+        }
+        if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+        ev.preventDefault();
+        var next = ev.key === "ArrowRight" ? index + 1 : index - 1;
+        if (next < 0) next = loopButtons.length - 1;
+        if (next >= loopButtons.length) next = 0;
+        loopButtons[next].focus();
+        selectLoopStage(loopButtons[next]);
+      });
+    });
+    if (loopButtons.length) selectLoopStage(loopButtons[0]);
+  }
 })();
 </script>"""
 
 
-def enhance_page_html(html):
+def enhance_page_html(html, active_filename="index.html"):
     """Inject shared offline UX (theme, filters, export, copy) into rendered HTML."""
+    stem = _page_stem(active_filename)
+    panel_id = "panel-{}".format(stem)
+    tab_id = "tab-{}".format(stem)
     if "</head>" in html:
         html = html.replace("</head>", site_enhancement_css() + "\n</head>", 1)
+    html = html.replace(
+        '<nav class="tabs" aria-label="Site tabs">',
+        '<nav class="tabs" role="tablist" aria-label="Site tabs">',
+        1,
+    )
+    html = html.replace(
+        "<main class=\"content\">",
+        '<main class="content" id="{}" role="tabpanel" aria-labelledby="{}" '
+        'tabindex="0">'.format(panel_id, tab_id),
+        1,
+    )
     marker = '<header class="site-header">\n  <h1>'
     if marker in html:
         html = html.replace(
@@ -896,15 +1322,161 @@ def when_text(when):
     return str(when)
 
 
+def load_mode(repo_root):
+    path = Path(repo_root) / ".factory" / "mode.yml"
+    if not path.is_file():
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    mode = data.get("mode")
+    return str(mode) if mode is not None else None
+
+
+def _json_script_payload(data):
+    payload = json.dumps(data, separators=(",", ":"), ensure_ascii=True)
+    return payload.replace("</", "<\\/")
+
+
+def render_active_factory_config(repo_root, models_data):
+    """Live summary from mode.yml, models.yaml, and factory/budget.yml when present."""
+    parts = [
+        "<h2>Active Factory Configuration</h2>",
+        '<div id="active-factory-config" class="config-summary card">',
+        "<h3>Live configuration</h3>",
+        '<dl class="config-dl">',
+    ]
+
+    mode_path = Path(repo_root) / ".factory" / "mode.yml"
+    if mode_path.is_file():
+        mode = load_mode(repo_root)
+        parts.append(
+            "<dt>Factory mode</dt><dd>{}</dd>".format(
+                esc(mode if mode else "(unset in mode.yml)")
+            )
+        )
+    else:
+        parts.append(
+            '<dt>Factory mode</dt><dd class="note-inline">'
+            ".factory/mode.yml not found</dd>"
+        )
+
+    models_path = Path(repo_root) / ".factory" / "models.yaml"
+    models = models_data.get("models") if models_data else None
+    if models_path.is_file() and models:
+        tier_lines = []
+        for entry in models:
+            model_id = entry.get("id", "")
+            if not model_id:
+                continue
+            status = entry.get("status") or "unspecified"
+            price_in = entry.get("price_in_per_mtok")
+            price_out = entry.get("price_out_per_mtok")
+            price_bit = ""
+            if price_in is not None and price_out is not None:
+                price_bit = " · ${}/{} in/out per Mtok".format(price_in, price_out)
+            tier_lines.append("{} ({}){}".format(model_id, status, price_bit))
+        if tier_lines:
+            parts.append(
+                "<dt>Model tiers</dt><dd><ul class=\"config-tier-list\">"
+            )
+            for line in tier_lines:
+                parts.append("<li>{}</li>".format(esc(line)))
+            parts.append("</ul></dd>")
+        else:
+            parts.append(
+                '<dt>Model tiers</dt><dd class="note-inline">'
+                "models key empty in models.yaml</dd>"
+            )
+        rules = models_data.get("routing_rules") or []
+        if rules:
+            parts.append(
+                "<dt>Routing rules</dt><dd>{} active rules "
+                "(first match wins)</dd>".format(len(rules))
+            )
+    else:
+        parts.append(
+            '<dt>Model tiers</dt><dd class="note-inline">'
+            ".factory/models.yaml not found or has no models list</dd>"
+        )
+
+    budget_path = Path(repo_root) / "factory" / "budget.yml"
+    budget = _load_budget(repo_root)
+    if budget_path.is_file() and budget:
+        weekly = budget.get("weekly_usd")
+        monthly = budget.get("monthly_usd")
+        weekly_s = (
+            format_currency(float(weekly))
+            if weekly is not None
+            else "not set"
+        )
+        monthly_s = (
+            format_currency(float(monthly))
+            if monthly is not None
+            else "not set"
+        )
+        parts.append(
+            "<dt>Budget caps</dt><dd>Weekly {} · Monthly {}</dd>".format(
+                esc(weekly_s), esc(monthly_s)
+            )
+        )
+    else:
+        parts.append(
+            '<dt>Budget caps</dt><dd class="note-inline">'
+            "factory/budget.yml not found</dd>"
+        )
+
+    parts.append("</dl></div>")
+    return "\n".join(parts)
+
+
+def render_interactive_factory_loop():
+    """Nine-stage loop strip with inspectable detail panel and inline SVG."""
+    parts = [
+        '<div id="factory-loop-interactive" class="factory-loop-interactive">',
+        '<div class="loop-stage-bar" role="tablist" aria-label="Factory loop stages">',
+    ]
+    for stage in FACTORY_LOOP_STAGES:
+        parts.append(
+            '<button type="button" class="loop-stage-btn" role="tab" '
+            'id="loop-stage-{}" data-stage="{}" aria-selected="false" '
+            'aria-controls="loop-stage-detail" tabindex="-1">{}</button>'.format(
+                esc(stage["id"]),
+                esc(stage["id"]),
+                esc(stage["label"]),
+            )
+        )
+    parts.append("</div>")
+    parts.append(
+        '<div id="loop-stage-detail" class="loop-stage-detail" role="tabpanel" '
+        'aria-live="polite" tabindex="0">'
+        '<p class="loop-stage-placeholder">Select a stage to inspect its '
+        "description, inputs, outputs, and guardrails.</p></div>"
+    )
+    parts.append(
+        '<script type="application/json" id="loop-stages-data">'
+        + _json_script_payload(list(FACTORY_LOOP_STAGES))
+        + "</script>"
+    )
+    parts.append(loop_svg())
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
 def architecture_html(repo_root, models_data, factory_md):
     parts = []
+
+    # Live config summary from repo YAML when present.
+    parts.append(render_active_factory_config(repo_root, models_data))
 
     # Newcomer pitch.
     parts.append(newcomer_pitch())
 
-    # Inline SVG loop diagram.
+    # Interactive nine-stage loop with inline SVG.
     parts.append("<h2>The loop</h2>")
-    parts.append(loop_svg())
+    parts.append(render_interactive_factory_loop())
 
     # Loop step cards.
     parts.append("<h2>Loop steps</h2>")
@@ -1102,6 +1674,7 @@ def _assert_non_negative_spend(collection, name):
         "predicted_usd",
         "actual_usd",
         "total_cost_usd",
+        "total_actual_cost_usd",
     )
     for item in collection:
         if not isinstance(item, dict):
@@ -1255,6 +1828,17 @@ def _mart_rows(marts, repo_root, name):
     return queried if queried is not None else []
 
 
+def _compute_mart_spend_by_work_type(agent_rows):
+    """Derive mart_spend_by_work_type from fct_agent_runs when JSON/DuckDB are absent."""
+    path = Path(__file__).with_name("factory-site-data.py")
+    spec = importlib.util.spec_from_file_location("factory_site_data", path)
+    if spec is None or spec.loader is None:
+        return []
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.compute_mart_spend_by_work_type(agent_rows)
+
+
 def _fmt_fin_currency(value):
     if value is None:
         return "—"
@@ -1335,6 +1919,52 @@ def _render_model_efficiency_table(rows):
     return "\n".join(parts)
 
 
+def _render_spend_by_work_type_table(rows):
+    if not rows:
+        return '<p class="note">No spend-by-work-type data available.</p>'
+    parts = [
+        '<table id="spend-by-work-type-table">',
+        "<thead><tr>",
+        "<th>Work type</th><th>Runs</th><th>Pass rate</th>",
+        "<th>Total cost</th><th>Share of spend</th><th>Avg cost</th>",
+        "<th>Tokens (in / cached / out)</th>",
+        "</tr></thead><tbody>",
+    ]
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (
+            -float(r.get("total_actual_cost_usd") or 0),
+            -int(r.get("run_count") or 0),
+            str(r.get("work_type", "")),
+        ),
+    )
+    for row in sorted_rows:
+        tin = row.get("total_tokens_in")
+        tcached = row.get("total_tokens_cached")
+        tout = row.get("total_tokens_out")
+        tokens_s = "—"
+        if tin is not None or tcached is not None or tout is not None:
+            tokens_s = "{:,} / {:,} / {:,}".format(
+                int(tin or 0),
+                int(tcached or 0),
+                int(tout or 0),
+            )
+        parts.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td>"
+            "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(row.get("work_type", "—")),
+                esc(row.get("run_count", "—")),
+                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
+                esc(_fmt_fin_currency(row.get("total_actual_cost_usd"))),
+                esc(_fmt_fin_pct(row.get("cost_share_pct"))),
+                esc(_fmt_fin_currency(row.get("avg_cost_usd"))),
+                esc(tokens_s),
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
 def financials_html(data_dir, repo_root=".", as_of_utc=None):
     """Generate the Financials tab content from marts data."""
     marts_dir, marts = _load_marts(data_dir)
@@ -1360,6 +1990,9 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
     fct_agent_runs = marts.get("fct_agent_runs", [])
     mart_model_efficiency = _mart_rows(marts, repo_root, "mart_model_efficiency")
     mart_monthly_cfo = _mart_rows(marts, repo_root, "mart_monthly_cfo")
+    mart_spend_by_work_type = _mart_rows(marts, repo_root, "mart_spend_by_work_type")
+    if not mart_spend_by_work_type and fct_agent_runs:
+        mart_spend_by_work_type = _compute_mart_spend_by_work_type(fct_agent_runs)
 
     _assert_non_negative_spend(rpt_run_rate, "rpt_run_rate")
     _assert_non_negative_spend(agg_spend_weekly, "agg_spend_weekly")
@@ -1376,6 +2009,9 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
                 raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
         _assert_non_negative_spend(collection, name)
     _assert_non_negative_spend(mart_model_efficiency, "mart_model_efficiency")
+    _assert_non_negative_spend(
+        mart_spend_by_work_type, "mart_spend_by_work_type"
+    )
     for row in mart_monthly_cfo:
         if not isinstance(row, dict):
             raise ValueError(
@@ -1466,6 +2102,12 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
         '<h2>Monthly CFO summary <small>(source: mart_monthly_cfo)</small></h2>'
     )
     parts.append(_render_monthly_cfo_table(mart_monthly_cfo))
+
+    parts.append(
+        '<h2>Spend by Work Type (Coding vs. Review) '
+        "<small>(source: mart_spend_by_work_type)</small></h2>"
+    )
+    parts.append(_render_spend_by_work_type_table(mart_spend_by_work_type))
 
     parts.append(
         "<h2>Per-Issue Economics <small>(sources: agg_spend_by_issue, rpt_issue_target_compliance)</small></h2>"
@@ -1848,6 +2490,51 @@ DBT_LAYERS = ("seed", "staging", "marts")
 DBT_LAYER_DEPTH = {"seed": 0, "staging": 1, "marts": 2, "other": 3}
 
 
+def _dbt_export_module():
+    path = Path(__file__).with_name("factory-site-dbt-export.py")
+    spec = importlib.util.spec_from_file_location("factory_site_dbt_export", path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _dbt_offline_manifest_roots(repo_root):
+    repo = Path(repo_root)
+    template_root = Path(__file__).resolve().parent.parent
+    if (repo / "factory" / "dbt" / "models").is_dir():
+        return [repo]
+    if _dbt_manifest_path(repo_root).is_file():
+        return [template_root]
+    if (repo / "factory" / "dbt" / "target").is_dir():
+        return [template_root]
+    return [repo]
+
+
+def _dbt_manifest_for_site(repo_root):
+    export = _dbt_export_module()
+    offline = None
+    if export is not None:
+        for root in _dbt_offline_manifest_roots(repo_root):
+            candidate = export.build_offline_manifest(root)
+            model_count = sum(
+                1
+                for n in (candidate.get("nodes") or {}).values()
+                if isinstance(n, dict) and n.get("resource_type") == "model"
+            )
+            if model_count:
+                offline = candidate
+                break
+    manifest_path = _dbt_manifest_path(repo_root)
+    on_disk = _load_json(manifest_path) if manifest_path.is_file() else None
+    if offline is None:
+        return on_disk
+    if on_disk is None:
+        return offline
+    return export.merge_manifests(on_disk, offline)
+
+
 def _dbt_manifest_path(repo_root):
     return Path(repo_root) / "factory" / "dbt" / "target" / "manifest.json"
 
@@ -1977,32 +2664,108 @@ def _dbt_docs_banner(out_dir):
     )
 
 
+def _dbt_badge(value, label):
+    return '<span class="dbt-meta-badge" title="{}">{}</span>'.format(
+        esc(label), esc(str(value))
+    )
+
+
+def _dbt_model_search_blob(node):
+    bits = [
+        node.get("name") or "",
+        _dbt_layer(node),
+        _dbt_materialization(node),
+        _dbt_description(node),
+    ]
+    return " ".join(bits)
+
+
+def _dbt_filter_toolbar(model_count):
+    return "\n".join(
+        [
+            '<div class="dbt-filter" id="dbt-filter-bar">',
+            '<label class="backlog-search-label" for="dbt-model-search">'
+            "Filter models</label>",
+            '<input type="search" id="dbt-model-search" class="dbt-search" '
+            'autocomplete="off" placeholder="Name, layer, or description" />',
+            '<div class="dbt-filter-toolbar">',
+            '<button type="button" class="btn-secondary" id="dbt-lineage-clear">'
+            "Clear lineage highlight</button>",
+            "</div>",
+            '<p class="dbt-filter-count" id="dbt-filter-count">Showing '
+            "{} of {} models</p>".format(model_count, model_count),
+            "</div>",
+        ]
+    )
+
+
+def _dbt_lineage_graph_json(nodes, upstream, downstream, by_id):
+    graph = {"nodes": {}, "upstream": {}, "downstream": {}}
+    for node in nodes:
+        name = node.get("name") or ""
+        if not name:
+            continue
+        uid = node.get("unique_id") or ""
+        graph["nodes"][name] = {"unique_id": uid, "layer": _dbt_layer(node)}
+        up = []
+        for parent_id in upstream.get(uid) or []:
+            parent = by_id.get(parent_id)
+            if parent and parent.get("name"):
+                up.append(parent["name"])
+        down = []
+        for child_id in downstream.get(uid) or []:
+            child = by_id.get(child_id)
+            if child and child.get("name"):
+                down.append(child["name"])
+        graph["upstream"][name] = sorted(up)
+        graph["downstream"][name] = sorted(down)
+    payload = json.dumps(graph, sort_keys=True, separators=(",", ":"))
+    payload = payload.replace("</", "<\\/")
+    return (
+        '<script type="application/json" id="dbt-lineage-graph">'
+        + payload
+        + "</script>"
+    )
+
+
 def _dbt_model_table(nodes, by_name, test_counts):
     if not nodes:
         return '<p class="note">No models found in manifest.</p>'
-    header = [
-        "Name",
-        "Layer",
-        "Materialization",
-        "Description",
-        "Columns",
-        "Tests",
+    parts = [
+        '<table id="dbt-models-table"><thead><tr>',
+        "<th>Name</th><th>Layer</th><th>Materialization</th>",
+        "<th>Description</th><th>Columns</th><th>Tests</th>",
+        "</tr></thead><tbody>",
     ]
-    rows = [header]
     for node in nodes:
         uid = node.get("unique_id") or ""
         name = node.get("name") or ""
-        rows.append(
-            [
-                name,
-                _dbt_layer(node),
-                _dbt_materialization(node),
-                _dbt_description(node),
-                str(_dbt_column_count(node)),
-                str(test_counts.get(uid, 0)),
-            ]
+        col_count = _dbt_column_count(node)
+        test_count = test_counts.get(uid, 0)
+        parts.append(
+            '<tr class="dbt-model-row" data-search="{}">'.format(
+                esc(_dbt_model_search_blob(node))
+            )
         )
-    return render_table(rows)
+        parts.append(
+            '<td><a href="#model-{}">{}</a></td>'.format(esc(name), esc(name))
+        )
+        parts.append("<td>{}</td>".format(esc(_dbt_layer(node))))
+        parts.append("<td>{}</td>".format(esc(_dbt_materialization(node))))
+        parts.append("<td>{}</td>".format(esc(_dbt_description(node))))
+        parts.append(
+            "<td>{}</td>".format(
+                _dbt_badge(col_count, "Column count") if col_count else "—"
+            )
+        )
+        parts.append(
+            "<td>{}</td>".format(
+                _dbt_badge(test_count, "Attached tests") if test_count else "—"
+            )
+        )
+        parts.append("</tr>")
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
 
 
 def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
@@ -2011,7 +2774,11 @@ def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
     for node in nodes:
         uid = node.get("unique_id") or ""
         name = node.get("name") or ""
-        parts.append('<section class="dbt-model" id="model-{}">'.format(esc(name)))
+        parts.append(
+            '<section class="dbt-model" id="model-{}" data-search="{}">'.format(
+                esc(name), esc(_dbt_model_search_blob(node))
+            )
+        )
         parts.append("<h3>{}</h3>".format(esc(name)))
         parts.append("<p>{}</p>".format(esc(_dbt_description(node))))
         up_links = []
@@ -2082,6 +2849,7 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
     height = margin * 2 + max_rows * (node_h + gap_y)
     width = margin * 2 + len(DBT_LAYERS) * col_w + (len(DBT_LAYERS) - 1) * gap_x
     positions = {}
+    by_uid = {n.get("unique_id"): n for n in nodes if n.get("unique_id")}
     parts = [
         '<svg class="dbt-lineage" viewBox="0 0 {} {}" role="img" '
         'aria-label="dbt model lineage by layer">'.format(width, height)
@@ -2105,6 +2873,12 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
             name = node.get("name") or ""
             positions[uid] = (x + col_w / 2, y + node_h / 2, x, y)
             parts.append(
+                '<g class="dbt-lineage-node" data-model="{}" tabindex="0" '
+                'role="button" aria-label="Highlight lineage for {}">'.format(
+                    esc(name), esc(name)
+                )
+            )
+            parts.append(
                 '<rect x="{}" y="{}" width="{}" height="{}" rx="5" '
                 'fill="#eef0f4" stroke="#1f2430" stroke-width="1.2"/>'.format(
                     x, y, col_w, node_h
@@ -2117,26 +2891,30 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
                     x + col_w / 2, y + node_h / 2 + 3, esc(label)
                 )
             )
+            parts.append("</g>")
     for node in nodes:
         uid = node.get("unique_id")
         if uid not in positions:
             continue
+        to_name = node.get("name") or ""
         cx, cy, _, _ = positions[uid]
         for parent_id in upstream.get(uid) or []:
             if parent_id not in positions:
                 continue
-            px, py, plx, ply = positions[parent_id]
-            _, _, px0, py0 = positions[parent_id]
-            _, _, nx0, ny0 = positions[uid]
-            # parent right edge to child left edge
+            px, py, _, _ = positions[parent_id]
+            _, _, px0, _ = positions[parent_id]
+            _, _, nx0, _ = positions[uid]
             x1 = px0 + col_w
             y1 = py
             x2 = nx0
             y2 = cy
+            par_node = by_uid.get(parent_id)
+            from_name = (par_node.get("name") or "") if par_node else ""
             parts.append(
-                '<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
+                '<line class="dbt-lineage-edge" data-from="{}" data-to="{}" '
+                'x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
                 'stroke-width="1.5" marker-end="url(#dbt-arrow)"/>'.format(
-                    x1, y1, x2, y2
+                    esc(from_name), esc(to_name), x1, y1, x2, y2
                 )
             )
     parts.append("</svg>")
@@ -2144,8 +2922,7 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
 
 
 def dbt_html(repo_root, out_dir):
-    manifest_path = _dbt_manifest_path(repo_root)
-    manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    manifest = _dbt_manifest_for_site(repo_root)
     if manifest is None:
         return placeholder_html("dbt")
 
@@ -2170,19 +2947,26 @@ def dbt_html(repo_root, out_dir):
 
     by_name = _dbt_unique_by_name(nodes)
     test_counts, test_names = _dbt_tests_by_model(manifest)
-    upstream, downstream, _by_id = _dbt_lineage_sets(nodes)
+    upstream, downstream, by_id = _dbt_lineage_sets(nodes)
 
     parts = [
         "<h2>dbt</h2>",
         _dbt_docs_banner(out_dir),
-        "<p>Models and lineage for the factory cost dataset (from manifest.json).</p>",
+        "<p>Models and lineage for the factory cost dataset "
+        "(manifest plus offline schema/SQL discovery).</p>",
     ]
     if catalog_note:
         parts.append(catalog_note)
     parts.append("<h2>Models</h2>")
+    parts.append(_dbt_filter_toolbar(len(nodes)))
     parts.append(_dbt_model_table(nodes, by_name, test_counts))
     parts.append("<h2>Lineage</h2>")
+    parts.append(
+        '<p class="note">Click a node to highlight upstream and downstream lineage. '
+        "Works without JavaScript as a static diagram.</p>"
+    )
     parts.append(_dbt_lineage_svg(nodes, upstream, by_name))
+    parts.append(_dbt_lineage_graph_json(nodes, upstream, downstream, by_id))
     parts.append(_dbt_model_details(nodes, by_name, upstream, downstream, test_names))
     return "\n".join(parts)
 
@@ -2263,7 +3047,7 @@ def main() -> None:
             version=esc(version),
             build_time=esc(now),
         )
-        body = enhance_page_html(body)
+        body = enhance_page_html(body, filename)
         with open(out_dir / filename, "w", encoding="utf-8") as fh:
             fh.write(body)
         written.append(filename)
