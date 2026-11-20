@@ -174,13 +174,15 @@ else bad "agent-fix: prompt content"; fi
 prompt_case "bare /oc fix uses the review comments" ok "/oc fix"
 prompt_case "/oc fixup is not /oc fix" fail "/oc fixup now"
 cp "$work/pa/fix-meta.txt" "$work/meta.bak"
-sed -i 's/^owner_comments=.*/owner_comments=0/' "$work/pa/fix-meta.txt"
+sed 's/^owner_comments=.*/owner_comments=0/' "$work/pa/fix-meta.txt" >"$work/pa/fix-meta.txt.tmp" \
+  && mv "$work/pa/fix-meta.txt.tmp" "$work/pa/fix-meta.txt"
 prompt_case "bare /oc fix with no owner comments refused" fail "/oc fix"
 cp "$work/meta.bak" "$work/pa/fix-meta.txt"
 echo '{}' >"$prdir/opencode.json"
 prompt_case "PR head with its own opencode.json refused" fail "/oc fix x"
 cp opencode.json "$prdir/opencode.json"
-sed -i "s/^head_sha=.*/head_sha=$SHA_B/" "$work/pa/fix-meta.txt"
+sed "s/^head_sha=.*/head_sha=$SHA_B/" "$work/pa/fix-meta.txt" >"$work/pa/fix-meta.txt.tmp" \
+  && mv "$work/pa/fix-meta.txt.tmp" "$work/pa/fix-meta.txt"
 prompt_case "checkout not at the context head refused" fail "/oc fix x"
 cp "$work/meta.bak" "$work/pa/fix-meta.txt"
 
@@ -298,7 +300,9 @@ publish "spec comment unreadable (HTTP 403) -> job A's validated copy" ok
 if grep -q "checked by publish against job A's copy only" "$work/comment.md"; then
   ok "publish-fix: 403 fallback labeled in the comment"; else bad "publish-fix: 403 fallback label"; fi
 setup_remote
-cp "$canon" "$work/art/spec.md"; sed -i 's/^title: .*/title: Tampered/' "$work/art/spec.md"
+cp "$canon" "$work/art/spec.md"
+sed 's/^title: .*/title: Tampered/' "$work/art/spec.md" >"$work/art/spec.md.tmp" \
+  && mv "$work/art/spec.md.tmp" "$work/art/spec.md"
 printf 'spec_comment_id=102\nspec_sha256=%s\n' "$(sha256sum <"$canon" | cut -d' ' -f1)" >>"$work/art/fix-meta.txt"
 publish "403 fallback with a job A copy that doesn't match spec_sha256 refused" fail
 unset FAKE_GH_API_403
@@ -320,7 +324,8 @@ else bad "publish-fix: racing commit kept"; fi
 
 # Artifact for another head / PR refused.
 setup_remote
-sed -i "s/^head_sha=.*/head_sha=$SHA_A/" "$work/art/fix-meta.txt"
+sed "s/^head_sha=.*/head_sha=$SHA_A/" "$work/art/fix-meta.txt" >"$work/art/fix-meta.txt.tmp" \
+  && mv "$work/art/fix-meta.txt.tmp" "$work/art/fix-meta.txt"
 publish "artifact meta for a different head refused" fail
 
 # Path policy still applies to the fix patch (relative to the PR head).

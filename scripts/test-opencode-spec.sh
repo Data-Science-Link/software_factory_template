@@ -342,7 +342,9 @@ publish "$work/missing" failure
 if [ "$rc" -eq 0 ] && grep -q 'ended with result `failure`' "$work/posted.md" && grep -q 'actions/runs/4242' "$work/posted.md"; then
   ok "publish: agent job failed -> failure note with the run link (never silent)"
 else bad "publish: failure note"; cat "$work/missing.pub.log"; fi
-cp -R "$work/good" "$work/tamper"; sed -i 's/^status: draft$/status: approved/' "$work/tamper/spec-comment.md"
+cp -R "$work/good" "$work/tamper"
+sed 's/^status: draft$/status: approved/' "$work/tamper/spec-comment.md" >"$work/tamper/spec-comment.md.tmp" \
+  && mv "$work/tamper/spec-comment.md.tmp" "$work/tamper/spec-comment.md"
 publish "$work/tamper" success
 if [ "$rc" -ne 0 ] && [ ! -e "$work/posted.md" ]; then ok "publish: artifact edited to 'approved' -> refused, nothing posted"
 else bad "publish: tampered draft (rc=$rc)"; fi
