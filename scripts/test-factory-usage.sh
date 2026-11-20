@@ -283,6 +283,88 @@ else
   note "no key or token printed: sentinel env value never appears in output"
 fi
 
+# ---- determinism: two successful runs match byte-for-byte ----
+out_a="$tmpdir/det-a.json"
+out_b="$tmpdir/det-b.json"
+set +e
+"${PY[@]}" "$FIXTURE1" "$FIXTURE2" >"$out_a" 2>"$tmpdir/det.err"
+det_rc=$?
+set -e
+if [ "$det_rc" -eq 0 ]; then
+  "${PY[@]}" "$FIXTURE2" "$FIXTURE1" >"$out_b" 2>/dev/null
+  if cmp -s "$out_a" "$out_b" && [ "$(tr -d '\n' <"$out_a")" = "$EXPECTED_BOTH" ]; then
+    note "stdout is deterministic for the same session set (order-independent)"
+  else
+    fail "stdout determinism (order-independent totals)"
+  fi
+else
+  fail "determinism setup run (rc=$det_rc)"
+fi
+
+# ---- empty messages list ----
+cp "$FIXTURE1" "$tmpdir/empty-msgs.json"
+python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1]))
+data["messages"] = []
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/empty-msgs.json"
+run_case "empty messages list" 3 "" "$tmpdir/empty-msgs.json"
+
+# ---- missing session id ----
+cp "$FIXTURE1" "$tmpdir/no-session-id.json"
+python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1]))
+del data["info"]["id"]
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/no-session-id.json"
+run_case "missing session id" 3 "" "$tmpdir/no-session-id.json"
+
+# ---- empty JSON file ----
+printf '' >"$tmpdir/empty-file.json"
+run_case "empty JSON file" 3 "" "$tmpdir/empty-file.json"
+
+# ---- top-level JSON null ----
+printf 'null' >"$tmpdir/null-root.json"
+run_case "top-level JSON null" 3 "" "$tmpdir/null-root.json"
+
+# ---- stderr never contains Traceback on error paths ----
+set +e
+"${PY[@]}" "$tmpdir/empty-file.json" 2>"$tmpdir/tb-check.err" >/dev/null
+set -e
+if grep -q Traceback "$tmpdir/tb-check.err"; then
+  fail "invalid input must not emit a Python traceback on stderr"
+else
+  note "error paths emit factory-usage messages without tracebacks"
+fi
+
+# ---- missing top-level messages key ----
+cp "$FIXTURE1" "$tmpdir/no-messages-key.json"
+python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1]))
+del data["messages"]
+json.dump(data, open(sys.argv[1], "w"), indent=2)
+' "$tmpdir/no-messages-key.json"
+run_case "missing messages key" 3 "" "$tmpdir/no-messages-key.json"
+
+# ---- invalid session cost types still yield null opencode_cost_usd when aggregated ----
+cp "$FIXTURE1" "$tmpdir/bad-cost-type.json"
+cp "$FIXTURE2" "$tmpdir/bad-cost-type-2.json"
+python3 -c '
+import json, sys
+for path in sys.argv[1:]:
+    data = json.load(open(path))
+    for msg in data["messages"]:
+        if msg.get("info", {}).get("role") == "assistant":
+            msg["info"]["cost"] = "not-a-number"
+    json.dump(data, open(path, "w"), indent=2)
+' "$tmpdir/bad-cost-type.json" "$tmpdir/bad-cost-type-2.json"
+run_case "non-numeric message cost -> opencode_cost_usd null" 0 \
+  '{"models": ["deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"], "opencode_cost_usd": null, "requests": 4, "sessions": 2, "source": "opencode-export", "tokens_cached": 8000, "tokens_in": 10000, "tokens_out": 240, "tokens_reasoning": 0}' \
+  "$tmpdir/bad-cost-type.json" "$tmpdir/bad-cost-type-2.json"
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
