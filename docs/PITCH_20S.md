@@ -1,10 +1,10 @@
 # Twenty-second peer pitch and adoption cheat sheet
 
-Portable summary of the software factory on `main`. Copy this file with the template or share the link in onboarding.
+Portable summary of the software factory on `main` (release `v0.1.0`). Copy this file with the template or share the link in onboarding.
 
 ## Say this out loud (~20 seconds)
 
-**We treat GitHub issues as the production line:** you label what matters, approve a short spec, and kick off an Actions worker that opens a standard PR with run records and cost baked in. **Humans still own judgment** — trivial doc-only fixes can merge on green CI, but anything that changes product behavior waits for a real gate on the PR body. **The boring parts repeat every time** — same spec shape, same checks, same financials trail — so you can compare quality and spend issue to issue instead of re-inventing process in chat.
+**Issues are the production line:** tag selected work, approve a short spec, comment `/oc run`—Actions opens a standard PR with metered cost and a run record. **Humans keep judgment:** trivial doc-only work can merge on green CI; anything that changes product behavior waits for an explicit gate on the PR. **Same rails every time**—spec shape, checks, spend trail—so you compare quality and dollars per issue, not per chat.
 
 ## Factory loop (one screen)
 
@@ -27,13 +27,15 @@ Deep playbook: [`.factory/FACTORY.md`](../.factory/FACTORY.md). Vision and defau
 
 | Step | Command / doc | What it does |
 |---|---|---|
-| 1 — Bootstrap | `python3 scripts/factory-init-repo.py` · [docs/INIT_REPO.md](INIT_REPO.md) | Stamp `.factory/`, `scripts/`, workflow caller stubs, and per-repo doc map starters into a target repo. |
+| 1 — Bootstrap | `python3 scripts/factory-init-repo.py` · [docs/INIT_REPO.md](INIT_REPO.md) | Stamp `.factory/`, `scripts/`, pinned reusable-workflow **callers**, and doc-map starters into a target repo. |
 | 2 — Harden | `bash scripts/harden-repo.sh` | Owner-only: ruleset / protection, Dependabot, secret scanning where the plan allows, one-time gitleaks history pass. |
 | 3 — Verify | `python3 scripts/factory-doctor.py` · [docs/DOCTOR.md](DOCTOR.md) | Offline readiness scorecard (mode, artifacts, models budget, protected scripts, workflow audit, docs links). Add `--public` for the pre-public hygiene pass. |
+| 4 — Pilot | [docs/PILOT_RUNBOOK.md](PILOT_RUNBOOK.md) | Run one low-risk issue end to end on a pinned tag (`v0.1.0`); migrate older copies with `factory-migrate-adopter.py` when needed. |
 
-**Reusable workflows (copy caller YAML from the template)**
+**Reusable workflows** — product repos keep thin caller YAML that pins a template tag; shared bodies live in the template repo:
 
-- [docs/reusable-workflows/](reusable-workflows/README.md) — pinned `workflow_call` bundles for `/oc run`, spec, fix, pr-check, and factory site refresh.
+- [docs/reusable-workflows/](reusable-workflows/README.md) — `workflow_call` bundles for `/oc run`, spec, fix, pr-check, and factory site refresh.
+- CLI index: [docs/CLI.md](CLI.md) · `python3 scripts/factory-cli.py list`
 
 **Adoption reading list**
 
@@ -46,6 +48,8 @@ Deep playbook: [`.factory/FACTORY.md`](../.factory/FACTORY.md). Vision and defau
 python3 scripts/factory-check-docs.py            # human-readable link + anchor report
 python3 scripts/factory-check-docs.py --strict   # CI-friendly non-zero on broken links
 python3 scripts/factory-prepublic-check.py       # before making the repo public
+python3 scripts/factory-prepublic-check.py --strict
+python3 scripts/factory-doctor.py --public       # doctor + prepublic in one pass
 python3 scripts/factory-cost-digest.py --help    # weekly spend rollup from run records
 bash scripts/test-factory-check-docs.sh
 bash scripts/test-factory-prepublic-check.sh

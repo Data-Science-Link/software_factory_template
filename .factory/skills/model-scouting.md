@@ -1,11 +1,11 @@
 # Skill: model-scouting
 
-Weekly **proposal-only** check that DeepInfra list prices still match `.factory/models.yaml`. Nothing in this skill edits `models.yaml`; Michael approves any routing change.
+Weekly **proposal-only** check that DeepInfra list prices still match `.factory/models.yaml`. Nothing in this skill edits `models.yaml`; the owner approves any routing change.
 
 ## When to run
 
 - After factory routing is in use on Actions (#29+) and coding quality from routed models looks sane.
-- On a quiet weekly schedule (Grok Bot or owner cron). **Stay silent** when the scout finds nothing meaningful.
+- On a quiet weekly schedule (Factory Manager routine or owner cron). **Stay silent** when the scout finds nothing meaningful.
 
 ## Command
 

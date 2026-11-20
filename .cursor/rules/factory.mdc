@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Factory rules
 
-This repo runs the software factory. For "do issue N", step 1 below comes first. Then read `.factory/FACTORY.md` and `.factory/skills/local-open-weights-run.md`.
+This repo runs the software factory. Default path: selection → spec → `/oc run` (see `.factory/FACTORY.md`). For local desktop "do issue N", step 1 below comes first, then read `.factory/skills/local-open-weights-run.md`.
 
 ## "do issue N"
 

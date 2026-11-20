@@ -1,21 +1,24 @@
 # AGENTS.md
 
-Standing rules for any AI agent working in this repo (OpenCode `/oc` workers, Cursor, Codex,
-local agents). Keep this file short: details live in `.factory/`, so read the linked file
-when your task needs it. Owner-only file: agents never edit it (#97).
+Standing rules for any AI agent working in this repo (Actions `/oc` workers, hosted cloud agents,
+optional local open-weights agents). Keep this file short: details live in `.factory/`, so read
+the linked file when your task needs it. Owner-only file: agents never edit it (#97).
 
 ## Toolchain registry
 
 Use these exact commands for this software-factory template. Do not invent package managers or
 alternate test runners. When this file is stamped into a product repo, replace the product rows
-from `.factory/DOCS.md`.
+from `.factory/DOCS.md`. Grouped index: `python3 scripts/factory-cli.py list` ([docs/CLI.md](docs/CLI.md)).
 
 | Intent | Command | Notes |
 |---|---|---|
 | Test | `bash scripts/test-<name>.sh` | Match `<name>` to what you changed; runners live in `scripts/test-*.sh` |
 | Spec check | `python3 scripts/factory-spec-check.py <path>` | Fixture suite: `bash scripts/test-spec-check.sh` |
+| Spec lint | `python3 scripts/factory-spec-lint.py <path>` | Fixture suite: `bash scripts/test-factory-spec-lint.sh` |
 | Cost predict | `python3 scripts/factory-predict-cost.py <spec>` | Fixture suite: `bash scripts/test-predict-cost.sh` |
 | PR check | `bash scripts/pr-check.sh <body.md> [files.txt]` | Fixture suite: `bash scripts/test-pr-check.sh` |
+| Repo health | `python3 scripts/factory-doctor.py` | Add `--public` before going public; fixture: `bash scripts/test-factory-doctor.sh` |
+| Docs audit | `python3 scripts/factory-check-docs.py --strict` | Fixture suite: `bash scripts/test-factory-check-docs.sh` |
 | Build | `_(product repo — set in DOCS.md)_` | — |
 | Test (product) | `_(product repo — set in DOCS.md)_` | — |
 | Lint | `_(product repo — set in DOCS.md)_` | — |
@@ -40,7 +43,8 @@ gates. Start with `.factory/FACTORY.md` (the loop and roles) and `.factory/DOCS.
    `bash scripts/test-<name>.sh` when you change scripts.
 5. Report honestly: claim a check only when command output in the PR or your transcript shows it.
 
-Local Cursor runs ("do issue N") also follow `.cursor/rules/factory.mdc`.
+Local desktop agent runs ("do issue N") also follow `.cursor/rules/factory.mdc` and
+`skills/local-open-weights-run.md`.
 `/oc` workers also follow the path policy printed in their prompt.
 
 ## Worker contract
