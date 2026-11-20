@@ -53,8 +53,8 @@ names = {c["name"] for c in cmds}
 expected = {
     "doctor", "init", "triage", "spec-lint", "spec-check", "backlog",
     "run-review", "fix-policy", "audit-workflows", "check-docs", "test-all",
-    "cost-digest", "predict-cost", "site", "site-smoke",
-    "prepublic", "release", "sync-repos",
+    "cost-digest", "cost-reconcile", "predict-cost", "site", "site-smoke",
+    "prepublic", "release", "sync-repos", "migrate-adopter", "owner-pack",
 }
 missing = expected - names
 assert not missing, f"missing commands in list: {missing}"
@@ -94,6 +94,33 @@ if grep -qi "usage" "$work/out"; then
   ok "release --help shows usage"
 else
   bad "release --help shows usage"
+fi
+
+# Pass-through: owner-pack --help
+run_cli owner-pack --help
+assert_rc "owner-pack --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "owner-pack --help shows usage"
+else
+  bad "owner-pack --help shows usage"
+fi
+
+# Pass-through: migrate-adopter --help
+run_cli migrate-adopter --help
+assert_rc "migrate-adopter --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "migrate-adopter --help shows usage"
+else
+  bad "migrate-adopter --help shows usage"
+fi
+
+# Pass-through: cost-reconcile --help
+run_cli cost-reconcile --help
+assert_rc "cost-reconcile --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "cost-reconcile --help shows usage"
+else
+  bad "cost-reconcile --help shows usage"
 fi
 
 # Unknown subcommand suggests close match
