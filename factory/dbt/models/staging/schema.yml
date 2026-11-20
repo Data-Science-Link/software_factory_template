@@ -3,6 +3,17 @@ version: 2
 models:
   - name: stg_agent_runs
     description: "Deduplicated agent runs from the agent_runs seed, with normalized model and UTC timestamps."
+    columns:
+      - name: run_id
+        description: "Unique identifier for the run."
+      - name: model_id
+        description: "Normalized model identifier from the harness model name."
+      - name: actual_cost_usd
+        description: "Measured or inferred actual cost of the run in USD."
+      - name: complexity
+        description: "Complexity class of the work."
+      - name: outcome
+        description: "How the run ended (PR opened, failed, cap exceeded, and so on)."
     data_tests:
       - unique:
           column_name: run_id

@@ -1,0 +1,12 @@
+[
+  {
+    "databaseId": 43076343835,
+    "workflowName": "opencode-fix",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-11T16:00:00.000Z",
+    "updatedAt": "2026-11-11T16:45:00.000Z",
+    "headBranch": "oc/issue-196-43076343835",
+    "displayTitle": "issue #196 quoted marker regression"
+  }
+]

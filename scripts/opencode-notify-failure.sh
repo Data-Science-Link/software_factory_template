@@ -10,7 +10,7 @@
 # Optional (#92, from the agent job's run-start and classify steps; each validated, else "none"):
 #   OC_REFUSED      run-start refusal code (scripts/factory-run-start.py): the run never started
 #   OC_MODEL_ID     the routed model, OC_ROUTED_RULE its models.yaml rule
-#   OC_ERROR_CLASS  tool_or_reasoning_format|other (scripts/factory-classify-failure.py)
+#   OC_ERROR_CLASS  tool_or_reasoning_format|other|empty_instruction (scripts/factory-classify-failure.py)
 #   OC_PRIOR_USD, OC_PREDICTED_USD, OC_CAP_USD  numbers for an over_cap refusal
 # The marker line carries kind/job/result/model/rule/error so the next run start can route the
 # retry (rule 4) or the fallback (rule 5) without trusting anything the worker wrote.
@@ -63,7 +63,7 @@ model="${OC_MODEL_ID:-}"
 rule="${OC_ROUTED_RULE:-}"
 case "$rule" in '' | *[!0-9]*) rule=none ;; esac
 error="${OC_ERROR_CLASS:-}"
-case "$error" in tool_or_reasoning_format | other) ;; *) error=none ;; esac
+case "$error" in tool_or_reasoning_format | other | empty_instruction) ;; *) error=none ;; esac
 refused="${OC_REFUSED:-}"
 case "$refused" in
   '') refused=none ;;
@@ -77,6 +77,7 @@ case "$refused" in
   cap_unset) why="\`budget.issue_cap_usd\` is not set in .factory/models.yaml." ;;
   over_target_unapproved) why="This run's predicted cost is over \`budget.issue_target_usd\` and the approved spec lacks \`over_target_approved_by: michael\`. Michael re-approves with scripts/factory-approve-spec.py ... --approved-by michael --over-target-ok (or split the issue)." ;;
   over_cap) why="Prior spend on this issue plus this run's predicted cost is over the per-issue cap. Split the issue or raise the cap in .factory/models.yaml." ;;
+  empty_instruction) why="Your \`/oc\` comment has no instruction after the prefix. Add what you want the worker to do, for example \`/oc implement the approved spec\`." ;;
   *) refused=invalid; why="Run start refused the run (unrecognized reason code)." ;;
 esac
 num() { [[ "${1:-}" =~ ^[0-9]{1,6}\.[0-9]{1,6}$ ]] && printf '%s' "$1" || printf '?'; }
@@ -109,9 +110,18 @@ $title in the \`$job\` job (result: \`$result\`). $second
   if [ "$model" != none ]; then
     body="$body
 - Model: \`$model\` (routed by run start, models.yaml rule $rule); failure class: \`$error\`."
+  elif [ "$error" = empty_instruction ]; then
+    body="$body
+- Failure class: \`empty_instruction\`."
   fi
-  body="$body
+  if [ "$error" = empty_instruction ]; then
+    body="$body
+- Why: Your \`/oc\` comment has no instruction after the prefix. Add what you want the worker to do, for example \`/oc implement the approved spec\`.
+- No DeepInfra spend: the worker stopped before OpenCode was called."
+  else
+    body="$body
 - DeepInfra spend may still have happened; the run's usage report is in the job log."
+  fi
 fi
 
 tmp="$(mktemp -d)"

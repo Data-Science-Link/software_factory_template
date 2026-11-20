@@ -44,11 +44,26 @@ ATTEMPT_KEYS = ("retry", "escalated_from", "error_class", "prior_model_family")
 REFUSAL_CODES = frozenset({
     "no_approved_spec", "spec_not_approved", "spec_issue_mismatch", "spec_check_failed",
     "router_failed", "router_guard", "model_not_allowed", "cap_unset", "over_cap",
-    "over_target_unapproved",
+    "over_target_unapproved", "empty_instruction",
 })
 
 DEFAULT_RUNS_DIR = ROOT / "factory" / "runs"
 DEFAULT_MODELS = ROOT / ".factory" / "models.yaml"
+
+
+def instruction_after_oc_build(body: str) -> str:
+    """Owner text after a leading ``/oc`` on a build trigger (issue #150).
+
+    Matches scripts/opencode-agent-run.sh: trim, strip ``/oc``, trim again. Does not treat
+    ``/oc spec`` specially; the build workflow never triggers on that prefix.
+    """
+    if not isinstance(body, str):
+        return ""
+    s = body.lstrip()
+    if not s.startswith("/oc"):
+        return s
+    s = s[3:]
+    return s.lstrip()
 
 
 def split_marker(text: str) -> tuple[str, str]:
@@ -370,6 +385,15 @@ def main() -> int:
             github_output = Path(env_out)
     if github_output is not None:
         _REFUSAL_OUT.append(github_output)
+
+    # Refuse before routing when the triggering comment has no build instruction (#150).
+    if args.kind == "build" and "OC_INSTRUCTION" in os.environ:
+        raw = os.environ["OC_INSTRUCTION"]
+        if not instruction_after_oc_build(raw):
+            return refuse(
+                "empty instruction after /oc prefix; add text after /oc",
+                "empty_instruction",
+            )
 
     # The context step writes spec.md only for an approved owner spec comment (#75).
     if not args.spec.is_file():

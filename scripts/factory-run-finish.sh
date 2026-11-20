@@ -6,8 +6,8 @@
 #   2. marks key spend "concurrent" when another /oc run overlapped this one (same DeepInfra key);
 #   3. posts the record on the issue under <!-- factory-run-record --> (run start reads these for
 #      the issue's prior spend), once per run attempt;
-#   4. on a build or fix PR, rewrites the PR body's factory-run block and Cost: line
-#      (scripts/factory-run-body.sh).
+#   4. on a build or fix PR, rewrites the PR body's factory-run block, Verification output,
+#      and Cost: line (scripts/factory-run-body.sh).
 # Needs GH_TOKEN with issues: write, pull-requests: write, actions: read. No DeepInfra key.
 # Env: OC_KIND (build|fix|spec), OC_ARTIFACT_DIR (the downloaded metering artifact), OC_ISSUE_NUMBER
 # (build/spec; fix reads fix-meta.txt), OC_AGENT_RESULT, OC_PUBLISH_RESULT, optional OC_REFUSED,
@@ -168,7 +168,10 @@ else
 fi
 
 if [ -n "$pr" ] && [ "$OC_KIND" != spec ] && [ "$outcome" != failed ] && [ "$outcome" != cancelled ]; then
+  ver_evidence=""
+  [ -f "$art/evidence.md" ] && ver_evidence="$art/evidence.md"
   OC_RUN_RECORD_URL="${comment_url:-${repo_url}/issues/${issue}}" FACTORY_RUNS_DIR="$runs_dir" \
+    OC_VERIFICATION_EVIDENCE="$ver_evidence" \
     bash scripts/factory-run-body.sh "$pr" "$run_id" || { say "could not update PR #${pr} body"; exit 1; }
 fi
 

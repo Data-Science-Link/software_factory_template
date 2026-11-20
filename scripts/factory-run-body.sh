@@ -1,5 +1,6 @@
 #!/bin/bash
-# Rewrite only the factory-run block and Cost: line in a PR body from a run record.
+# Rewrite the factory-run block, Verification output (when OC_VERIFICATION_EVIDENCE is set),
+# and Cost: line in a PR body from a run record (#187).
 set -euo pipefail
 
 # Check arguments
@@ -86,13 +87,41 @@ Run record: ${OC_RUN_RECORD_URL:-$run_record_path}
 EOF
 )
 
+ver_start='<!-- factory-verification:start -->'
+ver_end='<!-- factory-verification:end -->'
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+update_verification=no
+verification_section=""
+evidence_file="${OC_VERIFICATION_EVIDENCE:-}"
+if [ -n "$evidence_file" ] && [ -f "$evidence_file" ]; then
+  head_sha="$(jq -r '.head_sha // empty' "$run_record_path")"
+  head_label=""
+  if [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    head_label=", head \`${head_sha}\`"
+  fi
+  evidence_block="$(bash "$here/opencode-text-block.sh" fence "$evidence_file" 12000 "(no verification output in this run's artifact)")"
+  verification_section="$(cat <<EOF
+${ver_start}
+Verification output (run by the harness in a sandbox, not by the model; capped). Run \`${run_id}\`${head_label}:
+
+${evidence_block}
+${ver_end}
+EOF
+)"
+  update_verification=yes
+fi
+
 # Create a temporary file for the new body
 new_body_file=$(mktemp)
 trap 'rm -f "$temp_body_file" "$new_body_file"' EXIT
 
-# Process the body line by line to replace only the factory-run block and Cost line
+# Process the body line by line to replace the factory-run block, Verification block, and Cost line
 {
   in_run_block=false
+  in_ver_marked=false
+  in_legacy_ver=false
+  legacy_in_fence=false
+  verification_replaced=no
   cost_line_found=false
   
   while IFS= read -r line; do
@@ -116,6 +145,42 @@ trap 'rm -f "$temp_body_file" "$new_body_file"' EXIT
     if [[ "$in_run_block" == true ]]; then
       continue
     fi
+
+    if [[ "$update_verification" == yes && "$in_ver_marked" == true ]]; then
+      if [[ "$line" == "$ver_end" ]]; then
+        in_ver_marked=false
+      fi
+      continue
+    fi
+
+    if [[ "$update_verification" == yes && "$in_legacy_ver" == true ]]; then
+      if [[ "$legacy_in_fence" == true ]]; then
+        if [[ "$line" == '```' ]]; then
+          legacy_in_fence=false
+          in_legacy_ver=false
+        fi
+        continue
+      fi
+      if [[ "$line" == '```text' || "$line" == '```bash' || "$line" == '```' ]]; then
+        legacy_in_fence=true
+        continue
+      fi
+      continue
+    fi
+
+    if [[ "$update_verification" == yes && "$line" == "$ver_start" ]]; then
+      printf '%s\n' "$verification_section"
+      verification_replaced=yes
+      in_ver_marked=true
+      continue
+    fi
+
+    if [[ "$update_verification" == yes && "$line" =~ ^Verification\ output\ \(run\ by\ the\ harness ]]; then
+      printf '%s\n' "$verification_section"
+      verification_replaced=yes
+      in_legacy_ver=true
+      continue
+    fi
     
     # Check if this is the Cost line and replace it
     if [[ "$line" == "Cost: "* ]]; then
@@ -131,6 +196,12 @@ trap 'rm -f "$temp_body_file" "$new_body_file"' EXIT
   # If we never found the cost line, add it at the end
   if [[ "$cost_line_found" == false ]]; then
     echo "$cost_line"
+  fi
+
+  # PR bodies from before #187 may lack markers; append fresh Verification when none was replaced.
+  if [[ "$update_verification" == yes && "$verification_replaced" == no ]]; then
+    echo
+    printf '%s\n' "$verification_section"
   fi
 } > "$new_body_file"
 

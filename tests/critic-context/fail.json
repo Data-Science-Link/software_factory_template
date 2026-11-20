@@ -1,0 +1,15 @@
+{
+  "pr_number": "89",
+  "issue_number": "7",
+  "head_ref": "oc/issue-7-40000000002",
+  "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "pr": {
+    "number": 89,
+    "title": "OpenCode: issue #7 (broken)",
+    "head": {"ref": "oc/issue-7-40000000002", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    "base": {"ref": "main"}
+  },
+  "diff": "diff --git a/factory/x/hello.md b/factory/x/hello.md\n--- a/factory/x/hello.md\n+++ b/factory/x/hello.md\n@@ -1 +1 @@\n-hello\n+helo\n",
+  "spec": "## Outcome\nSay hello.\n",
+  "evidence": "Verification run by the harness: not run (no approved spec in this run).\n"
+}
