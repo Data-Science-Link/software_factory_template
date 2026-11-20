@@ -17,6 +17,10 @@
 #   3. the body mentions "Local open-weights" or "DeepInfra" and has no "Cost:" line with a "$"
 #      amount or the words "not measured".
 #   4. Factory Actions run PR (see below): missing or empty required factory-run block fields.
+#   5. Harness Verification evidence in the PR body shows FAIL (issue #161): a
+#      <!-- factory-verification:start --> ... <!-- factory-verification:end --> block, a
+#      "### Verification" / Evidence verification section, or a fenced harness log with
+#      Result: FAIL or a test "Results: N passed, M failed" where M > 0.
 #
 # Factory Actions run PR (rule 4), detected deterministically when either:
 #   - the factory-run start HTML marker (added by factory-run-end.sh when filling the block; the empty
@@ -100,6 +104,37 @@ if [ "$factory_run" = yes ]; then
   fi
   if ! has 'factory/specs/issue-[0-9]+\.md'; then
     fail 'Factory run PR needs a spec link to factory/specs/issue-<N>.md (run record spec_path).'
+  fi
+fi
+
+# 5. Harness Verification evidence must not report failure (#161)
+# Read the raw body (fences and HTML markers kept); rule 1-4 use $plain with those stripped.
+verification_blob="$(
+  tr -d '\r' <<<"$body" | perl -0pe '
+    my $b = $_;
+    my @chunks;
+    while ($b =~ /<!--\s*factory-verification:start\s*-->\s*(.*?)\s*<!--\s*factory-verification:end\s*-->/gs) {
+      push @chunks, $1;
+    }
+  while ($b =~ /^#{1,3}[ \t]+Evidence: verification output\b.*?\n(.*?)(?=^#{1,3}[ \t]|\z)/gms) {
+      push @chunks, $1;
+    }
+    while ($b =~ /^Verification output \(run by the harness[^\n]*\n(.*?)(?=^#{1,3}[ \t]|\z)/gms) {
+      push @chunks, $1;
+    }
+    while ($b =~ /^###[ \t]+Verification\b.*?\n(.*?)(?=^#{1,3}[ \t]|\z)/gms) {
+      push @chunks, $1;
+    }
+    print join("\n---\n", @chunks);
+  '
+)"
+if [ -n "$verification_blob" ]; then
+  v_fail=no
+  if grep -qE '^Result: FAIL' <<<"$verification_blob"; then v_fail=yes; fi
+  if grep -qE 'Results: [0-9]+ passed, [1-9][0-9]* failed' <<<"$verification_blob"; then v_fail=yes; fi
+  if grep -qE '^verify: FAIL' <<<"$verification_blob"; then v_fail=yes; fi
+  if [ "$v_fail" = yes ]; then
+    fail 'Harness Verification evidence shows FAIL (fix verification or push an /oc fix run).'
   fi
 fi
 

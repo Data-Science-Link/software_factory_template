@@ -24,7 +24,8 @@ bad() { echo "FAIL  $1"; failed=$((failed + 1)); }
 draft() { "$py" scripts/opencode-spec-draft.py "$@"; }
 
 # --- model and cost guard from models.yaml
-if [ "$(draft model)" = deepseek-ai/DeepSeek-V4-Pro-0813 ] && draft preflight | grep -q '^predicted_spec_run_usd=0\.0[0-9]*$'; then
+if [ "$(draft model)" = deepseek-ai/DeepSeek-V4-Pro-0813 ] \
+  && draft preflight --issue 7 | grep -q '^predicted_spec_run_usd=0\.0[0-9]*$'; then
   ok "model: no issue context -> V4 Pro from models.yaml rule 2 (fail safe); predicted spec run under \$0.10"
 else bad "model / preflight"; fi
 printf '# Issue #64\n\ndbt hygiene: disable anonymous stats.\n' >"$work/ctx-normal.md"
@@ -38,7 +39,7 @@ cp "$work/ctx-normal.md" "$work/lbl-missing/issue-context.md"
 # Normal-risk issue whose title and body say HIGH_RISK / high-risk / "risk high" (prose, #153's own case).
 printf '## Issue #153: /oc spec HIGH_RISK free-text match forces V4 Pro\n\nA high-risk misroute: "risk high" in prose. Risk: **high** in the body.\n' >"$work/lbl-none/ctx-prose.md"
 FLASH=deepseek-ai/DeepSeek-V4-Flash-0731; PRO=deepseek-ai/DeepSeek-V4-Pro-0813
-pf_normal="$(draft preflight --context "$work/lbl-none/issue-context.md" --guidance="keep it small")"
+pf_normal="$(draft preflight --issue 7 --context "$work/lbl-none/issue-context.md" --guidance="keep it small")"
 if grep -qx "model=$FLASH" <<<"$pf_normal" && grep -qx 'risk_class=not_high' <<<"$pf_normal"; then
   ok "model: normal issue (no risk label), plain guidance -> V4 Flash rule 9"
 else bad "model: normal issue routing"; echo "$pf_normal"; fi
@@ -54,7 +55,7 @@ else bad "model: issue prose must not route to Pro"; fi
 if [ "$(draft model --context "$work/lbl-high/issue-context.md" --guidance="keep it small")" = "$PRO" ] \
   && [ "$(draft model --context "$work/lbl-none/issue-context.md" --guidance="risk: high")" = "$PRO" ] \
   && [ "$(draft model --context "$work/lbl-none/issue-context.md" --guidance="risk:HIGH, and keep it small")" = "$PRO" ] \
-  && draft preflight --context "$work/lbl-high/issue-context.md" | grep -qx 'risk_class=high'; then
+  && draft preflight --issue 7 --context "$work/lbl-high/issue-context.md" | grep -qx 'risk_class=high'; then
   ok "model: risk:high label on the issue, or guidance starting with 'risk: high' -> V4 Pro rule 2"
 else bad "model: structured high-risk signal"; fi
 if [ "$(draft model --guidance="keep it small")" = "$PRO" ] && [ "$(draft model --context "$work/nonexistent.md")" = "$PRO" ] \
@@ -76,8 +77,31 @@ d = yaml.safe_load(open(".factory/models.yaml"))
 d["token_priors"]["spec"] = {"tokens_in": 2000000, "tokens_cached_fraction": 0.1, "tokens_out": 100000}
 yaml.safe_dump(d, open(sys.argv[1], "w"), sort_keys=False)
 PY
-if ! draft --models "$work/models-big.yaml" preflight >/dev/null 2>&1; then ok "preflight: predicted spec run above the \$1 cap refused"
+if ! draft --models "$work/models-big.yaml" preflight --issue 7 >/dev/null 2>&1; then ok "preflight: predicted spec run above the \$1 cap refused"
 else bad "preflight over cap"; fi
+
+# --- #115: spec preflight sums prior issue spend (same rules as factory-run-start.py)
+mkdir -p "$work/runs-zero" "$work/runs-prior" "$work/runs-bad"
+if draft preflight --issue 115 --context "$work/lbl-none/issue-context.md" --runs-dir "$work/runs-zero" \
+    | grep -qx 'prior_spend_usd=0.0000'; then
+  ok "preflight #115: zero prior spend within cap"
+else bad "preflight #115: zero prior"; fi
+printf '%s\n' '{"run_id": "gha-spec-1", "issue": 115, "actual_cost_usd": 0.995}' >"$work/runs-prior/gha-spec-1.json"
+set +e
+prior_err="$(draft preflight --issue 115 --context "$work/lbl-none/issue-context.md" --runs-dir "$work/runs-prior" 2>&1)"
+prior_rc=$?
+set -e
+if [ "$prior_rc" -ne 0 ] && grep -q 'prior spend \$0.9950' <<<"$prior_err" \
+  && grep -q 'predicted spec-run' <<<"$prior_err" && grep -q 'issue cap' <<<"$prior_err"; then
+  ok "preflight #115: prior + predicted over cap refused (predicted alone under cap)"
+else bad "preflight #115: prior+predicted refusal"; echo "$prior_err"; fi
+printf 'not json\n' >"$work/runs-bad/broken.json"
+set +e
+bad_out="$(draft preflight --issue 115 --context "$work/lbl-none/issue-context.md" --runs-dir "$work/runs-bad" 2>&1)"
+set -e
+if grep -q 'prior_spend_usd=0.0000' <<<"$bad_out" && grep -q 'skipped unreadable run file broken.json' <<<"$bad_out"; then
+  ok "preflight #115: malformed run record skipped safely"
+else bad "preflight #115: malformed run record"; echo "$bad_out"; fi
 
 # --- a scratch repo: the worker runs here (fake opencode prints a canned final message)
 repo="$work/repo"
@@ -151,6 +175,13 @@ else bad "prompt: #149 rules"; fi
 
 # Good draft: normalized to a draft, prediction filled by script, reviewer from risk.
 wrap tests/oc-spec/good-spec.md "$work/out-good.txt"
+mkdir -p "$repo/factory/runs"
+printf '%s\n' '{"run_id":"gha-prior-7","issue":7,"actual_cost_usd":0.05}' >"$repo/factory/runs/gha-prior-7.json"
+specrun prior "$work/out-good.txt"
+if grep -q '"prior_spend_usd": 0.05' "$work/prior/run-start.json"; then
+  ok "spec-run #115: run-start.json carries prior_spend from factory/runs"
+else bad "spec-run prior in run-start.json"; cat "$work/prior/run-start.json" 2>/dev/null || true; fi
+rm -f "$repo/factory/runs/gha-prior-7.json"
 specrun good "$work/out-good.txt"
 c="$work/good/spec-comment.md"
 if [ "$rc" -eq 0 ] && [ "$(head -n 1 "$c")" = '<!-- factory-spec-draft v1 -->' ] && grep -qx 'status: draft' "$c" \
@@ -251,6 +282,23 @@ wrap "$work/esc.md" "$work/out-esc.txt"
 specrun esc "$work/out-esc.txt"
 if grep -q 'escaped quote' "$work/esc/spec-comment.md"; then ok "build: factory-spec-check.py failure (escaped quote) -> refused"
 else bad "build: spec-check failure"; fi
+sed 's/^title: .*hello.*/title: Site data: collect run records for the factory site/' tests/oc-spec/good-spec.md >"$work/colon.md"
+wrap "$work/colon.md" "$work/out-colon.txt"
+specrun colon "$work/out-colon.txt"
+if [ "$(head -n 1 "$work/colon/spec-comment.md")" = '<!-- factory-spec-draft v1 -->' ] \
+  && ! grep -q 'invalid YAML front matter' "$work/colon/spec-comment.md" \
+  && ! grep -q 'factory-predict-cost.py refused' "$work/colon/spec-comment.md"; then
+  ok "build: unquoted colon in title -> draft still posted (#189)"
+else bad "build: unquoted colon in title"; head -12 "$work/colon/spec-comment.md"
+fi
+pp189="$(cd "$repo" && OC_INSTRUCTION='/oc spec' OC_ISSUE_NUMBER=189 OC_ARTIFACT_DIR="$work/prompt189" bash scripts/opencode-spec-run.sh --print-prompt)"
+if grep -qF 'Quote any value that contains a colon' <<<"$pp189"; then
+  ok "prompt: quote front-matter values with colons (#189)"
+else bad "prompt: colon quoting rule (#189)"; fi
+pp106="$(cd "$repo" && OC_INSTRUCTION='/oc spec' OC_ISSUE_NUMBER=106 OC_ARTIFACT_DIR="$work/prompt106" bash scripts/opencode-spec-run.sh --print-prompt)"
+if grep -qF 'Bad inputs and edge cases' <<<"$pp106"; then
+  ok "prompt: Bad inputs and edge cases required for normal/high (#106)"
+else bad "prompt: bad inputs section (#106)"; fi
 specrun cost "$work/out-good.txt" 1.5000
 if grep -q 'above the \$1.00 cap; not posted as a draft' "$work/cost/spec-comment.md"; then ok "build: spec run that cost more than \$1 -> no draft"
 else bad "build: over-cap run"; head -6 "$work/cost/spec-comment.md"; fi

@@ -48,7 +48,10 @@ select
     issues,
     spend_usd,
     {{ var('weekly_budget_usd') }} as budget_usd,
-    spend_usd / nullif({{ var('weekly_budget_usd') }}, 0) * 100 as budget_used_pct,
+    round(
+        spend_usd / nullif({{ var('weekly_budget_usd') }}, 0) * 100,
+        6
+    ) as budget_used_pct,
     spend_usd > {{ var('weekly_budget_usd') }} as over_budget
 from combined
 order by week_start_utc

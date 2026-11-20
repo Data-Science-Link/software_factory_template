@@ -6,6 +6,7 @@ Writes to --out-dir (default $OC_ARTIFACT_DIR):
   context-meta.txt   spec_comment_id=<id|none>, spec_sha256 and sizes; read by agent-run and publish
   issue-labels.txt   the issue's label names from the API, one per line (may be empty); the
                      /oc spec run's structured risk signal (#153: label risk:high -> V4 Pro)
+  issue-comments.json  trimmed comment list for spend preflight (#115); fields only run start reads
   spec.md            only when an approved spec exists: the exact spec (marker line on, LF line
                      ends, one trailing newline). The harness commits it as
                      factory/specs/issue-<N>.md; the worker never copies it by hand (#75).
@@ -222,6 +223,19 @@ def main() -> int:
     if canonical is not None:
         (out / "spec.md").write_bytes(canonical.encode("utf-8"))
         spec_sha = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    spend_rows = [
+        {
+            "user": {"login": (c.get("user") or {}).get("login")},
+            "author_association": c.get("author_association"),
+            "created_at": c.get("created_at"),
+            "body": c.get("body"),
+        }
+        for c in comments
+        if isinstance(c, dict)
+    ]
+    (out / "issue-comments.json").write_text(
+        json.dumps(spend_rows, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     (out / "context-meta.txt").write_text(
         f"spec_comment_id={spec_id}\nspec_sha256={spec_sha}\ncontext_bytes={len(ctx.encode())}\n"
         f"owner_comments={len(shown)}\n",

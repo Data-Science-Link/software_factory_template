@@ -229,6 +229,77 @@ else
   failed=$((failed + 1))
 fi
 
+# ---- test 10: unlabeled count and triage note when issues lack priority/risk labels ----
+if "$PYTHON" - "$page" <<'PY'
+import re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+if "Unlabeled issues:" not in html or "backlog-unlabeled" not in html:
+    raise SystemExit("unlabeled notice missing")
+if "priority:high" not in html or "risk:low" not in html:
+    raise SystemExit("label how-to text missing")
+# Fixture issue #3 has no priority/risk labels -> 1 unlabeled.
+if not re.search(r'Unlabeled issues:</strong>\s*1 open issue', html):
+    raise SystemExit("unlabeled count wrong (expected 1)")
+if not re.search(r'card-label">Unlabeled</span><span class="card-value">1</span>', html):
+    raise SystemExit("Unlabeled summary card missing or wrong count")
+PY
+then
+  echo "PASS  backlog tab shows unlabeled count and triage note for partly labeled issues"
+  passed=$((passed + 1))
+else
+  echo "FAIL  backlog tab did not render the unlabeled count or triage note"
+  failed=$((failed + 1))
+fi
+
+# ---- test 11: fully labeled fixture omits the unlabeled notice and card ----
+labeled="$tmpdir/labeled.json"
+"$PYTHON" - "$labeled" <<'PY'
+import json, sys
+items = [
+    {
+        "number": 10,
+        "title": "Labeled issue A",
+        "url": "https://github.com/example/factory/issues/10",
+        "createdAt": "2026-11-01T10:00:00Z",
+        "updatedAt": "2026-11-10T09:00:00Z",
+        "priority": "high",
+        "risk": "high",
+        "status": "open",
+    },
+    {
+        "number": 11,
+        "title": "Labeled issue B",
+        "url": "https://github.com/example/factory/issues/11",
+        "createdAt": "2026-11-02T11:00:00Z",
+        "updatedAt": "2026-11-11T08:30:00Z",
+        "priority": "low",
+        "risk": "low",
+        "status": "open",
+    },
+]
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(items, fh, indent=2)
+    fh.write("\n")
+PY
+root4="$tmpdir/root-labeled"
+make_root "$root4" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
+cp "$labeled" "$root4/site-data/backlog.json"
+out4="$tmpdir/out-labeled"
+if "$PYTHON" scripts/factory-site.py --repo-root "$root4" --data "$root4/site-data" \
+  --out "$out4" --now "2026-11-11 12:00:00" >/dev/null; then
+  page4="$out4/backlog.html"
+  if grep -q "backlog-unlabeled" "$page4" || grep -q 'card-label">Unlabeled' "$page4"; then
+    echo "FAIL  fully labeled backlog still shows an unlabeled notice or card"
+    failed=$((failed + 1))
+  else
+    echo "PASS  fully labeled backlog omits unlabeled notice and summary card"
+    passed=$((passed + 1))
+  fi
+else
+  echo "FAIL  renderer crashed on fully labeled backlog fixture"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then

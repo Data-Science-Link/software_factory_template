@@ -125,6 +125,15 @@ RUN_ARGS=(--spec tests/run-start/spec-approved-simple-normal.md --issue 91 \
 run_case "case8 same run_id deduped -> prior 0.4000" 0 \
   "prior_spend_usd=0.4000"
 
+# --- Case 8b (#115): prior /oc spec run record counts toward build preflight ---
+mkdir -p "$tmpdir/runs8b"
+printf '%s\n' '{"run_id": "gha-spec-prior-1", "issue": 91, "actual_cost_usd": 0.55, "kind": "spec"}' \
+  >"$tmpdir/runs8b/gha-spec-prior-1.json"
+RUN_ARGS=(--spec tests/run-start/spec-approved-simple-normal.md --issue 91 \
+  --runs-dir "$tmpdir/runs8b")
+run_case "case8b spec run record in runs-dir -> prior 0.5500 for build start" 0 \
+  "prior_spend_usd=0.5500"
+
 # --- Case 9: prior 0.995 + predicted cost -> exit 3 with refused on stderr ---
 mkdir -p "$tmpdir/runs9"
 cp tests/run-start/run-995.json "$tmpdir/runs9/"
@@ -305,6 +314,22 @@ RUN_ARGS=(--spec "$STD" --issue 91 --runs-dir "$tmpdir/none35" \
 run_case "case35 repeatable --comments-json: spend 0.30 + fix marker -> Pro, prior 0.3000" 0 \
   "$PRO" "prior_spend_usd=0.3000"
 
+# case35b: bare /oc at run start -> refused=empty_instruction before spec routing (#150).
+: > "$tmpdir/case35b-gh.txt"
+set +e
+env OC_INSTRUCTION='/oc' "${PY[@]}" --kind build --spec "$tmpdir/does-not-exist.md" --issue 91 \
+  --runs-dir "$tmpdir/none35b" --github-output "$tmpdir/case35b-gh.txt" \
+  >/dev/null 2>"$tmpdir/case35b-stderr.txt"
+rc35b=$?
+set -e
+if [ "$rc35b" -eq 3 ] && grep -qx "refused=empty_instruction" "$tmpdir/case35b-gh.txt" \
+  && ! grep -q '^model' "$tmpdir/case35b-gh.txt" \
+  && grep -q 'empty instruction after /oc' "$tmpdir/case35b-stderr.txt"; then
+  note "case35b bare /oc -> exit 3, refused=empty_instruction (before spec file check)"
+else
+  fail "case35b bare /oc (exit $rc35b; gh=$(cat "$tmpdir/case35b-gh.txt"))"
+fi
+
 # case36: missing spec file -> refused=no_approved_spec, exit 3, no model line.
 : > "$tmpdir/case36-gh.txt"
 set +e
@@ -420,6 +445,14 @@ if [ "$a" = "error_class=tool_or_reasoning_format" ] && [ "$b" = "error_class=ot
   && [ "$c" = "error_class=other" ] && [ "$(cat "$tmpdir/cls.gh")" = "error_class=tool_or_reasoning_format" ]; then
   note "case51 classify-failure: 3+ tool/schema error lines -> tool_or_reasoning_format; else or no log -> other"
 else fail "case51 classify-failure (a=$a b=$b c=$c)"; fi
+
+mkdir -p "$tmpdir/clsdir"
+printf 'empty_instruction\n' >"$tmpdir/clsdir/agent-failure-reason.txt"
+touch "$tmpdir/clsdir/opencode.log"
+d="$(python3 scripts/factory-classify-failure.py --log "$tmpdir/clsdir/opencode.log")"
+if [ "$d" = "error_class=empty_instruction" ]; then
+  note "case51b classify-failure: agent-failure-reason.txt -> empty_instruction"
+else fail "case51b agent reason file (got $d)"; fi
 
 # ===== #92 round trip: the marker opencode-notify-failure.sh posts is the one run start reads =====
 mkdir -p "$tmpdir/nbin"

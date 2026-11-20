@@ -25,7 +25,7 @@ note="$OC_ARTIFACT_DIR/worker-note.md"
 PRISTINE_DIR="$(mktemp -d)"
 trap 'rm -rf "$PRISTINE_DIR"' EXIT
 for f in opencode-artifact-scan.sh opencode-git-push-lease.sh opencode-run-facts.sh opencode-build-fix-context.py \
-  opencode-build-context.py factory-spec-check.py opencode-text-block.sh opencode-stage-spec-files.sh; do
+  opencode-build-context.py factory_spec_front_matter.py factory-spec-check.py opencode-text-block.sh opencode-stage-spec-files.sh; do
   git -C "$trusted" show "HEAD:scripts/$f" >"$PRISTINE_DIR/$f"
 done
 # #102: the default branch's scripts, from this job's trusted checkout (not the PR head or job A).

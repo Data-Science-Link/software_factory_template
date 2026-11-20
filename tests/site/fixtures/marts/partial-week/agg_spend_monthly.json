@@ -1,0 +1,11 @@
+[
+  {
+    "month_start_utc": "2026-11-01",
+    "runs": 2,
+    "issues": 1,
+    "spend_usd": 0.01,
+    "budget_usd": 10,
+    "budget_used_pct": 0.1,
+    "over_budget": false
+  }
+]
