@@ -1,0 +1,10 @@
+# Owner-only site and dbt budget caps (starter values; #169 D4).
+# Workers must not edit. See docs/SETUP.md §6.
+
+monthly_usd: 10
+weekly_usd: 2.50
+issue_target_usd: 0.15
+issue_cap_usd: 1.00
+fixed_costs_monthly_usd: 20
+actions_minutes_month: 2000
+warn_pct: 80

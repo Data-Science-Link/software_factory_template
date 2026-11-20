@@ -356,5 +356,35 @@ if [ ! -e "$work/comment.md" ] && grep -q 'model_id in fix-meta.txt is missing o
   && [ "$(git -C "$bare" rev-parse "refs/heads/$branch")" = "$head_sha" ]; then
   ok "publish-fix: bad model_id -> no push, no comment (#92)"
 else bad "publish-fix: bad model_id refusal"; tail -3 "$work/pub.log"; fi
+# --- edge cases: malformed JSON, missing keys, unicode, --help
+if "$py" scripts/opencode-build-fix-context.py --help >/dev/null 2>&1; then ok "build-fix: --help exits 0"
+else bad "build-fix: --help"; fi
+printf '{broken' >"$work/bad-fix.json"
+set +e
+run badfix --from-json "$work/bad-fix.json" --out-dir "$work/badfix"
+set -e
+if [ "$rc" -ne 0 ] && grep -q 'not valid JSON' "$work/badfix.log" && ! grep -q Traceback "$work/badfix.log"; then
+  ok "build-fix: malformed fixture JSON -> no traceback"
+else bad "build-fix: malformed JSON"; cat "$work/badfix.log"; fi
+printf '{"pr": {"number": 72, "state": "open", "head": {"ref": "oc/issue-33-1", "sha": "%s", "repo": {"full_name": "%s", "fork": false}}, "base": {"ref": "main", "repo": {"full_name": "%s", "default_branch": "main"}}}, "head_commit_date": "2026-11-02T19:00:00Z", "files": []}' \
+  "$SHA_A" "$REPO" "$REPO" >"$work/no-issue.json"
+run noiss --from-json "$work/no-issue.json" --out-dir "$work/noiss"
+if [ "$rc" -ne 0 ] && grep -q 'missing a JSON object "issue"' "$work/noiss.log"; then
+  ok "build-fix: fixture without issue refused on full build"
+else bad "build-fix: missing issue"; cat "$work/noiss.log"; fi
+"$py" - "$work/base.json" "$work/unicode-fix.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["pr"]["title"] = "Fix café 🔧"
+d["pr_comments"][1]["body"] = "PR-OWNER with bytes \xc2\xa9 and emoji ✅"
+d["issue_comments"] = None
+json.dump(d, open(sys.argv[2], "w"), ensure_ascii=False)
+PY
+run ufix --from-json "$work/unicode-fix.json" --out-dir "$work/ufix"
+if [ "$rc" -eq 0 ] && grep -q 'Fix café 🔧' "$work/ufix/fix-context.md" \
+  && grep -q 'emoji ✅' "$work/ufix/fix-context.md"; then
+  ok "build-fix: unicode in title/comments; null issue_comments treated as empty"
+else bad "build-fix: unicode/null issue_comments"; cat "$work/ufix.log"; fi
+
 echo "passed: $passed  failed: $failed"
 [ "$failed" -eq 0 ]

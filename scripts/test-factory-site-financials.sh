@@ -251,5 +251,71 @@ else
   fail "site HTML has no script src or remote CSS, and only GitHub or dbt-docs http(s) links"
 fi
 
+# ---- 15. Budget pacing badge, review commands, CSV export hooks ----
+if "$PYTHON" - "$out1/financials.html" <<'PY'
+import re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+checks = [
+    'id="financials-pacing-banner"',
+    'id="financials-pacing-status"',
+    'financials-pacing--on-track',
+    ">On track<",
+    'id="financials-review-cmd"',
+    "python3 scripts/factory-monthly-review.py",
+    "python3 scripts/factory-cost-digest.py",
+    'id="financials-export-csv"',
+    'function csvEscape',
+]
+for needle in checks:
+    if needle not in html:
+        raise SystemExit("missing %r" % needle)
+PY
+then
+  pass "sample fixture shows on-track pacing badge and review command snippet"
+else
+  fail "sample fixture shows on-track pacing badge and review command snippet"
+fi
+
+if grep -q 'financials-pacing--over-budget' "$over_html" \
+   && grep -q ">Over budget<" "$over_html"; then
+  pass "over-budget fixture shows Over budget pacing badge"
+else
+  fail "over-budget fixture shows Over budget pacing badge"
+fi
+
+if grep -q 'financials-pacing--no-cap' "$out_zb/financials.html" \
+   && grep -q ">No cap set<" "$out_zb/financials.html"; then
+  pass "zero-budget fixture shows No cap set pacing badge"
+else
+  fail "zero-budget fixture shows No cap set pacing badge"
+fi
+
+data_watch="$tmpdir/watch-pacing"
+out_watch="$tmpdir/out-watch"
+mkdir -p "$data_watch/marts"
+cp "$SAMPLE"/*.json "$data_watch/marts/"
+"$PYTHON" - "$data_watch/marts/rpt_run_rate.json" <<'PY'
+import json, sys
+row = json.load(open(sys.argv[1], encoding="utf-8"))[0]
+row["mtd_variable_usd"] = 8.0
+row["trailing_7d_usd_per_day"] = 0.25
+json.dump([row], open(sys.argv[1], "w", encoding="utf-8"), indent=2)
+PY
+render_site "$data_watch" "$out_watch" >/dev/null
+if grep -q 'financials-pacing--watch' "$out_watch/financials.html" \
+   && grep -q ">Watch<" "$out_watch/financials.html"; then
+  pass "watch pacing badge when spend is between 75% and 100% of cap"
+else
+  fail "watch pacing badge when spend is between 75% and 100% of cap"
+fi
+
+# ---- 16. RFC4180 csvEscape covers commas, quotes, and newlines in JS ----
+if grep -q 's.replace(/"/g' "$out1/financials.html" \
+   && grep -qF '/[",\n\r]/.test(s)' "$out1/financials.html"; then
+  pass "CSV export script implements RFC-4180 escaping"
+else
+  fail "CSV export script implements RFC-4180 escaping"
+fi
+
 echo "Results: ${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]

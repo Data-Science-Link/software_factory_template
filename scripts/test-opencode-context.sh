@@ -129,6 +129,53 @@ if grep -qF 'Spec: not fetched' "$work/pub2/art/pr-body.md" 2>/dev/null && grep 
   ok "no context step (workflow not yet updated): agent prompt and publish still work"
 else bad "no context step: agent prompt and publish still work"; fi
 
+# --- edge cases: malformed JSON, fixture shape, null/empty fields, unicode, --help
+if "$py" scripts/opencode-build-context.py --help >/dev/null 2>&1; then ok "--help exits 0"
+else bad "--help exits 0"; fi
+printf '{not-json' >"$work/bad-fixture.json"
+set +e
+"$py" scripts/opencode-build-context.py --from-json "$work/bad-fixture.json" --out-dir "$work/bad-out" \
+  >"$work/bad-fixture.log" 2>&1
+bad_rc=$?
+set -e
+if [ "$bad_rc" -ne 0 ] && grep -q 'not valid JSON' "$work/bad-fixture.log" \
+  && ! grep -q Traceback "$work/bad-fixture.log"; then
+  ok "malformed fixture JSON -> exit 1, clear stderr, no traceback"
+else bad "malformed fixture JSON"; cat "$work/bad-fixture.log"; fi
+printf '{"issue": 1, "comments": []}' >"$work/wrong-issue.json"
+set +e
+"$py" scripts/opencode-build-context.py --from-json "$work/wrong-issue.json" --out-dir "$work/wi-out" \
+  2>"$work/wi.err" >/dev/null
+wi_rc=$?
+set -e
+if [ "$wi_rc" -ne 0 ] && grep -q 'missing a JSON object "issue"' "$work/wi.err" && ! grep -q Traceback "$work/wi.err"; then
+  ok 'fixture with non-object "issue" refused'
+else bad 'fixture with non-object "issue"'; cat "$work/wi.err"; fi
+"$py" - "$work/edge.json" <<'PY'
+import json, sys
+d = json.load(open("tests/oc-context/no-spec.json"))
+d["issue"]["title"] = "Unicode 🔥 café — \x00 ignored in title"
+d["issue"]["body"] = None
+d["issue"]["labels"] = None
+d["comments"] = [None, "stray", {"id": 1, "author_association": "OWNER", "body": "note with emoji 🎯"}]
+json.dump(d, open(sys.argv[1], "w"), ensure_ascii=False)
+PY
+build edge "$work/edge.json"
+if [ "$rc" -eq 0 ] && grep -q 'Unicode 🔥 café' "$work/edge/issue-context.md" \
+  && grep -q 'emoji 🎯' "$work/edge/issue-context.md" && [ ! -s "$work/edge/issue-labels.txt" ] \
+  && [ "$(meta edge spec_comment_id)" = none ]; then
+  ok "null body/labels, non-dict comments skipped, unicode preserved"
+else bad "null body/labels / unicode edge case"; fi
+printf '\xff\xfe\xfd' >"$work/binary.json"
+set +e
+"$py" scripts/opencode-build-context.py --from-json "$work/binary.json" --out-dir "$work/bin-out" \
+  2>"$work/bin.err" >/dev/null
+bin_rc=$?
+set -e
+if [ "$bin_rc" -ne 0 ] && grep -q 'cannot read fixture' "$work/bin.err" && ! grep -q Traceback "$work/bin.err"; then
+  ok "non-UTF-8 fixture file refused cleanly"
+else bad "non-UTF-8 fixture"; cat "$work/bin.err"; fi
+
 echo
 echo "Results: $passed passed, $failed failed"
 [ "$failed" -eq 0 ]

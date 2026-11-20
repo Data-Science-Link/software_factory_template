@@ -44,14 +44,37 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
+def read_fixture(path: str) -> dict:
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        die(f"cannot read fixture {path}: {exc}")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        die(f"fixture {path} is not valid JSON ({exc.msg} at char {exc.pos})")
+    if not isinstance(data, dict):
+        die(f"fixture {path} must be a JSON object")
+    return data
+
+
 def gh(*args: str) -> str:
     return subprocess.run(["gh", "api", *args], check=True, capture_output=True, text=True).stdout
 
 
 def load(args: argparse.Namespace) -> tuple[dict, list]:
     if args.from_json:
-        data = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
-        return data["issue"], data["comments"]
+        data = read_fixture(args.from_json)
+        issue = data.get("issue")
+        if not isinstance(issue, dict):
+            die('fixture is missing a JSON object "issue"')
+        raw = data.get("comments", [])
+        if raw is None:
+            raw = []
+        if not isinstance(raw, list):
+            die('fixture "comments" must be a JSON array (or omitted)')
+        comments = [c for c in raw if isinstance(c, dict)]
+        return issue, comments
     repo, n = args.repo, args.issue
     issue = json.loads(gh(f"repos/{repo}/issues/{n}"))
     lines = gh("--paginate", "--jq", ".[]", f"repos/{repo}/issues/{n}/comments?per_page=100")
