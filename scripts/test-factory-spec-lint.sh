@@ -13,6 +13,9 @@ fixtures="tests/spec-lint"
 passed=0
 failed=0
 
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
 assert_rc() {
   local label="$1" expect="$2"
   shift 2
@@ -54,7 +57,7 @@ assert_rc "bad front matter enum" 1 \
 assert_rc "unquoted colon in title" 1 \
   python3 scripts/factory-spec-lint.py "$fixtures/fail-unquoted-colon-title.md"
 
-json_out="$(mktemp)"
+json_out="$tmpdir/json-out.json"
 if python3 scripts/factory-spec-lint.py --json "$fixtures/pass-valid.md" >"$json_out"; then
   if python3 - "$json_out" <<'PY'
 import json, sys
