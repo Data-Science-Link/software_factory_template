@@ -113,6 +113,47 @@ else
   fail "collect-runs: resolves repo from git remote origin"
 fi
 
+# ---- --offline --runs-dir dry-run uses synthesis, no gh / collect ----
+offline_log="$tmpdir/offline-dry.log"
+if bash scripts/factory-site-build.sh --offline --runs-dir examples/sample-runs --dry-run \
+  >"$offline_log" 2>&1; then
+  ok=1
+  grep -q 'SKIP  collect runs' "$offline_log" || ok=0
+  grep -q 'site-data synthesize' "$offline_log" || ok=0
+  grep -q 'examples/sample-runs' "$offline_log" || ok=0
+  grep -q 'backlog (offline' "$offline_log" || ok=0
+  if grep -q 'factory-backlog.py' "$offline_log" && ! grep -q 'gh issue' "$offline_log"; then
+    :
+  else
+    ok=0
+  fi
+  if [ "$ok" = 1 ]; then
+    pass "--offline --runs-dir --dry-run synthesizes marts and skips network"
+  else
+    fail "--offline --runs-dir --dry-run synthesizes marts and skips network"
+    cat "$offline_log"
+  fi
+else
+  fail "--offline --runs-dir --dry-run synthesizes marts and skips network"
+  cat "$offline_log" 2>/dev/null || true
+fi
+
+# ---- full offline build from sample-runs passes factory-site-smoke.py ----
+site_tmp="$tmpdir/offline-site"
+rm -rf site site-data
+PINNED_NOW="2026-11-20 12:00:00"
+if bash scripts/factory-site-build.sh --offline --runs-dir examples/sample-runs \
+  --now "$PINNED_NOW" >"$tmpdir/offline-build.log" 2>&1 \
+  && [ -f site/index.html ] \
+  && smoke_out="$("$PYTHON" scripts/factory-site-smoke.py site 2>&1)" \
+  && printf '%s\n' "$smoke_out" | grep -q '^OK'; then
+  pass "offline build from examples/sample-runs passes factory-site-smoke.py"
+else
+  fail "offline build from examples/sample-runs passes factory-site-smoke.py"
+  cat "$tmpdir/offline-build.log" 2>/dev/null || true
+  printf '%s\n' "${smoke_out:-}" 
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
