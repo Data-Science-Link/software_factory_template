@@ -14,6 +14,7 @@ Pointers only — do not duplicate long docs here. Update paths when you drop th
 | PR template | `.github/pull_request_template.md` | copy from sketches |
 | Code owners | `.github/CODEOWNERS` | copy from sketches; set handles |
 | Architecture | `docs/architecture.md` | create or retarget |
+| Monthly factory review | `docs/MONTHLY_REVIEW.md` | 30-day stdlib review (`scripts/factory-monthly-review.py`) |
 | How to run tests / CI | *(fill in)* | agents need this for verify |
 | Deploy / release | *(fill in)* | |
 | Domain / product glossary | *(fill in)* | |
