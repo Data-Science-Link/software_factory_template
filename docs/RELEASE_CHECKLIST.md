@@ -24,7 +24,9 @@ Use `python3 scripts/factory-release.py` for a read-only release scorecard. It n
 
 4. **Confirm CI** — `main` should be green on that commit (`pr-check`, `run-records`, `gitleaks`). See [RELEASING.md](RELEASING.md) for approval and #156 gates before the first public tag.
 
-5. **Cut the release (owner)** — run the commands printed at the bottom of the helper output: annotated tag, push tag, `gh release create`, and `python3 scripts/factory-sync-repos.py --tag <tag> --dry-run` when that script is available. Product repos update pins or sync PRs per [RELEASING.md](RELEASING.md).
+5. **Cut the release (owner)** — run the commands printed at the bottom of the helper output: annotated tag, push tag, `gh release create`, and `python3 scripts/factory-sync-repos.py --repos-file factory/adopters.txt --tag <tag> --dry-run` when that script is available. Product repos update pins or sync PRs per [RELEASING.md](RELEASING.md).
+
+6. **First-adopter pilot (optional, same release)** — onboard one product repo to the new tag and run one small issue end to end. See [PILOT_RUNBOOK.md](PILOT_RUNBOOK.md).
 
 ## JSON for automation
 
