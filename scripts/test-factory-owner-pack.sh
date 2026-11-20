@@ -47,7 +47,26 @@ PY
 import json, sys
 json.dump({"summary": {"pass": 1, "warn": 0, "fail": 0, "skip": 0}, "checks": []}, sys.stdout)
 PY
-  chmod +x "$repo"/scripts/*.py
+  cat >"$repo/scripts/factory-models-check.py" <<'PY'
+#!/usr/bin/env python3
+import json, sys
+json.dump({"status": "ok", "models_checked": 1, "errors": [], "warnings": []}, sys.stdout)
+PY
+  cat >"$repo/scripts/factory-decision-log.py" <<'PY'
+#!/usr/bin/env python3
+import json, sys
+if len(sys.argv) > 1 and sys.argv[1] == "check":
+    json.dump({"total": 1, "valid": True, "errors": [], "warnings": []}, sys.stdout)
+PY
+  cat >"$repo/scripts/test-shell-hygiene.sh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  cat >"$repo/scripts/test-examples.sh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$repo"/scripts/*.py "$repo"/scripts/*.sh
 }
 
 run_pack() {
@@ -133,6 +152,60 @@ print("json ok")
 ' "$work/out"
 then ok "--json parses cleanly"
 else bad "--json schema"
+fi
+
+# --- new quality gates present on stub + READY ---
+for gate_id in models_config decision_log examples_smoke shell_hygiene; do
+  if python3 -c '
+import json, sys
+gate = sys.argv[2]
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+row = next(g for g in data["gates"] if g["id"] == gate)
+assert row["status"] == "PASS", (gate, row["status"])
+print(gate, "ok")
+' "$work/out" "$gate_id"
+  then ok "stub gate $gate_id PASS in --json"
+  else bad "stub gate $gate_id in --json"
+  fi
+done
+
+run_pack --repo-dir "$stub_repo" --version v0.1.0
+if grep -q "Model registry (factory-models-check)" "$work/out" \
+  && grep -q "Shell hygiene (test-shell-hygiene)" "$work/out" \
+  && grep -q "OWNER_WORKFLOW_SYNC.md" "$work/out"; then
+  ok "stub --markdown lists new gates and owner refs"
+else
+  bad "stub --markdown new gates"
+fi
+
+# --- live repo: new gates PASS (integration) ---
+if [ -f "$root/.factory/models.yaml" ]; then
+  run_pack --repo-dir "$root" --version v0.1.0 --json
+  for gate_id in models_config decision_log examples_smoke shell_hygiene; do
+    if python3 -c '
+import json, sys
+gate = sys.argv[2]
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+row = next(g for g in data["gates"] if g["id"] == gate)
+assert row["status"] == "PASS", (gate, row["status"], row.get("detail"))
+print("live", gate, row["status"])
+' "$work/out" "$gate_id"
+    then ok "live gate $gate_id PASS"
+    else bad "live gate $gate_id"
+    fi
+  done
+  run_pack --repo-dir "$root" --version v0.1.0
+  for needle in \
+    "Model registry (factory-models-check)" \
+    "Decision log (factory-decision-log)" \
+    "Examples smoke (test-examples)" \
+    "Shell hygiene (test-shell-hygiene)"; do
+    if grep -qF "$needle" "$work/out"; then
+      ok "live markdown mentions $needle"
+    else
+      bad "live markdown missing $needle"
+    fi
+  done
 fi
 
 echo ""
