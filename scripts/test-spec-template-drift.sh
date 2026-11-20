@@ -32,7 +32,7 @@ fi
 # Broken case: a template copy with a mismatched price_table_version is blocked.
 broken="$tmpdir/spec.md"
 cp .factory/templates/spec.md "$broken"
-sed -i 's/^price_table_version: .*/price_table_version: 1900-01-01/' "$broken"
+sed 's/^price_table_version: .*/price_table_version: 1900-01-01/' "$broken" >"$broken.tmp" && mv "$broken.tmp" "$broken"
 set +e
 bad_output="$("$PWD/scripts/spec-template-drift-check.py" --template "$broken" 2>&1)"
 bad_rc=$?

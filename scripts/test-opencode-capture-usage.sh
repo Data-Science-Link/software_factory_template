@@ -6,11 +6,14 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 capture="$root/scripts/opencode-capture-usage.sh"
 fixtures="$root/tests/opencode-capture-usage"
 
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
 run_case() {
   local name=$1 fixture=$2
   shift 2
   local out
-  out="$(mktemp)"
+  out="$tmpdir/case-${name//[^A-Za-z0-9._-]/_}.out"
   OPENCODE_STATS_FIXTURE="$fixture" bash "$capture" "$out"
   for needle in "$@"; do
     if ! grep -Fq "$needle" "$out"; then
@@ -27,7 +30,7 @@ run_case() {
 run_case_no_cost_var() {
   local name=$1 fixture=$2
   local combined
-  combined="$(mktemp)"
+  combined="$tmpdir/combined-${name//[^A-Za-z0-9._-]/_}.out"
   if OPENCODE_STATS_FIXTURE="$fixture" bash "$capture" 2>/dev/null | tee "$combined" | grep -q '^OC_OPENCODE_COST='; then
     echo "FAIL $name: expected no OC_OPENCODE_COST line" >&2
     cat "$combined" >&2
@@ -57,7 +60,7 @@ run_case "no-cost-row" "$fixtures/stats-no-cost.txt" \
   "OpenCode-reported cost: not measured"
 run_case_no_cost_var "no-cost-row" "$fixtures/stats-no-cost.txt"
 
-empty_out="$(mktemp)"
+empty_out="$tmpdir/empty.out"
 OPENCODE_STATS_FIXTURE="$fixtures/stats-empty.txt" bash "$capture" "$empty_out" >/dev/null
 if grep -q 'Input tokens:' "$empty_out"; then
   echo "FAIL empty: should not report input tokens" >&2

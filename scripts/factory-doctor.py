@@ -499,6 +499,141 @@ def check_prepublic_hygiene(repo: Path) -> list[Check]:
     ]
 
 
+def check_models_config(repo: Path) -> list[Check]:
+    script = repo / "scripts" / "factory-models-check.py"
+    if not script.is_file():
+        return [
+            Check(
+                id="models_config",
+                category="models_config",
+                status="skip",
+                detail="scripts/factory-models-check.py not present",
+            )
+        ]
+    models_yaml = repo / ".factory" / "models.yaml"
+    routing_md = repo / ".factory" / "MODEL_ROUTING.md"
+    cmd = [
+        sys.executable,
+        str(script),
+        "--models-yaml",
+        str(models_yaml),
+        "--json",
+    ]
+    if routing_md.is_file():
+        cmd.extend(["--routing-md", str(routing_md)])
+    try:
+        proc = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo,
+        )
+        payload = json.loads(proc.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        return [
+            Check(
+                id="models_config",
+                category="models_config",
+                status="fail",
+                detail=f"factory-models-check.py --json failed: {exc}",
+            )
+        ]
+    errors = payload.get("errors") or []
+    warnings = payload.get("warnings") or []
+    n_err = len(errors)
+    n_warn = len(warnings)
+    if n_err > 0:
+        status = "fail"
+        detail = f"models-check: {n_err} error(s), {n_warn} warning(s)"
+    elif n_warn > 0:
+        status = "warn"
+        detail = f"models-check: no errors; {n_warn} warning(s)"
+    else:
+        status = "pass"
+        checked = int(payload.get("models_checked", 0))
+        detail = f"models-check: clean ({checked} model(s))"
+    return [
+        Check(
+            id="models_config",
+            category="models_config",
+            status=status,
+            detail=detail,
+            extra={
+                "errors": errors[:10],
+                "warnings": warnings[:10],
+                "models_checked": payload.get("models_checked"),
+            },
+        )
+    ]
+
+
+def check_decision_log(repo: Path) -> list[Check]:
+    script = repo / "scripts" / "factory-decision-log.py"
+    if not script.is_file():
+        return [
+            Check(
+                id="decision_log",
+                category="decision_log",
+                status="skip",
+                detail="scripts/factory-decision-log.py not present",
+            )
+        ]
+    decisions_md = repo / ".factory" / "DECISIONS.md"
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "check",
+                "--file",
+                str(decisions_md),
+                "--json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo,
+        )
+        payload = json.loads(proc.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        return [
+            Check(
+                id="decision_log",
+                category="decision_log",
+                status="fail",
+                detail=f"factory-decision-log.py check --json failed: {exc}",
+            )
+        ]
+    errors = payload.get("errors") or []
+    warnings = payload.get("warnings") or []
+    n_err = len(errors)
+    n_warn = len(warnings)
+    if n_err > 0:
+        status = "fail"
+        detail = f"decision-log check: {n_err} error(s), {n_warn} warning(s)"
+    elif n_warn > 0:
+        status = "warn"
+        detail = f"decision-log check: no errors; {n_warn} warning(s)"
+    else:
+        status = "pass"
+        total = int(payload.get("total", 0))
+        detail = f"decision-log check: clean ({total} decision(s))"
+    return [
+        Check(
+            id="decision_log",
+            category="decision_log",
+            status=status,
+            detail=detail,
+            extra={
+                "errors": errors[:10],
+                "warnings": warnings[:10],
+                "total": payload.get("total"),
+            },
+        )
+    ]
+
+
 def check_workflow_hygiene(repo: Path) -> list[Check]:
     audit = repo / "scripts" / "factory-audit-workflows.py"
     if not audit.is_file():
@@ -625,6 +760,8 @@ def run_doctor(repo: Path, *, live: bool, public: bool) -> list[Check]:
     checks.extend(check_python_dbt(repo))
     checks.extend(check_protected_scripts(repo))
     checks.extend(check_workflow_hygiene(repo))
+    checks.extend(check_models_config(repo))
+    checks.extend(check_decision_log(repo))
     checks.extend(check_docs_links(repo))
     if public:
         checks.extend(check_prepublic_hygiene(repo))

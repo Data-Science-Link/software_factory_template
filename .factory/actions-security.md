@@ -59,6 +59,25 @@ Workflow: `.github/workflows/opencode-spec.yml` (owner paste). Scripts: `opencod
 6. **Approval:** `/oc` still takes only the latest OWNER comment with `status: approved` (`opencode-build-context.py`); a bot draft is ignored even if it says approved. `factory-approve-spec.py` checks the draft came from the workflow, sets status/approved_by/approved_at, re-runs the checks and prediction, accepts `grok-bot` only for trivial or normal risk (high risk needs `michael`, Michael's decision 2026-11-02), and posts the copy from the owner's gh login.
 7. **Residual risk:** the draft is model-written and may carry prompt-injection text into the later build prompt; the reviewer reads the whole spec before approving, and the build worker sees it inside the untrusted-data block.
 
+## Independent Critic `review` job (#41)
+
+Proposed paste: `docs/OWNER_WORKFLOW_SYNC.md` §5 (owner adds the job to `opencode-spike.yml` / `opencode-fix.yml`; workers must not edit `.github/workflows/*`). Scripts: `scripts/factory-critic-context.py`, `scripts/factory-critic-run.py`; prompt: `.factory/prompts/critic-review.md`; operator guide: `docs/CRITIC_REVIEW.md`.
+
+**Threat:** The builder model and worker could over-trust their own diff, miss spec drift, or smuggle instructions through the PR body. A second model on the **same** runner with a **write** token could amplify compromise (exfil or publish under the bot identity).
+
+**Boundary (must hold in workflow YAML):**
+
+1. **Separate fresh runner:** A dedicated `review` job runs after **`agent`** succeeds and before **`publish`**, never on the coder/agent VM and never reusing that job’s environment snapshot.
+2. **Read-only tokens:** Job `permissions`: `contents: read` only (no `contents: write`, no `pull-requests: write`, no `id-token` for OIDC). Checkout builder artifacts with `persist-credentials: false`; do not pass `GITHUB_TOKEN` into the model step.
+3. **Trusted prompt from base ref:** Checkout the repository **default branch** (not the PR head). Load `.factory/prompts/critic-review.md` from that tree only (`factory-critic-context.py --prompt` default). The PR branch must not be able to replace the Critic system prompt.
+4. **Distinct reviewer model:** `factory-critic-run.py` selects a DeepInfra model id from `.factory/models.yaml` that is **guaranteed different** from the builder/coder model (`--coder-model` / `OC_CODER_MODEL`). Use `--print-model` in CI to log the pair without spending tokens.
+5. **Read-only model call:** The only secret in the review job is `DEEPINFRA_API_KEY`. The Critic sees `critic-input.md` (prompt + capped bundle) and returns text; no bash, no repo writes, no publish token.
+6. **Bundle hygiene:** `factory-critic-context.py` packs diff, approved spec, and harness verification output; redacts token-like strings; optional `FACTORY_CRITIC_SCAN` (default `scripts/opencode-artifact-scan.sh`) on outputs. Treat bundled content as **untrusted data** (same rule as issue/spec text in the builder prompt).
+7. **Cost inside issue cap:** `factory-critic-run.py` writes `critic-run-record.json` with `work_type: review`, token counts, and `usage_x_price_table` cost from `models.yaml`. Review spend counts toward the same per-issue cap as build/fix runs (`factory/budget.yml` / `issue_cap_usd`).
+8. **Publish separation:** Posting the Critic comment to the PR remains in **`publish`** (write token), fed from review artifacts — same split as agent vs publish today.
+
+**Residual risk:** The Critic can still miss defects or hallucinate findings; `needs fixes` should flow to `/oc fix` only after the Factory Manager or owner agrees. A hostile diff can still try prompt injection inside the bundle; the base-ref prompt and read-only posture limit but do not eliminate that class.
+
 ## If a secret leaks
 
 1. **Rotate immediately:** DeepInfra → delete compromised Actions key → create new key (`sft-actions`) → update repo secret `DEEPINFRA_API_KEY`.
