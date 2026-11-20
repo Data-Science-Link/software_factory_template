@@ -39,6 +39,23 @@ def normalize_front_matter_raw(raw: str) -> str:
     return "\n".join(out)
 
 
+def duplicate_scalar_keys(raw: str) -> list[str]:
+    """Root-level scalar keys duplicated in raw YAML front matter (first wins in PyYAML)."""
+    seen: set[str] = set()
+    dups: list[str] = []
+    for line in raw.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        m = _FM_SCALAR_LINE.match(line)
+        if not m:
+            continue
+        key = m.group(1)
+        if key in seen and key not in dups:
+            dups.append(key)
+        seen.add(key)
+    return dups
+
+
 def parse_front_matter_raw(raw: str) -> tuple[dict[str, Any] | None, str | None]:
     """Parse normalized YAML front matter; returns (mapping, error_message)."""
     try:

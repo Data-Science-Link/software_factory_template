@@ -37,9 +37,40 @@ Shared factory method files (`FACTORY.md`, skills, `scripts/`, and so on) are fe
 
 Revert the sync PR that bumped the pinned tag (one line per caller workflow). No other product-repo edits are required.
 
-## Tag bump sync
+## Adopter upgrade and fleet sync
 
-After a new template tag, run `scripts/factory-sync-repos.py` with a repo list and target tag to open (or update) one sync PR per product repository. See [RELEASING.md](../RELEASING.md).
+After a new template tag:
+
+1. **Contract validation** (template repo, before tagging or opening sync PRs):
+
+   ```bash
+   python3 scripts/factory-reusable-check.py --strict
+   ```
+
+2. **Drift check** (read-only; no branches or PRs):
+
+   ```bash
+   python3 scripts/factory-sync-repos.py \
+     --repos-file factory/adopters.txt \
+     --tag v0.2.0 \
+     --check --json
+   ```
+
+   JSON `summary` counts adopters as `up_to_date`, `outdated`, `missing_pins`, or `error`. `missing_pins` means no reusable-workflow caller was found under `.github/workflows/`.
+
+3. **Open sync PRs** (one per product repo that is outdated):
+
+   ```bash
+   python3 scripts/factory-sync-repos.py \
+     --repos-file factory/adopters.txt \
+     --tag v0.2.0 \
+     --dry-run
+   python3 scripts/factory-sync-repos.py \
+     --repos-file factory/adopters.txt \
+     --tag v0.2.0
+   ```
+
+See [RELEASING.md](../RELEASING.md) for approval gates. The adopters file skips blank lines and `#` comments; duplicate `owner/repo` lines are ignored once.
 
 ## Offline contract check
 
@@ -49,6 +80,12 @@ Before cutting a release tag or opening a sync PR, validate that each `reusable-
 python3 scripts/factory-reusable-check.py --strict
 ```
 
-Use `--json` for machine-readable output, or `--dir <path>` to lint a fixture tree (see `scripts/test-factory-reusable-check.sh`).
+`--json` emits deterministic machine-readable findings; `--dir <path>` lints a fixture tree (see `scripts/test-factory-reusable-check.sh`).
+
+Contract checks include:
+
+- Callers must not contain hardcoded personal org slugs (`Data-Science-Link`); only `YOUR_ORG/software_factory_template` or `{{TEMPLATE_REPO}}` placeholders.
+- Callers and reusables must declare explicit `permissions:` (never `write-all`).
+- Each caller’s `with:` / `secrets:` must match its paired reusable `workflow_call` contract.
 
 Callers keep `YOUR_ORG/software_factory_template` on the `uses:` line; reusable bodies use `"{{TEMPLATE_REPO}}"` for template checkout steps. `scripts/factory-init-repo.py` and `scripts/factory-migrate-adopter.py` substitute the real `org/repo` at scaffold time.
