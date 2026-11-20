@@ -1,0 +1,7 @@
+[
+  {
+    "ended_at_utc": "2026-11-11T12:00:00Z",
+    "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "work_type": "build"
+  }
+]

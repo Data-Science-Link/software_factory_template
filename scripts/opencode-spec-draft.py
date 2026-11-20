@@ -262,6 +262,13 @@ def checks(spec: str, issue: str) -> list[str]:
         errors.append("## Files is empty")
     if not re.search(r"\S", section(spec, "Worker prompt")):
         errors.append("## Worker prompt is empty")
+    try:
+        _, fm_lines, _ = split_spec(spec)
+        risk = get_field(fm_lines, "risk")
+    except ValueError:
+        risk = ""
+    if risk in ("normal", "high") and not re.search(r"\S", section(spec, "Bad inputs and edge cases")):
+        errors.append("## Bad inputs and edge cases is missing or empty (required for normal or high risk)")
     return errors
 
 
