@@ -47,6 +47,20 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
+def read_fixture(path: str) -> dict:
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        die(f"cannot read fixture {path}: {exc}")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        die(f"fixture {path} is not valid JSON ({exc.msg} at char {exc.pos})")
+    if not isinstance(data, dict):
+        die(f"fixture {path} must be a JSON object")
+    return data
+
+
 def gh(*args: str) -> str:
     return subprocess.run(["gh", "api", *args], check=True, capture_output=True, text=True).stdout
 
@@ -177,7 +191,11 @@ def main() -> int:
     owner = args.repo.split("/")[0]
 
     if args.from_json:
-        data = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
+        data = read_fixture(args.from_json)
+        if not isinstance(data.get("pr"), dict):
+            die('fixture is missing a JSON object "pr"')
+        if not args.check_pr and not isinstance(data.get("issue"), dict):
+            die('fixture is missing a JSON object "issue"')
     else:
         data = {"pr": json.loads(gh(f"repos/{args.repo}/pulls/{args.pr}"))}
     if args.pr and str((data.get("pr") or {}).get("number")) != str(args.pr):
