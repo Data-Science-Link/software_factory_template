@@ -4,6 +4,8 @@ This template is versioned with semver tags (`v0.1.0` and up) so a product repo 
 
 See [CHANGELOG.md](../CHANGELOG.md) for the notes.
 
+After the first tag exists, run the **first adopter pilot** on one product repo before you widen pins. Checklist: [PILOT_RUNBOOK.md](PILOT_RUNBOOK.md).
+
 ## Before you tag
 
 - [ ] The owner has approved cutting this tag (and, for the first product pin, the #156 pilot gate is understood).
@@ -24,7 +26,7 @@ See [CHANGELOG.md](../CHANGELOG.md) for the notes.
 A product repo keeps thin caller workflows (see [docs/reusable-workflows/callers/](reusable-workflows/callers/)) that call the template at a pinned tag, for example:
 
 ```
-uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-opencode-fix.yml@v0.1.0
+uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-opencode-fix.yml@v0.1.0
 ```
 
 with matching `factory_ref: v0.1.0`. Scripts and shared factory files are fetched at that tag during the run.
