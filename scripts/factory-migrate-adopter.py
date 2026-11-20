@@ -21,6 +21,9 @@ from typing import Any
 
 DEFAULT_TEMPLATE_REPO = "Data-Science-Link/software_factory_template"
 DEFAULT_TAG = "v0.1.0"
+TEMPLATE_REPO_PLACEHOLDER = "YOUR_ORG/software_factory_template"
+LEGACY_TEMPLATE_REPO = "Data-Science-Link/software_factory_template"
+OWNER_PLACEHOLDER = "YOUR_OWNER_GITHUB_LOGIN"
 ARCHIVE_DIR = ".factory/migration-archive/scripts"
 CALLERS_DIR = ".factory/migration-callers"
 MODE_REL = ".factory/mode.yml"
@@ -175,10 +178,16 @@ def mode_yml_content() -> str:
     return "# owner-only\nmode: product\n"
 
 
-def substitute_caller(text: str, template_repo: str, tag: str) -> str:
+def substitute_caller(
+    text: str, template_repo: str, tag: str, owner: str | None = None
+) -> str:
     text = text.replace("{{TEMPLATE_REPO}}", template_repo)
     text = text.replace("{{TAG}}", tag)
+    text = text.replace(TEMPLATE_REPO_PLACEHOLDER, template_repo)
+    text = text.replace(LEGACY_TEMPLATE_REPO, template_repo)
     text = text.replace("@v0.0.0", f"@{tag}")
+    if owner:
+        text = text.replace(OWNER_PLACEHOLDER, owner)
     text = re.sub(
         r"((?:[\w.-]+/){2}\.github/workflows/reusable-[\w.-]+\.yml)@[^\s\"']+",
         rf"\1@{tag}",
@@ -190,6 +199,20 @@ def substitute_caller(text: str, template_repo: str, tag: str) -> str:
         text,
     )
     return text
+
+
+def assert_caller_placeholders_resolved(text: str, *, owner: str) -> None:
+    """Raise ValueError when template or owner placeholders survive substitution."""
+    leftovers: list[str] = []
+    if "YOUR_ORG" in text:
+        leftovers.append("YOUR_ORG")
+    if OWNER_PLACEHOLDER in text:
+        leftovers.append(OWNER_PLACEHOLDER)
+    if leftovers:
+        raise ValueError(
+            "caller workflow still contains template placeholders: "
+            + ", ".join(leftovers)
+        )
 
 
 def render_generated_caller(spec: dict[str, str], template_repo: str, tag: str) -> str:
@@ -213,15 +236,21 @@ def render_generated_caller(spec: dict[str, str], template_repo: str, tag: str) 
 
 
 def load_caller_stubs(
-    template_dir: Path, template_repo: str, tag: str
+    template_dir: Path,
+    template_repo: str,
+    tag: str,
+    owner: str | None = None,
 ) -> dict[str, str]:
     callers_dir = template_dir / "docs" / "reusable-workflows" / "callers"
     out: dict[str, str] = {}
     if callers_dir.is_dir():
         for path in sorted(callers_dir.glob("*.yml")) + sorted(callers_dir.glob("*.yaml")):
-            out[path.name] = substitute_caller(
-                path.read_text(encoding="utf-8"), template_repo, tag
+            body = substitute_caller(
+                path.read_text(encoding="utf-8"), template_repo, tag, owner
             )
+            if owner:
+                assert_caller_placeholders_resolved(body, owner=owner)
+            out[path.name] = body
         if out:
             return out
     for spec in CALLER_SPECS:
@@ -291,6 +320,7 @@ def build_report(
     template_dir: Path,
     template_repo: str,
     tag: str,
+    owner: str | None = None,
 ) -> Report:
     template_index = template_script_index(template_dir)
     rows = classify_scripts(repo, template_index)
@@ -307,7 +337,7 @@ def build_report(
     report.mode_status = {"status": status, "mode": mode}
 
     wf = scan_workflows(repo, template_repo, tag)
-    stubs = load_caller_stubs(template_dir, template_repo, tag)
+    stubs = load_caller_stubs(template_dir, template_repo, tag, owner)
     missing = missing_callers(wf, stubs)
     report.workflow_status = {
         **wf,
@@ -517,6 +547,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="With --apply, also write .github/workflows/ caller stubs (owner risk)",
     )
     ap.add_argument("--json", action="store_true", help="Emit JSON report on stdout")
+    ap.add_argument(
+        "--owner",
+        default=None,
+        help=(
+            "GitHub login allowed to trigger /oc workflows; substitutes "
+            f"{OWNER_PLACEHOLDER} in caller stubs"
+        ),
+    )
     return ap.parse_args(argv)
 
 
@@ -546,8 +584,16 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.owner is not None and not re.fullmatch(r"[\w.-]+", args.owner):
+        print(
+            "factory-migrate-adopter: --owner must be a GitHub username (letters, digits, - .)",
+            file=sys.stderr,
+        )
+        return 2
 
-    report, stubs = build_report(repo, template_dir, args.template_repo, args.tag)
+    report, stubs = build_report(
+        repo, template_dir, args.template_repo, args.tag, args.owner
+    )
     plan_actions(
         report,
         stubs,
