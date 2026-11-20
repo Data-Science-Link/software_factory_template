@@ -1595,10 +1595,15 @@ def main(argv=None):
     if args.input is not None:
         try:
             with open(args.input, "r", encoding="utf-8") as fh:
-                run = json.load(fh)
+                raw = fh.read()
         except OSError as exc:
             print(f"ERROR: cannot read --input: {exc}", file=sys.stderr)
             return 2
+        if not raw.strip():
+            print("ERROR: --input is empty", file=sys.stderr)
+            return 2
+        try:
+            run = json.loads(raw)
         except json.JSONDecodeError as exc:
             print(f"ERROR: --input is not valid JSON: {exc}", file=sys.stderr)
             return 2
@@ -1615,6 +1620,12 @@ def main(argv=None):
         return 0
 
     if args.live_dir is not None:
+        if not os.path.isdir(args.live_dir):
+            print(
+                f"ERROR: --live-dir is not a directory: {args.live_dir}",
+                file=sys.stderr,
+            )
+            return 2
         runs = fetch_runs_live_dir(args.live_dir)
         reviews = [review_run(run) for run in runs]
         payload = {

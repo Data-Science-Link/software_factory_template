@@ -103,6 +103,58 @@ else
   run_fail "--json output did not parse or validate"
 fi
 
+# ---- test 6: missing issues JSON exits non-zero with ERROR (no traceback) ----
+set +e
+err="$tmpdir/missing.err"
+"$PYTHON" "$TRIAGE" --issues-json "$tmpdir/does-not-exist.json" --repo-dir . >"$tmpdir/missing.out" 2>"$err"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR: cannot read issues JSON' "$err" \
+   && ! grep -q '^Traceback' "$err"; then
+  run_pass "missing --issues-json writes ERROR to stderr and exits non-zero"
+else
+  run_fail "missing --issues-json error handling"
+  cat "$err" || true
+fi
+
+# ---- test 7: malformed issues JSON ----
+printf 'not json' >"$tmpdir/bad.json"
+set +e
+"$PYTHON" "$TRIAGE" --issues-json "$tmpdir/bad.json" --repo-dir . >"$tmpdir/bad.out" 2>"$tmpdir/bad.err"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR: issues JSON is not valid JSON' "$tmpdir/bad.err" \
+   && ! grep -q '^Traceback' "$tmpdir/bad.err"; then
+  run_pass "malformed issues JSON rejected cleanly"
+else
+  run_fail "malformed issues JSON handling"
+  cat "$tmpdir/bad.err" || true
+fi
+
+# ---- test 8: object (not array) issues JSON ----
+printf '{}' >"$tmpdir/object.json"
+set +e
+"$PYTHON" "$TRIAGE" --issues-json "$tmpdir/object.json" --repo-dir . 2>"$tmpdir/obj.err"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR: issues JSON must be an array' "$tmpdir/obj.err"; then
+  run_pass "non-array issues JSON rejected"
+else
+  run_fail "non-array issues JSON handling"
+fi
+
+# ---- test 9: --json output is key-sorted and deterministic ----
+"$PYTHON" "$TRIAGE" --issues-json "$FIXTURE" --repo-dir "$REPO_DIR" --json \
+  >"$tmpdir/json-a.json"
+"$PYTHON" "$TRIAGE" --issues-json "$FIXTURE" --repo-dir "$REPO_DIR" --json \
+  >"$tmpdir/json-b.json"
+if cmp -s "$tmpdir/json-a.json" "$tmpdir/json-b.json" \
+   && "$PYTHON" -c 'import json; d=json.load(open("'"$tmpdir/json-a.json"'")); assert list(d)==sorted(d)' 2>/dev/null; then
+  run_pass "--json output sort_keys deterministic"
+else
+  run_fail "--json determinism or sort_keys"
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then

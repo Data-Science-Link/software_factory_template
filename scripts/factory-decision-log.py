@@ -35,6 +35,18 @@ class Decision:
         return f"{self.date} — {self.title}"
 
 
+def read_log_file(path: Path) -> tuple[str | None, str | None]:
+    """Return (text, error_message). Missing file yields empty text."""
+    if not path.is_file():
+        return "", None
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except OSError as exc:
+        return None, f"cannot read {path}: {exc}"
+    except UnicodeDecodeError:
+        return None, f"{path} is not valid UTF-8"
+
+
 def split_log_section(text: str) -> tuple[str, str]:
     """Return (preamble, log_body). Everything from ## Log onward is the log."""
     lines = text.splitlines(keepends=True)
@@ -177,7 +189,7 @@ def cmd_list(entries: list[Decision], as_json: bool) -> int:
         for e in entries
     ]
     if as_json:
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows, indent=2, sort_keys=True))
         return 0
     if not rows:
         print("(no decisions)")
@@ -200,7 +212,7 @@ def cmd_check(entries: list[Decision], as_json: bool) -> int:
         "warnings": warnings,
     }
     if as_json:
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(f"total decisions: {len(entries)}")
         for w in warnings:
@@ -228,8 +240,11 @@ def cmd_add(
     status: str | None,
     do_write: bool,
 ) -> int:
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    entries = parse_decisions(text)
+    text, err = read_log_file(path)
+    if err:
+        print(f"add: {err}", file=sys.stderr)
+        return 1
+    entries = parse_decisions(text or "")
     when = entry_date or date.today().isoformat()
     if not valid_date(when):
         print(f"add: malformed --date {when!r}", file=sys.stderr)
@@ -304,8 +319,11 @@ def main() -> int:
         print(f"add: file not found: {path}", file=sys.stderr)
         return 1
 
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    entries = parse_decisions(text)
+    text, err = read_log_file(path)
+    if err:
+        print(f"decision-log: {err}", file=sys.stderr)
+        return 1
+    entries = parse_decisions(text or "")
 
     if args.command == "list":
         return cmd_list(entries, args.json)
