@@ -13,6 +13,7 @@ factory/site/base.html.
 import argparse
 import datetime
 import html
+import importlib.util
 import json
 import os
 import re
@@ -1102,6 +1103,7 @@ def _assert_non_negative_spend(collection, name):
         "predicted_usd",
         "actual_usd",
         "total_cost_usd",
+        "total_actual_cost_usd",
     )
     for item in collection:
         if not isinstance(item, dict):
@@ -1255,6 +1257,17 @@ def _mart_rows(marts, repo_root, name):
     return queried if queried is not None else []
 
 
+def _compute_mart_spend_by_work_type(agent_rows):
+    """Derive mart_spend_by_work_type from fct_agent_runs when JSON/DuckDB are absent."""
+    path = Path(__file__).with_name("factory-site-data.py")
+    spec = importlib.util.spec_from_file_location("factory_site_data", path)
+    if spec is None or spec.loader is None:
+        return []
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.compute_mart_spend_by_work_type(agent_rows)
+
+
 def _fmt_fin_currency(value):
     if value is None:
         return "—"
@@ -1335,6 +1348,52 @@ def _render_model_efficiency_table(rows):
     return "\n".join(parts)
 
 
+def _render_spend_by_work_type_table(rows):
+    if not rows:
+        return '<p class="note">No spend-by-work-type data available.</p>'
+    parts = [
+        '<table id="spend-by-work-type-table">',
+        "<thead><tr>",
+        "<th>Work type</th><th>Runs</th><th>Pass rate</th>",
+        "<th>Total cost</th><th>Share of spend</th><th>Avg cost</th>",
+        "<th>Tokens (in / cached / out)</th>",
+        "</tr></thead><tbody>",
+    ]
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (
+            -float(r.get("total_actual_cost_usd") or 0),
+            -int(r.get("run_count") or 0),
+            str(r.get("work_type", "")),
+        ),
+    )
+    for row in sorted_rows:
+        tin = row.get("total_tokens_in")
+        tcached = row.get("total_tokens_cached")
+        tout = row.get("total_tokens_out")
+        tokens_s = "—"
+        if tin is not None or tcached is not None or tout is not None:
+            tokens_s = "{:,} / {:,} / {:,}".format(
+                int(tin or 0),
+                int(tcached or 0),
+                int(tout or 0),
+            )
+        parts.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td>"
+            "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(row.get("work_type", "—")),
+                esc(row.get("run_count", "—")),
+                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
+                esc(_fmt_fin_currency(row.get("total_actual_cost_usd"))),
+                esc(_fmt_fin_pct(row.get("cost_share_pct"))),
+                esc(_fmt_fin_currency(row.get("avg_cost_usd"))),
+                esc(tokens_s),
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
 def financials_html(data_dir, repo_root=".", as_of_utc=None):
     """Generate the Financials tab content from marts data."""
     marts_dir, marts = _load_marts(data_dir)
@@ -1360,6 +1419,9 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
     fct_agent_runs = marts.get("fct_agent_runs", [])
     mart_model_efficiency = _mart_rows(marts, repo_root, "mart_model_efficiency")
     mart_monthly_cfo = _mart_rows(marts, repo_root, "mart_monthly_cfo")
+    mart_spend_by_work_type = _mart_rows(marts, repo_root, "mart_spend_by_work_type")
+    if not mart_spend_by_work_type and fct_agent_runs:
+        mart_spend_by_work_type = _compute_mart_spend_by_work_type(fct_agent_runs)
 
     _assert_non_negative_spend(rpt_run_rate, "rpt_run_rate")
     _assert_non_negative_spend(agg_spend_weekly, "agg_spend_weekly")
@@ -1376,6 +1438,9 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
                 raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
         _assert_non_negative_spend(collection, name)
     _assert_non_negative_spend(mart_model_efficiency, "mart_model_efficiency")
+    _assert_non_negative_spend(
+        mart_spend_by_work_type, "mart_spend_by_work_type"
+    )
     for row in mart_monthly_cfo:
         if not isinstance(row, dict):
             raise ValueError(
@@ -1466,6 +1531,12 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
         '<h2>Monthly CFO summary <small>(source: mart_monthly_cfo)</small></h2>'
     )
     parts.append(_render_monthly_cfo_table(mart_monthly_cfo))
+
+    parts.append(
+        '<h2>Spend by Work Type (Coding vs. Review) '
+        "<small>(source: mart_spend_by_work_type)</small></h2>"
+    )
+    parts.append(_render_spend_by_work_type_table(mart_spend_by_work_type))
 
     parts.append(
         "<h2>Per-Issue Economics <small>(sources: agg_spend_by_issue, rpt_issue_target_compliance)</small></h2>"
