@@ -1,0 +1,11 @@
+[
+  {
+    "body": "<!-- factory-run-record -->\n```json\n{\n  \"run_id\": \"gha-43110000001-1\",\n  \"issue\": 174,\n  \"outcome\": \"pr_opened\",\n  \"work_type\": \"build\",\n  \"workflow\": \"opencode-spike\",\n  \"complexity\": \"complex\",\n  \"actual_cost_usd\": 0.229,\n  \"issue_spend_to_date_usd\": 0.229,\n  \"gate_passed\": true,\n  \"verification_status\": \"fail\",\n  \"started_at\": \"2026-11-19T10:00:00Z\",\n  \"ended_at\": \"2026-11-19T10:05:00Z\",\n  \"model\": \"qwen-test\"\n}\n```\n"
+  },
+  {
+    "body": "<!-- factory-run-record -->\n```json\n{\n  \"run_id\": \"gha-43110000002-1\",\n  \"issue\": 174,\n  \"outcome\": \"pr_updated\",\n  \"work_type\": \"fix\",\n  \"workflow\": \"opencode-fix\",\n  \"complexity\": \"complex\",\n  \"actual_cost_usd\": 0.114,\n  \"issue_spend_to_date_usd\": 0.343,\n  \"gate_passed\": true,\n  \"verification_status\": \"fail\",\n  \"started_at\": \"2026-11-19T11:00:00Z\",\n  \"ended_at\": \"2026-11-19T11:04:00Z\",\n  \"model\": \"qwen-test\"\n}\n```\n"
+  },
+  {
+    "body": "<!-- factory-run-record -->\n```json\n{\n  \"run_id\": \"gha-43110000003-1\",\n  \"issue\": 174,\n  \"outcome\": \"pr_updated\",\n  \"work_type\": \"fix\",\n  \"workflow\": \"opencode-fix\",\n  \"complexity\": \"complex\",\n  \"actual_cost_usd\": 0.191,\n  \"issue_spend_to_date_usd\": 0.534,\n  \"gate_passed\": true,\n  \"verification_status\": \"fail\",\n  \"started_at\": \"2026-11-19T12:00:00Z\",\n  \"ended_at\": \"2026-11-19T12:06:00Z\",\n  \"model\": \"qwen-test\"\n}\n```\n"
+  }
+]

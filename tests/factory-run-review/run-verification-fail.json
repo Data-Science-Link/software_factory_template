@@ -1,0 +1,17 @@
+{
+  "run_id": 43111111111,
+  "workflow": "opencode-spike",
+  "status": "completed",
+  "conclusion": "success",
+  "model": "test-model",
+  "routing_rule": "test",
+  "wall_time_seconds": 120,
+  "timeout": false,
+  "gate_passed": true,
+  "verification_text": "Verification run by the harness (scripts/opencode-verify.sh), not by the model.\nResult: FAIL\nResults: 3 passed, 2 failed\n",
+  "cost_usd": 0.22,
+  "tool_events": [],
+  "blocked_calls": [],
+  "scan": {"result": "pass", "detail": "artifact-scan: passed."},
+  "evidence": {"present": true, "label": "harness-verified"}
+}

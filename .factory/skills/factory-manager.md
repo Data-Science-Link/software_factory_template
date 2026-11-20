@@ -154,7 +154,7 @@ Batch owner decisions at natural pauses — **one chat message**, multiple choic
 2. **PR ready (normal/high)** — Recommendation: approve #P for merge. Why: risk class, actual vs predicted cost, gate summary, Evidence. Alternative: hold for X.
 3. **Model / routing** — Recommendation: pin model X per `MODEL_ROUTING.md`. Why: task fit, price, prior run success. Alternative: escalate tier (cost consequence).
 4. **Scope split** — Recommendation: split into issues A + B. Why: predicted cost > $1 or over target. Alternative: narrow scope and one run.
-5. **Fix vs split** — after two failed fix rounds or repeated gate fail: Recommendation: one more `/oc fix` or split — pick one with Why. Alternative: owner patch.
+5. **Fix vs split** — on simple/standard PRs after two failed fix rounds, or on **complex** PRs after **one** failed fix round that still fails Verification: Recommendation is **stop and escalate** (cloud agent / stronger model / owner patch), not another `/oc fix`. Alternative: split the issue.
 6. **End of day** — open decisions only (each with Recommendation + Why); what shipped; what failed gates need owner.
 
 **Standing rules:** “Approve whatever you recommend” counts only when the recommendation was stated **for that PR** in the room and named in the PR body. Blanket “approve all open PRs” covers only PRs that were review-ready at that moment.
@@ -175,7 +175,7 @@ Batch owner decisions at natural pauses — **one chat message**, multiple choic
 1. **Gate:** From run record or PR body — all required in-job checks `pass` for reviewable PRs. Any `fail` → triage; PR not ready.
 2. **Bot PR checks:** If `pr-check` / `gitleaks` sit in “waiting for approval”, owner approves workflows on the PR **or** manager runs `bash scripts/factory-kick-checks.sh <PR>` from owner `gh`, then `gh pr checks <PR> --watch`.
 3. **Factory review:** Post one comment per round using `review-local-pr.md` (scope, done checks, template, CI). Tell owner: pass, or fix count + PR link.
-4. **Fix rounds:** Owner says “fix the review on #P” → manager posts `/oc fix` with the numbered list. **Cap at two fix rounds** per PR; then escalate with a batched checkpoint (split, spec change, or owner edit). Each fix run is metered; same $1 issue cap applies.
+4. **Fix rounds:** Owner says “fix the review on #P” → manager posts `/oc fix` with the numbered list. Before each fix, run `python3 scripts/factory-fix-policy.py` on the issue/PR facts (complexity, issue spend, failed fix rounds, last Verification status). **Simple/standard within budget:** cap at **two** fix rounds per PR, then escalate. **Complex / multi-section / over-target spend:** if the **first** `/oc fix` still fails harness Verification, **do not** start a second fix round — recommendation `stop_and_escalate` (stronger model, cloud agent, or owner). Each fix run is metered; same $1 issue cap applies.
 
 ---
 
@@ -243,7 +243,8 @@ The **factory site** (Architecture, Financials, Backlog, dbt tabs) is the financ
 |---|---|
 | First gate fail on a run | One **escalation** retry if `models.yaml` allows (e.g. model step-up); else report with run link |
 | Second gate fail | Stop auto-retry; batched checkpoint with owner |
-| Fix round 3+ requested | Decline `/oc fix`; options: split issue, new spec, owner patch |
+| Fix round 3+ requested (simple/standard) | Decline `/oc fix`; options: split issue, new spec, owner patch |
+| Complex build: 1st fix still fails Verification | Decline 2nd `/oc fix`; escalate per `factory-fix-policy.py` |
 | Issue at $1 cap | Refuse run; propose split |
 | Protected script or workflow change needed | Owner-only; paste YAML in issue for owner |
 
@@ -258,6 +259,7 @@ The **factory site** (Architecture, Financials, Backlog, dbt tabs) is the financ
 | `factory-approve-spec.py` | Approve draft → posted approved spec |
 | `factory-kick-checks.sh` | Bot PR missing pr-check/gitleaks on head |
 | `factory-run-review.py` | Post-merge cost/review audit (when present) |
+| `factory-fix-policy.py` | Before each `/oc fix`: complex-build 1-fix-round circuit breaker |
 
 ---
 
