@@ -110,6 +110,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "CFO spend and quality digest from factory run records.",
     ),
     CommandSpec(
+        "cost-reconcile",
+        "Spend & Site",
+        "factory-cost-reconcile.py",
+        "Offline cost reconciliation and run-record drift audit vs models.yaml.",
+    ),
+    CommandSpec(
         "predict-cost",
         "Spend & Site",
         "factory-predict-cost.py",
@@ -144,6 +150,18 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Release & Ops",
         "factory-sync-repos.py",
         "Open or update sync PRs to bump reusable-workflow pin tags.",
+    ),
+    CommandSpec(
+        "migrate-adopter",
+        "Release & Ops",
+        "factory-migrate-adopter.py",
+        "Dry-run or apply migration from copied template files to pinned callers.",
+    ),
+    CommandSpec(
+        "owner-pack",
+        "Release & Ops",
+        "factory-owner-pack.py",
+        "Unified owner launch-readiness gate (doctor, docs, workflows, release).",
     ),
 )
 
