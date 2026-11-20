@@ -76,3 +76,39 @@ models:
         description: "Gate pass rate for the month; null when run_count is 0."
       - name: avg_cost_per_issue_usd
         description: "total_cost_usd divided by distinct_issues; null when distinct_issues is 0."
+
+  - name: mart_spend_by_work_type
+    description: >-
+      Spend rollup by normalized work type (coding, review, spec, fix, and similar):
+      run volume, gate pass rate, token totals, and each type's share of total actual spend.
+    data_tests:
+      - unique:
+          column_name: work_type
+      - not_null:
+          column_name: work_type
+      - not_null:
+          column_name: run_count
+    columns:
+      - name: work_type
+        description: "Normalized work_type from agent runs; blank values become unknown."
+      - name: run_count
+        description: "Number of runs in the group."
+      - name: pass_count
+        description: "Runs that passed the pre-spin-down gate."
+      - name: pass_rate_pct
+        description: "Gate pass rate as a percentage of run_count; null-safe when empty."
+      - name: total_actual_cost_usd
+        description: "Sum of actual_cost_usd for the work type."
+      - name: avg_cost_usd
+        description: "Average actual cost per run in USD."
+      - name: cost_share_pct
+        description: >-
+          Share of total actual spend across all work types (0–100); 0 when total spend is 0.
+      - name: total_tokens_in
+        description: "Sum of input tokens for the group."
+      - name: total_tokens_cached
+        description: "Sum of cached input tokens for the group."
+      - name: total_tokens_out
+        description: "Sum of output tokens for the group."
+      - name: total_actions_minutes
+        description: "Sum of GitHub Actions minutes attributed to runs in the group."

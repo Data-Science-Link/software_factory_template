@@ -1,0 +1,73 @@
+name: Factory idea / enhancement
+description: Propose an improvement to the software factory template
+title: "[Idea]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe a concrete outcome for **this template repo**. Do not paste secrets, tokens, or private product data.
+
+        Maintainers use your **Priority** and **Risk** selections to apply `priority:*` and `risk:*` labels (see [CONTRIBUTING.md](../../CONTRIBUTING.md)).
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences — what should be true after this ships?
+      placeholder: e.g. Add contributor docs so public adopters know how to file issues.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why / Value
+      description: Who benefits and why now?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / Acceptance criteria
+      description: Bullet list of in-scope files or behaviors and how we know it is done.
+      placeholder: |
+        - [ ] CONTRIBUTING.md covers issue forms and local verification
+        - [ ] Issue forms validate under factory-check-docs --strict
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (label)
+      description: Suggested `priority:*` label for triage.
+      options:
+        - priority:high
+        - priority:low
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk (label)
+      description: Suggested risk class; use risk:high for workflows, secrets, auth, or spend guards.
+      options:
+        - normal
+        - risk:high
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Complexity estimate
+      description: Rough sizing for planning (not a label).
+      options:
+        - simple
+        - standard
+        - complex
+    validations:
+      required: true

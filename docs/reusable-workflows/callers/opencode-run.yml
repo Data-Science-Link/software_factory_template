@@ -18,7 +18,7 @@ jobs:
       github.event.comment.user.login == 'YOUR_OWNER_GITHUB_LOGIN' &&
       github.event.comment.author_association == 'OWNER' &&
       github.event.issue.pull_request == null
-    uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-opencode-run.yml@v0.1.0
+    uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-opencode-run.yml@v0.1.0
     secrets: inherit
     with:
       factory_ref: v0.1.0

@@ -1,0 +1,23 @@
+[
+  {
+    "number": 9001,
+    "title": "🔥 Emoji & <script>alert(1)</script> — café ñ",
+    "body": null,
+    "labels": [
+      {"name": "priority:high"},
+      {"name": "priority:low"},
+      {"name": "risk:medium"}
+    ],
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-02T00:00:00Z",
+    "url": "https://github.com/example/factory/issues/9001"
+  },
+  {
+    "number": 9002,
+    "title": "Missing labels key",
+    "body": "Body with #9001 reference",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z",
+    "url": "https://github.com/example/factory/issues/9002"
+  }
+]
