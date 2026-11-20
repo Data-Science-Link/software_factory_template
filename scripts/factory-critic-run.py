@@ -51,8 +51,30 @@ For the owner: nothing
 
 
 def die(msg: str, code: int = 2) -> None:
-    print(f"critic-run: FAIL — {msg}", file=sys.stderr)
+    print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def as_price(value: Any, model_id: str, field: str) -> float:
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        die(f"model {model_id!r}: invalid {field}: {value!r}")
+    if not (out >= 0 and out == out):  # NaN check via out == out
+        die(f"model {model_id!r}: non-finite {field}")
+    return out
+
+
+def as_nonneg_int(value: Any, label: str, *, required: bool = False) -> int:
+    if value is None or value == "":
+        if required:
+            die(f"missing {label}")
+        return 0
+    try:
+        out = int(value)
+    except (TypeError, ValueError) as exc:
+        die(f"invalid {label}: {value!r}")
+    return max(0, out)
 
 
 def load_cost_from_usage():
@@ -84,9 +106,17 @@ def normalize_model_id(model_id: str) -> str:
 def load_models(path: Path) -> dict[str, Any]:
     if not path.is_file():
         die(f"models file not found: {path}")
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8", errors="replace"))
+    except yaml.YAMLError as exc:
+        die(f"models YAML parse error: {exc}")
+    except OSError as exc:
+        die(f"cannot read models file: {exc}")
     if not isinstance(data, dict):
         die("models.yaml must be a mapping")
+    models = data.get("models")
+    if models is not None and not isinstance(models, list):
+        die("models.yaml field 'models' must be a list")
     return data
 
 
@@ -123,10 +153,10 @@ def select_reviewer_model(coder_model: str, models_data: dict[str, Any]) -> tupl
         die("no deepinfra models in models.yaml")
     order = reviewer_pick_order(models)
     for mid in order:
-        if mid != coder:
+        if normalize_model_id(mid) != coder:
             return mid, "models.yaml routing rule 7 (different model than builder)"
     for mid in sorted(eligible):
-        if mid != coder:
+        if normalize_model_id(mid) != coder:
             return mid, "fallback: first deepinfra model id != coder"
     die(f"no reviewer model distinct from coder {coder!r}")
 
@@ -134,6 +164,9 @@ def select_reviewer_model(coder_model: str, models_data: dict[str, Any]) -> tupl
 def model_row(models_data: dict[str, Any], model_id: str) -> dict[str, Any]:
     for row in models_data.get("models") or []:
         if isinstance(row, dict) and row.get("id") == model_id:
+            mid = str(row.get("id") or model_id)
+            for key in ("price_in_per_mtok", "price_cached_per_mtok", "price_out_per_mtok"):
+                as_price(row.get(key), mid, key)
             return row
     die(f"unknown model id {model_id!r} (not in models.yaml)")
 
@@ -143,10 +176,14 @@ def predict_review_cost(models_data: dict[str, Any], reviewer_id: str) -> float:
     block = priors.get("simple") or priors.get("standard")
     if not block:
         return 0.0
-    tokens_in = int(block["tokens_in"])
-    frac = float(block.get("tokens_cached_fraction", 0))
+    tokens_in = as_nonneg_int(block.get("tokens_in"), "token_priors.tokens_in", required=True)
+    try:
+        frac = float(block.get("tokens_cached_fraction", 0))
+    except (TypeError, ValueError) as exc:
+        die(f"invalid token_priors.tokens_cached_fraction: {block.get('tokens_cached_fraction')!r}")
+    frac = min(max(frac, 0.0), 1.0)
     tokens_cached = int(tokens_in * frac)
-    tokens_out = int(block.get("tokens_out", 0))
+    tokens_out = as_nonneg_int(block.get("tokens_out", 0), "token_priors.tokens_out")
     prices = model_row(models_data, reviewer_id)
     return round(
         cost_from_usage_lazy(
@@ -164,8 +201,12 @@ def predict_review_cost(models_data: dict[str, Any], reviewer_id: str) -> float:
 def parse_meta(path: Path | None) -> dict[str, str]:
     if path is None or not path.is_file():
         return {}
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        die(f"cannot read --meta {path}: {exc}")
     out: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         if "=" not in line:
             continue
         k, v = line.split("=", 1)
@@ -183,16 +224,27 @@ def redact_text(text: str) -> str:
 
 def extract_usage(payload: dict[str, Any]) -> tuple[int, int, int, int]:
     usage = payload.get("usage") or {}
-    tokens_in = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
-    tokens_out = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+    if usage is not None and not isinstance(usage, dict):
+        die("API response usage must be an object when present")
+    tokens_in = as_nonneg_int(
+        usage.get("prompt_tokens") or usage.get("input_tokens"),
+        "usage.prompt_tokens",
+    )
+    tokens_out = as_nonneg_int(
+        usage.get("completion_tokens") or usage.get("output_tokens"),
+        "usage.completion_tokens",
+    )
     cached = 0
     details = usage.get("prompt_tokens_details") or usage.get("input_tokens_details") or {}
     if isinstance(details, dict):
-        cached = int(details.get("cached_tokens") or details.get("cache_read_tokens") or 0)
+        cached = as_nonneg_int(
+            details.get("cached_tokens") or details.get("cache_read_tokens"),
+            "usage.cached_tokens",
+        )
     reasoning = 0
     cout = usage.get("completion_tokens_details") or {}
     if isinstance(cout, dict):
-        reasoning = int(cout.get("reasoning_tokens") or 0)
+        reasoning = as_nonneg_int(cout.get("reasoning_tokens"), "usage.reasoning_tokens")
     return tokens_in, tokens_cached_fix(tokens_in, cached), tokens_out, reasoning
 
 
@@ -288,7 +340,7 @@ def build_run_record(
     budget = models_data.get("budget") or {}
     run_id = os.environ.get("GITHUB_RUN_ID", "90000000999")
     attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
-    repo = os.environ.get("GITHUB_REPOSITORY", "Data-Science-Link/software_factory_template")
+    repo = os.environ.get("GITHUB_REPOSITORY", "ORG/product-repo")
     issue = parse_meta_int(meta, "issue_number") or 0
     pr = parse_meta_int(meta, "pr_number")
     head_sha = meta.get("head_sha") or ("a" * 40)
@@ -420,12 +472,23 @@ def main() -> int:
         return 0
 
     predicted = predict_review_cost(models_data, reviewer_id)
-    user_text = args.input.read_text(encoding="utf-8")
+    try:
+        user_text = args.input.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        die(f"cannot read critic-input: {exc}")
 
     if args.fixture_response:
         if not args.fixture_response.is_file():
             die(f"fixture-response not found: {args.fixture_response}")
-        payload = json.loads(args.fixture_response.read_text(encoding="utf-8"))
+        try:
+            raw = args.fixture_response.read_text(encoding="utf-8", errors="replace")
+            payload = json.loads(raw)
+        except OSError as exc:
+            die(f"cannot read fixture-response: {exc}")
+        except json.JSONDecodeError as exc:
+            die(f"fixture-response is not valid JSON: {exc}")
+        if not isinstance(payload, dict):
+            die("fixture-response root must be a JSON object")
         review_text = message_content(payload) or DRY_REVIEW
         tokens_in, tokens_cached, tokens_out, tokens_reasoning = extract_usage(payload)
     elif args.dry_run:

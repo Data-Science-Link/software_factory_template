@@ -111,6 +111,66 @@ if [ -f ".factory/prompts/critic-review.md" ] && grep -q '/oc fix' ".factory/pro
   ok "critic-review.md present and references /oc fix"
 else bad "critic-review.md"; fi
 
+set +e
+"$py" scripts/factory-critic-context.py --from-json "$work/nope.json" --out-dir "$work/badfile" \
+  >"$work/badfile.log" 2>&1
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR:' "$work/badfile.log" && ! grep -q Traceback "$work/badfile.log"; then
+  ok "missing --from-json exits with ERROR (no traceback)"
+else bad "missing --from-json"; cat "$work/badfile.log"; fi
+
+printf 'not-json' >"$work/bad-json.json"
+set +e
+"$py" scripts/factory-critic-context.py --from-json "$work/bad-json.json" --out-dir "$work/badjson" \
+  >"$work/badjson.log" 2>&1
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR:.*valid JSON' "$work/badjson.log"; then
+  ok "malformed --from-json"
+else bad "malformed --from-json"; cat "$work/badjson.log"; fi
+
+"$py" - "$work/empty-diff.json" <<'PY'
+import json, sys
+sha = "a" * 40
+d = {
+  "pr_number": "44", "issue_number": "9",
+  "pr": {"number": 44, "title": "empty", "head": {"ref": "oc/issue-9-x", "sha": sha}, "base": {"ref": "main"}},
+  "diff": "", "spec": "", "evidence": "",
+}
+json.dump(d, open(sys.argv[1], "w"))
+PY
+run empty "$work/empty-diff.json"
+if [ "$rc" -eq 0 ] && grep -q '(empty diff)' "$work/empty/critic-context.md" \
+  && grep -q 'diff_sha256=none' "$work/empty/critic-meta.txt"; then
+  ok "empty diff rendered with stable meta"
+else bad "empty diff"; cat "$work/empty.log"; fi
+
+printf '\xff\xfe' >"$work/latin1.patch"
+set +e
+"$py" scripts/factory-critic-context.py --from-json tests/critic-context/pass.json \
+  --patch "$work/latin1.patch" --out-dir "$work/nutf8" >"$work/nutf8.log" 2>&1
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && [ -s "$work/nutf8/critic-context.md" ]; then
+  ok "non-UTF-8 patch tolerated (errors=replace)"
+else bad "non-UTF-8 patch"; cat "$work/nutf8.log"; fi
+
+set +e
+"$py" scripts/factory-critic-context.py --from-json tests/critic-context/pass.json \
+  --out-dir "$work/tiny" --max-bytes 100 >"$work/tiny.log" 2>&1
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR:.*max-bytes' "$work/tiny.log"; then
+  ok "--max-bytes too small rejected"
+else bad "--max-bytes guard"; cat "$work/tiny.log"; fi
+
+run det3 tests/critic-context/pass.json
+run det4 tests/critic-context/pass.json
+if cmp -s "$work/det3/critic-input.md" "$work/det4/critic-input.md"; then
+  ok "deterministic critic-input.md"
+else bad "critic-input determinism"; fi
+
 echo
 echo "Results: $passed passed, $failed failed"
 [ "$failed" -eq 0 ]
