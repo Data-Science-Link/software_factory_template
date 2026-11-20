@@ -7,12 +7,13 @@ Until reusable workflows land (**planned, #156**), copy the factory files into t
 ## 1. Copy the factory (until #156)
 
 1. Copy `.factory/`, `scripts/`, and `.github/` (workflows, the PR template, and the `protect-main` ruleset) into the repo.
-2. Fill in [`.factory/DOCS.md`](../.factory/DOCS.md) with that repo's real paths, secret *names* (never values), key view, and health numbers.
-3. Add repo-specific skills under `.factory/skills/` as needed.
-4. Keep `.factory/DECISIONS.md` append-only for that repo's own decisions.
-5. Set [`.factory/MODEL_ROUTING.md`](../.factory/MODEL_ROUTING.md) and review [`.factory/models.yaml`](../.factory/models.yaml) for the models and caps you will use.
-6. In each clone, run `scripts/install-hooks.sh`. Once per repo, as an admin, run `scripts/protect-main.sh` (step 4).
-7. Copy the starters in `.factory/sketches/` into place if the repo does not already have them, and add your own `LICENSE` and `SECURITY.md`.
+2. Set **product** mode in owner-only [`.factory/mode.yml`](../.factory/mode.yml): `mode: product` (workers must not edit this file). The template repo keeps `mode: template` so factory work can still add scripts and edit `.factory/` docs; if `mode` is missing or invalid, the artifact scan fails closed to product mode (no changes under `scripts/` or `.factory/`).
+3. Fill in [`.factory/DOCS.md`](../.factory/DOCS.md) with that repo's real paths, secret *names* (never values), key view, and health numbers.
+4. Add repo-specific skills under `.factory/skills/` as needed.
+5. Keep `.factory/DECISIONS.md` append-only for that repo's own decisions.
+6. Set [`.factory/MODEL_ROUTING.md`](../.factory/MODEL_ROUTING.md) and review [`.factory/models.yaml`](../.factory/models.yaml) for the models and caps you will use.
+7. In each clone, run `scripts/install-hooks.sh`. Once per repo, as an admin, run `scripts/protect-main.sh` (step 4).
+8. Copy the starters in `.factory/sketches/` into place if the repo does not already have them, and add your own `LICENSE` and `SECURITY.md`.
 
 ## 2. DeepInfra key (secret + variable)
 
@@ -61,6 +62,7 @@ These stay local to the install repo. After #156, factory scripts and workflows 
 
 | File | What you set |
 |---|---|
+| `.factory/mode.yml` | `mode: product` in product repos (`mode: template` only in this template repo). Owner-only: workers must not edit it. Missing or invalid `mode` fails closed to product (no worker changes under `scripts/` or `.factory/`). |
 | `.factory/models.yaml` | Model routing, prices, and today's spend caps (`budget.issue_target_usd`, `budget.issue_cap_usd`, `budget.deepinfra_monthly_limit_usd`). Owner-only: workers must not edit it. |
 | `factory/budget.yml` | Weekly and monthly site budgets (**#169 D3**, added by #170). Starting values (**#169 D4**): $10 per month, $2.50 per week. Owner-only (#56): workers must not edit it, and the path-policy scan rejects any worker patch that does. |
 | Protected-path list | Spend and security scripts workers must not edit. Printed by `bash scripts/opencode-artifact-scan.sh --list-protected`. The list lives in that script today; after #156 it comes from the pinned tag. |
@@ -96,7 +98,7 @@ The `/oc` workflows in this template only run when the comment author is the Git
 - [ ] The labels in step 3 exist
 - [ ] `scripts/protect-main.sh` has been run (or the Free-plan limitation is recorded)
 - [ ] The `gh` token has no `workflow` scope
-- [ ] Per-repo config is filled in; no secrets are in those files
+- [ ] `.factory/mode.yml` is `mode: product` and per-repo config is filled in; no secrets are in those files
 - [ ] Site hosting matches whether the repo is private or public
 - [ ] Workflow comment login matches the repo owner
 - [ ] A first selected issue can take `/oc spec` from the owner account
