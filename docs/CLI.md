@@ -48,6 +48,7 @@ Run `python3 scripts/factory-cli.py --help` for a grouped command list with scri
 | `predict-cost` | `python3 scripts/factory-cli.py predict-cost factory/specs/issue-1.md` |
 | `routing-report` | `python3 scripts/factory-cli.py routing-report --runs-dir tests/cost-reconcile` |
 | `cache-report` | `python3 scripts/factory-cli.py cache-report --runs-dir factory/runs` |
+| `monthly-review` | `python3 scripts/factory-cli.py monthly-review --runs-dir examples/sample-runs --as-of 2026-11-20` |
 | `site` | `python3 scripts/factory-cli.py site --out /tmp/site --data /tmp/site-data` |
 | `site-smoke` | `python3 scripts/factory-cli.py site-smoke tests/site-smoke/raw-bold` |
 
