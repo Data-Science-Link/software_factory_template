@@ -252,8 +252,19 @@ def normalize_items(items, sub_issues_by_epic=None):
 
 
 def load_fixture(path):
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except OSError as exc:
+        sys.stderr.write(f"ERROR: cannot read fixture {path}: {exc}\n")
+        sys.exit(1)
+    except ValueError as exc:
+        sys.stderr.write(f"ERROR: fixture {path} is not valid JSON: {exc}\n")
+        sys.exit(1)
+    if not isinstance(data, list):
+        sys.stderr.write(f"ERROR: fixture {path} must be a JSON array\n")
+        sys.exit(1)
+    return data
 
 
 def repo_slug():

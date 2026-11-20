@@ -23,8 +23,21 @@ USES_RE = re.compile(
     rf"(uses:\s+{re.escape(TEMPLATE)}/\.github/workflows/reusable-[-\w]+\.yml)@v\d+\.\d+\.\d+",
     re.MULTILINE,
 )
-REF_RE = re.compile(r"^(\s*factory_ref:\s*)v\d+\.\d+\.\d+\s*$", re.MULTILINE)
+REF_RE = re.compile(
+    r"^(\s*factory_ref:\s*)v\d+\.\d+\.\d+(?=\s*$)", re.MULTILINE
+)
+SEMVER_RE = re.compile(r"^v?\d+\.\d+\.\d+$")
 BRANCH_PREFIX = "factory-sync-"
+
+
+def normalize_tag(tag: str) -> str:
+    """Return a ``vMAJOR.MINOR.PATCH`` tag or raise ValueError."""
+    t = tag.strip()
+    if not SEMVER_RE.fullmatch(t):
+        raise ValueError(
+            f"invalid semver tag {tag!r} (expected vMAJOR.MINOR.PATCH, e.g. v0.2.0)"
+        )
+    return t if t.startswith("v") else f"v{t}"
 
 
 def run(cmd: list[str], *, check: bool = True, **env) -> subprocess.CompletedProcess[str]:
@@ -49,16 +62,15 @@ def fetch_file(repo: str, path: str) -> str:
 
 
 def bump_content(text: str, tag: str) -> tuple[str, bool]:
-    semver = tag if tag.startswith("v") else f"v{tag}"
-    new, n1 = USES_RE.subn(rf"\1@{semver}", text)
-    new, n2 = REF_RE.subn(rf"\1{semver}", new)
-    changed = n1 > 0 or n2 > 0
-    if not changed and TEMPLATE in text:
-        # Also accept already-matching tag: still sync factory_ref lines that differ
+    semver = normalize_tag(tag)
+    new, _ = USES_RE.subn(rf"\1@{semver}", text)
+    new, _ = REF_RE.subn(rf"\1{semver}", new)
+    if new == text and TEMPLATE in text:
+        # Pins may already match @tag while factory_ref lines still lag.
         new2, n3 = REF_RE.subn(rf"\1{semver}", text)
-        if n3:
+        if n3 and new2 != text:
             return new2, True
-    return new, changed
+    return new, new != text
 
 
 def default_branch(repo: str) -> str:
@@ -170,6 +182,11 @@ def main() -> int:
     p.add_argument("--tag", required=True, help="Target semver tag (e.g. v0.2.0)")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
+    try:
+        normalize_tag(args.tag)
+    except ValueError as exc:
+        print(f"factory-sync-repos: {exc}", file=sys.stderr)
+        return 2
     repos = [
         line.strip()
         for line in Path(args.repos_file).read_text().splitlines()

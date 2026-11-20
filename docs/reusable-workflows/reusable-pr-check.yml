@@ -1,4 +1,4 @@
-# Ready to paste into .github/workflows/reusable-pr-check.yml on Data-Science-Link/software_factory_template (owner paste, #156).
+# Ready to paste into .github/workflows/reusable-pr-check.yml in the template repository (owner paste, #156).
 # Product repos call this file at a pinned tag; callers live under docs/reusable-workflows/callers/.
 # PR check: holds every PR body to a few factory rules (issue link, AI
 # disclosure, Cost line for Local open-weights runs). Script only: no model,
@@ -30,7 +30,7 @@ jobs:
       - name: Check out factory template (pinned ref)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: Data-Science-Link/software_factory_template
+          repository: "{{TEMPLATE_REPO}}"
           ref: ${{ inputs.factory_ref }}
           path: factory-template
           persist-credentials: false
@@ -85,7 +85,7 @@ jobs:
       - name: Check out factory template (pinned ref)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: Data-Science-Link/software_factory_template
+          repository: "{{TEMPLATE_REPO}}"
           ref: ${{ inputs.factory_ref }}
           path: factory-template
           persist-credentials: false
