@@ -24,6 +24,13 @@ EXCLUDE_PREFIXES = (
     ".git/",
 )
 
+# Approved specs under factory/specs/ are historical snapshots; script names may be obsolete.
+HISTORICAL_SPEC_PREFIX = "factory/specs/"
+
+
+def is_historical_spec(rel_path: str) -> bool:
+    return rel_path.startswith(HISTORICAL_SPEC_PREFIX) and rel_path.endswith(".md")
+
 PLACEHOLDER_SCRIPTS = (
     re.compile(r"^scripts/test-N\.sh$", re.I),
     re.compile(r"^scripts/foo\.sh$", re.I),
@@ -207,6 +214,7 @@ def scan_file(
     report: Report,
     *,
     check_scripts: bool,
+    include_historical_specs: bool,
 ) -> None:
     rel = md_path.relative_to(repo).as_posix()
     try:
@@ -292,6 +300,7 @@ def scan_file(
                 )
 
     if check_scripts:
+        skip_orphan_scripts = is_historical_spec(rel) and not include_historical_specs
         for match in BACKTICK_SCRIPT.finditer(body):
             ref = match.group(1).strip()
             report.script_refs_checked += 1
@@ -299,6 +308,8 @@ def scan_file(
                 continue
             script_path = repo / ref
             if not script_path.is_file():
+                if skip_orphan_scripts:
+                    continue
                 report.findings.append(
                     Finding(
                         kind="missing_script",
@@ -314,12 +325,19 @@ def run_audit(
     repo: Path,
     *,
     check_scripts: bool = True,
+    include_historical_specs: bool = False,
 ) -> Report:
     report = Report(repo_dir=str(repo.resolve()))
     files = list_tracked_markdown(repo)
     report.files_scanned = len(files)
     for md in files:
-        scan_file(repo, md, report, check_scripts=check_scripts)
+        scan_file(
+            repo,
+            md,
+            report,
+            check_scripts=check_scripts,
+            include_historical_specs=include_historical_specs,
+        )
     return report
 
 
@@ -363,12 +381,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit 1 when any broken link or heading anchor is found",
+        help="Exit 1 on any error, warning, or broken link/anchor finding",
     )
     parser.add_argument(
         "--no-script-refs",
         action="store_true",
         help="Skip backticked scripts/*.sh|py reference checks",
+    )
+    parser.add_argument(
+        "--include-historical-specs",
+        action="store_true",
+        help=(
+            "Also warn on missing script refs in factory/specs/issue-*.md "
+            "(historical spec snapshots; default is to skip orphan-script warnings there)"
+        ),
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
     repo = args.repo_dir.resolve()
@@ -376,14 +402,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"error: not a directory: {repo}", file=sys.stderr)
         return 2
 
-    report = run_audit(repo, check_scripts=not args.no_script_refs)
+    report = run_audit(
+        repo,
+        check_scripts=not args.no_script_refs,
+        include_historical_specs=args.include_historical_specs,
+    )
 
     if args.json:
         print(json.dumps(report.to_json(), indent=2, sort_keys=True))
     else:
         print_text_report(report)
 
-    if args.strict and report.broken_links:
+    if args.strict and report.findings:
         return 1
     return 0
 

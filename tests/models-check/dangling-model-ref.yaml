@@ -1,0 +1,19 @@
+price_table_version: "2099-01-01"
+models:
+  - id: org/Only-Model
+    provider: deepinfra
+    price_in_per_mtok: 0.1
+    price_cached_per_mtok: 0.01
+    price_out_per_mtok: 0.2
+routing_rules:
+  - rule: 3
+    when: {}
+    model: org/Missing-From-Registry
+checks: []
+token_priors:
+  simple:
+    tokens_in: 1
+    tokens_cached_fraction: 0.5
+    tokens_out: 1
+budget:
+  issue_cap_usd: 1.0

@@ -1,0 +1,31 @@
+price_table_version: "2099-01-01"
+models:
+  - id: org/Minimal-Ok
+    provider: deepinfra
+    price_in_per_mtok: 0.06
+    price_cached_per_mtok: 0.015
+    price_out_per_mtok: 0.18
+routing_rules:
+  - rule: 3
+    when: {}
+    model: org/Minimal-Ok
+checks:
+  - rule: 6
+    when:
+      predicted_cost_usd_gt: 1.0
+    action: do_not_run_split_issue
+token_priors:
+  simple:
+    tokens_in: 1000
+    tokens_cached_fraction: 0.5
+    tokens_out: 100
+  standard:
+    tokens_in: 2000
+    tokens_cached_fraction: 0.5
+    tokens_out: 200
+  complex:
+    tokens_in: 3000
+    tokens_cached_fraction: 0.5
+    tokens_out: 300
+budget:
+  issue_cap_usd: 1.0

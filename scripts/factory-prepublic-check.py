@@ -71,6 +71,7 @@ ALLOW_EMAIL_SUFFIXES = (
 )
 ALLOW_EMAIL_LOCALS = (
     "41898282+github-actions[bot]@users.noreply.github.com",
+    "git@github.com",
     "oc-verify@invalid",
     "policy-test@example.invalid",
     "test@test",
@@ -182,6 +183,13 @@ def scan_text(
         for m in EMAIL_RE.finditer(line):
             addr = m.group(0)
             if ACTION_VERSION_AT.search(line[max(0, m.start() - 24) : m.end() + 4]):
+                continue
+            # SCP-style git remotes (git@host:path) are not personal mail.
+            if (
+                addr.lower().startswith("git@")
+                and m.end() < len(line)
+                and line[m.end()] == ":"
+            ):
                 continue
             if not email_allowed(addr):
                 findings.append(
