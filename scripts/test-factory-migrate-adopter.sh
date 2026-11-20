@@ -101,8 +101,8 @@ fi
 # --- apply with --owner and custom --template-repo (zero placeholders) ---
 fixture_owner="$work/adopter-owner"
 setup_fixture_repo "$fixture_owner"
-TEMPLATE_REPO="example-org/software_factory_template"
-OWNER_LOGIN="example-migrate-owner"
+TEMPLATE_REPO="acme-corp/software_factory_template"
+OWNER_LOGIN="acme-corp"
 run_migrate --repo-dir "$fixture_owner" --tag v0.9.4 \
   --template-dir "$root" --template-repo "$TEMPLATE_REPO" \
   --owner "$OWNER_LOGIN" --apply
@@ -116,6 +116,25 @@ grep -q "$TEMPLATE_REPO" "$fixture_owner/.factory/migration-callers/opencode-spe
   || bad "owner apply: custom template-repo in callers"
 grep -q "$OWNER_LOGIN" "$fixture_owner/.factory/migration-callers/opencode-spec.yml" \
   && ok "owner apply: owner login substituted" || bad "owner apply: owner login substituted"
+owner_leaks="$(grep -R -l 'Data-Science-Link/software_factory_template' \
+  "$fixture_owner/.factory/migration-callers" 2>/dev/null || true)"
+[ -z "$owner_leaks" ] && ok "owner apply: zero template-owner org leak in callers" \
+  || bad "owner apply: zero template-owner org leak in callers"
+
+# --- idempotent re-apply preserves customized scripts and callers ---
+custom_marker="# migrate-idempotent-marker"
+printf '\n%s\n' "$custom_marker" >>"$fixture_owner/scripts/test-all.sh"
+caller1="$(cat "$fixture_owner/.factory/migration-callers/pr-check.yml")"
+run_migrate --repo-dir "$fixture_owner" --tag v0.9.4 \
+  --template-dir "$root" --template-repo "$TEMPLATE_REPO" \
+  --owner "$OWNER_LOGIN" --apply
+assert_rc "second apply idempotent" 0
+caller2="$(cat "$fixture_owner/.factory/migration-callers/pr-check.yml")"
+if [ "$caller1" = "$caller2" ] && grep -qF "$custom_marker" "$fixture_owner/scripts/test-all.sh"; then
+  ok "re-apply does not clobber callers or customized scripts"
+else
+  bad "re-apply does not clobber callers or customized scripts"
+fi
 if ! bash "$root/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-init-repo.py' \
   && ! bash "$root/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-migrate-adopter.py'; then
   ok "init/migrate not in PROTECTED_SCRIPTS"

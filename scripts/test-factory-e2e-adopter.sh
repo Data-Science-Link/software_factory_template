@@ -90,8 +90,8 @@ fi
 # ---- Step 2b: init with custom --template-repo and --owner (zero template placeholders) ----
 repo_owned="$work/adopter-owned"
 mkdir -p "$repo_owned"
-TEMPLATE_REPO="example-org/software_factory_template"
-OWNER_LOGIN="example-product-owner"
+TEMPLATE_REPO="acme-corp/software_factory_template"
+OWNER_LOGIN="acme-corp"
 set +e
 owned_out="$("$PYTHON" "$ROOT/scripts/factory-init-repo.py" \
   --target "$repo_owned" \
@@ -121,6 +121,15 @@ if grep -q "$TEMPLATE_REPO" "$repo_owned/.github/workflows/opencode-run.yml" \
   pass "step 2b: opencode-run pins template-repo and owner"
 else
   fail "step 2b: opencode-run pins template-repo and owner"
+fi
+template_leaks="$(
+  grep -R -l 'Data-Science-Link/software_factory_template' "$repo_owned/.github/workflows" 2>/dev/null \
+    || true
+)"
+if [ -z "$template_leaks" ]; then
+  pass "step 2b: generated callers have zero template-owner org leak"
+else
+  fail "step 2b: generated callers have zero template-owner org leak" "$template_leaks"
 fi
 if ! "$ROOT/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-init-repo.py' \
   && ! "$ROOT/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-migrate-adopter.py'; then
@@ -256,6 +265,193 @@ if [ "$smoke_rc" -eq 0 ] && echo "$smoke_out" | grep -q "^OK"; then
   pass "step 6: factory-site-smoke.py --build"
 else
   fail "step 6: factory-site-smoke.py --build" "$smoke_out"
+fi
+
+# ---- Step 7: init -> migrate -> fleet sync --check --json (acme-corp / demo-app) ----
+ACME_TEMPLATE="acme-corp/software_factory_template"
+ACME_OWNER="acme-corp"
+FLEET_REPO="acme-corp/demo-app"
+repo_life="$work/demo-app"
+gh_fake="$tmpdir/gh-fake"
+mkdir -p "$gh_fake/bin" "$repo_life/src"
+
+if git init -q "$repo_life" \
+  && printf '%s\n' '# demo product' >"$repo_life/README.md" \
+  && git -C "$repo_life" add README.md \
+  && git -C "$repo_life" -c user.email=demo@example.invalid -c user.name=demo commit -q -m "seed"; then
+  pass "step 7: temp demo-app git repo"
+else
+  fail "step 7: temp demo-app git repo"
+fi
+
+set +e
+life_init="$("$PYTHON" "$ROOT/scripts/factory-init-repo.py" \
+  --target "$repo_life" \
+  --tag "$TAG" \
+  --template-dir "$ROOT" \
+  --template-repo "$ACME_TEMPLATE" \
+  --owner "$ACME_OWNER" \
+  --repo-name demo-app 2>&1)"
+life_init_rc=$?
+set -e
+[ "$life_init_rc" -eq 0 ] && pass "step 7: factory-init-repo.py" || fail "step 7: factory-init-repo.py" "$life_init"
+
+CUSTOM_MARKER="# user-adopter-customization demo-app"
+printf '\n%s\n' "$CUSTOM_MARKER" >>"$repo_life/AGENTS.md"
+mkdir -p "$repo_life/scripts"
+cp "$ROOT/scripts/pr-check.sh" "$repo_life/scripts/pr-check.sh"
+cp "$ROOT/scripts/test-all.sh" "$repo_life/scripts/test-all.sh"
+printf '\n%s\n' '# local product test tweak' >>"$repo_life/scripts/test-all.sh"
+echo '#!/usr/bin/env bash' >"$repo_life/scripts/build-product.sh"
+echo 'echo ok' >>"$repo_life/scripts/build-product.sh"
+
+set +e
+life_init2="$("$PYTHON" "$ROOT/scripts/factory-init-repo.py" \
+  --target "$repo_life" \
+  --tag "$TAG" \
+  --template-dir "$ROOT" \
+  --template-repo "$ACME_TEMPLATE" \
+  --owner "$ACME_OWNER" \
+  --repo-name demo-app 2>&1)"
+life_init2_rc=$?
+set -e
+if [ "$life_init2_rc" -eq 0 ] && grep -qF "$CUSTOM_MARKER" "$repo_life/AGENTS.md" \
+  && grep -qF '# local product test tweak' "$repo_life/scripts/test-all.sh"; then
+  pass "step 7: re-init is idempotent (customizations preserved)"
+else
+  fail "step 7: re-init is idempotent (customizations preserved)" "$life_init2"
+fi
+
+life_ph="$(grep -R -l -E 'YOUR_ORG|YOUR_OWNER_GITHUB_LOGIN' "$repo_life/.github/workflows" 2>/dev/null || true)"
+life_leak="$(grep -R -l 'Data-Science-Link/software_factory_template' "$repo_life/.github/workflows" 2>/dev/null || true)"
+if [ -z "$life_ph" ] && [ -z "$life_leak" ]; then
+  pass "step 7: acme-corp callers have zero placeholders and org leaks"
+else
+  fail "step 7: acme-corp callers have zero placeholders and org leaks" "${life_ph}${life_leak}"
+fi
+
+custom_hash_before="$(sha256sum "$repo_life/scripts/test-all.sh" | awk '{print $1}')"
+set +e
+life_migrate="$("$PYTHON" "$ROOT/scripts/factory-migrate-adopter.py" \
+  --repo-dir "$repo_life" \
+  --tag "$TAG" \
+  --template-dir "$ROOT" \
+  --template-repo "$ACME_TEMPLATE" \
+  --owner "$ACME_OWNER" \
+  --apply 2>&1)"
+life_mig_rc=$?
+set -e
+[ "$life_mig_rc" -eq 0 ] && pass "step 7: factory-migrate-adopter.py --apply" \
+  || fail "step 7: factory-migrate-adopter.py --apply" "$life_migrate"
+
+if [ -f "$repo_life/.factory/migration-callers/pr-check.yml" ] \
+  && grep -q "$ACME_TEMPLATE" "$repo_life/.factory/migration-callers/pr-check.yml"; then
+  pass "step 7: migration-callers pin acme-corp template"
+else
+  fail "step 7: migration-callers pin acme-corp template"
+fi
+
+set +e
+life_migrate2="$("$PYTHON" "$ROOT/scripts/factory-migrate-adopter.py" \
+  --repo-dir "$repo_life" \
+  --tag "$TAG" \
+  --template-dir "$ROOT" \
+  --template-repo "$ACME_TEMPLATE" \
+  --owner "$ACME_OWNER" \
+  --apply 2>&1)"
+life_mig2_rc=$?
+set -e
+custom_hash_after="$(sha256sum "$repo_life/scripts/test-all.sh" | awk '{print $1}')"
+if [ "$life_mig2_rc" -eq 0 ] && [ "$custom_hash_before" = "$custom_hash_after" ]; then
+  pass "step 7: migrate re-apply is idempotent for customized scripts"
+else
+  fail "step 7: migrate re-apply is idempotent for customized scripts" "$life_migrate2"
+fi
+
+# Fleet sync reads pinned reusable callers via gh (offline fake).
+SYNC_TEMPLATE_PIN="Data-Science-Link/software_factory_template"
+RUN_YML_LIFE="name: opencode-run
+jobs:
+  x:
+    uses: ${SYNC_TEMPLATE_PIN}/.github/workflows/reusable-opencode-run.yml@${TAG}
+    with:
+      factory_ref: ${TAG}
+"
+mkdir -p "$repo_life/.github/workflows"
+printf '%s\n' "$RUN_YML_LIFE" >"$repo_life/.github/workflows/opencode-run.yml"
+printf '%s\n' 'name: pr-check' >"$repo_life/.github/workflows/pr-check.yml"
+
+cat >"$gh_fake/bin/gh" <<'GH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = api ]; then
+  case "$*" in
+    *contents/.github/workflows/opencode-run.yml*)
+      printf '{"content":"%s"}' "${FAKE_RUN_YML_B64:-}"
+      exit 0
+      ;;
+    *contents/.github/workflows/pr-check.yml*)
+      printf '{"content":"%s"}' "${FAKE_PR_YML_B64:-}"
+      exit 0
+      ;;
+    *contents/.github/workflows*)
+      printf '%s' '[{"path":".github/workflows/opencode-run.yml"},{"path":".github/workflows/pr-check.yml"}]'
+      exit 0
+      ;;
+  esac
+fi
+if [ "$1" = repo ] && [ "$2" = view ]; then
+  echo main
+  exit 0
+fi
+if [ "$1" = pr ]; then
+  exit 0
+fi
+exit 0
+GH
+chmod +x "$gh_fake/bin/gh"
+export FAKE_RUN_YML_B64="$(printf '%s' "$RUN_YML_LIFE" | base64 -w0)"
+export FAKE_PR_YML_B64="$(printf '%s' 'name: pr-check' | base64 -w0)"
+life_adopters="$tmpdir/demo-adopters.txt"
+printf '%s\n' "$FLEET_REPO" >"$life_adopters"
+
+set +e
+sync_out="$(
+  PATH="$gh_fake/bin:$PATH" "$PYTHON" "$ROOT/scripts/factory-sync-repos.py" \
+    --repos-file "$life_adopters" \
+    --tag v0.2.0 \
+    --check \
+    --json 2>&1
+)"
+sync_rc=$?
+set -e
+export FLEET_REPO
+if [ "$sync_rc" -eq 0 ] && echo "$sync_out" | "$PYTHON" -c "
+import json, os, sys
+d = json.load(sys.stdin)
+fleet = os.environ['FLEET_REPO']
+assert d['repos'] == [fleet]
+row = d['adopters'][0]
+assert row['repo'] == fleet
+assert row['status'] == 'outdated'
+assert d['summary']['total'] == 1
+"; then
+  pass "step 7: factory-sync-repos.py --check --json fleet drift"
+else
+  fail "step 7: factory-sync-repos.py --check --json fleet drift" "$sync_out"
+fi
+
+sync_out2="$(
+  PATH="$gh_fake/bin:$PATH" "$PYTHON" "$ROOT/scripts/factory-sync-repos.py" \
+    --repos-file "$life_adopters" \
+    --tag v0.2.0 \
+    --check \
+    --json 2>&1
+)"
+if [ "$sync_out" = "$sync_out2" ]; then
+  pass "step 7: fleet sync JSON is deterministic"
+else
+  fail "step 7: fleet sync JSON is deterministic"
 fi
 
 echo "Results: ${passed} passed, ${failed} failed"
