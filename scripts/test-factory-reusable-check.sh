@@ -36,6 +36,15 @@ else
   echo "$out" | head -40
 fi
 
+# ---- deterministic JSON (sorted keys at top level) ----
+a="$("${PY[@]}" --json 2>/dev/null)"
+b="$("${PY[@]}" --json 2>/dev/null)"
+if [ "$a" = "$b" ]; then
+  ok "live --json output is deterministic"
+else
+  bad "live --json deterministic"
+fi
+
 # ---- synthetic failure fixtures ----
 fail_root="$tmpdir/fail-contract"
 mkdir -p "$fail_root/callers"
@@ -67,7 +76,7 @@ on:
 permissions: write-all
 jobs:
   call:
-    uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-demo.yml@v0.1.0
+    uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-demo.yml@v0.1.0
     secrets:
       WRONG_SECRET: ${{ secrets.DEMO_SECRET }}
     with:
@@ -80,7 +89,7 @@ out="$("${PY[@]}" --dir "$fail_root" --json 2>&1)"
 rc=$?
 set -e
 fail_count="$(echo "$out" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['summary']['fail'])")"
-if [ "$rc" -eq 1 ] && [ "${fail_count:-0}" -ge 5 ]; then
+if [ "$rc" -eq 1 ] && [ "${fail_count:-0}" -ge 6 ]; then
   ok "fixtures report contract failures ($fail_count fails)"
 else
   bad "fixture failures (rc=$rc fail_count=${fail_count:-?})"
@@ -90,7 +99,7 @@ fi
 echo "$out" | "$PYTHON" -c "
 import json, sys
 codes = {f['check'] for f in json.load(sys.stdin)['findings'] if f['status'] == 'fail'}
-need = {'action_pin', 'caller_input', 'caller_permissions', 'caller_secret'}
+need = {'action_pin', 'caller_input', 'caller_org_leak', 'caller_permissions', 'caller_secret'}
 miss = need - codes
 if miss:
     print('missing fail checks:', miss, file=sys.stderr)
