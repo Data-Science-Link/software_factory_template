@@ -4,7 +4,7 @@ Repo-agnostic, **stdlib-only** 30-day health packet for adopting teams. Aggregat
 
 ## Ritual (about 15 minutes)
 
-1. **Collect runs** — ensure recent factory runs are present under `factory/runs/` (or use `scripts/factory-collect-runs.sh` in CI).
+1. **Collect runs** — ensure recent factory runs are present under `factory/runs/` (or use `scripts/factory-collect-runs.py` in CI).
 2. **Generate the packet** — default 30-day window, pinned end date for reproducible review notes:
 
    ```bash
