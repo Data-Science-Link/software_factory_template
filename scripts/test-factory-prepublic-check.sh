@@ -82,12 +82,26 @@ md="$("${PY[@]}" "$fixture" 2>/dev/null)"
 set -e
 echo "$md" | grep -q '^# Pre-public hygiene scan' && ok "markdown report heading" || bad "markdown report"
 
-# Live scan of this repo (report mode must exit 0)
+# Live scan of this repo (report mode must exit 0, zero findings — no self-match false positives)
 set +e
 live="$("${PY[@]}" . --json 2>"$work/live.err")"
 live_rc=$?
 set -e
 [ "$live_rc" -eq 0 ] && ok "live repo scan report mode (rc=0)" || bad "live repo scan rc=$live_rc"
+
+live_count="$(printf '%s' "$live" | python3 -c 'import json,sys; print(json.load(sys.stdin)["finding_count"])')"
+if [ "$live_count" -eq 0 ]; then
+  ok "live repo scan: zero findings (no self-match on scanner literals)"
+else
+  bad "live repo scan finding_count=$live_count (expected 0)"
+  printf '%s' "$live" | python3 -c 'import json,sys; [print(f) for f in json.load(sys.stdin)["findings"]]' >&2 || true
+fi
+
+set +e
+live_strict="$("${PY[@]}" . --strict --json 2>"$work/live_strict.err")"
+live_strict_rc=$?
+set -e
+[ "$live_strict_rc" -eq 0 ] && ok "live repo --strict with zero findings" || bad "live repo --strict rc=$live_strict_rc"
 
 echo ""
 echo "Results: $passed passed, $failed failed"
