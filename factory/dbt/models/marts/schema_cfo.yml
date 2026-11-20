@@ -71,9 +71,9 @@ models:
       - name: monthly_budget_usd
         description: "Configured monthly DeepInfra budget in USD from project vars."
       - name: budget_used_pct
-        description: "Monthly spend as a percentage of monthly_budget_usd, rounded to six decimals."
+        description: "Monthly spend as a percentage of monthly_budget_usd (0–100+ when over budget), rounded to six decimals."
       - name: pass_rate_pct
-        description: "Gate pass rate for the month; null when run_count is 0."
+        description: "Gate pass rate for the month (0–100); null when run_count is 0."
       - name: avg_cost_per_issue_usd
         description: "total_cost_usd divided by distinct_issues; null when distinct_issues is 0."
 
