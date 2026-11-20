@@ -15,6 +15,10 @@ models:
         description: "Issue number the run belongs to."
       - name: pr
         description: "PR number opened or updated by the run, when any."
+      - name: harness
+        description: "Agent harness that executed the run (e.g. opencode-github-action, cursor-cloud)."
+      - name: provider
+        description: "Model provider backing the run (e.g. deepinfra, cursor)."
       - name: model_id
         description: "Normalized model identifier."
       - name: complexity
