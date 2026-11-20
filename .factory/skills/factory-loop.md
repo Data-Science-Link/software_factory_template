@@ -48,6 +48,7 @@ Use the same shape in **approval packs** and when marking a PR **ready for revie
 - **Default:** `/oc run` on a selected issue with an approved spec — the Actions worker syncs, branches, implements the spec, and opens or updates the PR.
 - **Epic / template build / backup:** Cursor cloud agent (or local open-weights): sync latest default branch, branch from default, open a PR that references the issue.
 - Run at most 4 coding agents at once (or the repo's number in DECISIONS); keep a restart list on the issue (running agent, branch, next step). Outside coding agents follow this same loop and need the owner's cost yes first (see FACTORY.md Rules).
+- **Complex-build fix circuit breaker:** for **complex** work, multi-section specs, or issue spend already above the per-issue target (`factory/budget.yml` → `issue_target_usd`), if the **first** `/oc fix` round still fails harness **Verification**, **stop** — do not post a second `/oc fix` on the same PR. Escalate: stronger model per `.factory/MODEL_ROUTING.md`, a Cursor cloud agent, or owner intervention. Evaluate with `python3 scripts/factory-fix-policy.py` before each fix round. Simple/standard builds within budget keep the usual **two** fix rounds.
 - Stay inside issue scope. Lasting choices → `.factory/DECISIONS.md`.
 - Follow repo conventions via `.factory/DOCS.md` and any repo-specific skills here.
 - **Fill the whole PR template**, especially the **Factory loop** section (steps 1–8). That checklist is how humans audit process adherence — leave it blank only if a step is truly N/A, with a one-line note.

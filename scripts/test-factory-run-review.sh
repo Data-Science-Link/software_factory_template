@@ -361,6 +361,55 @@ else
   fail "negative session parts (blocked_calls not empty / blocked_call finding present)"
 fi
 
+# Verification vs gate (#233): gate_passed true with harness FAIL must not report
+# gates_passed true and must emit verification_failed (high).
+set +e
+"${REVIEW[@]}" --input "$FIX_DIR/run-verification-fail.json" > "$tmpdir/out-ver-fail.json" 2>"$tmpdir/err-ver-fail.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "verification vs gate (script exited non-zero)"
+elif python3 - "$tmpdir/out-ver-fail.json" <<'PY'
+import json, sys
+review = json.load(open(sys.argv[1]))
+assert review.get("gates_passed") is False, review.get("gates_passed")
+assert review.get("verification_status") == "fail"
+assert any(f["code"] == "verification_failed" and f["severity"] == "high" for f in review["findings"])
+assert review.get("gate_passed") is True
+PY
+then
+  note "verification vs gate (FAIL verification forces gates_passed false)"
+else
+  fail "verification vs gate (gates_passed or finding missing)"
+fi
+
+# Complex fix-round waste (#233): two failed fix rounds on a complex build with
+# spend >2x target must surface complex_fix_round_waste on the PR summary.
+complex_dir="$FIX_DIR/complex-waste"
+set +e
+"${REVIEW[@]}" --live-dir "$complex_dir" > "$tmpdir/out-complex.json" 2>"$tmpdir/err-complex.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "complex fix-round waste (script exited non-zero)"
+elif python3 - "$tmpdir/out-complex.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
+summary = data["summary"]
+assert summary.get("gates_passed") is False
+codes = {f["code"] for f in summary.get("findings", [])}
+assert "verification_failed" in codes
+assert "complex_fix_round_waste" in codes
+assert summary.get("fix_policy_recommendation") == "stop_and_escalate"
+assert summary.get("failed_fix_verification_rounds") == 2
+PY
+then
+  note "complex fix-round waste (summary flags circuit breaker)"
+else
+  fail "complex fix-round waste (summary findings or policy wrong)"
+fi
+
 # No model call, no secret printed: a sentinel in the environment must never
 # appear in the script's output or stderr.
 secret="sentinel-run-review-secret-98765"
@@ -377,7 +426,7 @@ else
 fi
 
 echo ""
-echo "Results: $passed passed, $failed failed"
+echo "Results: $((passed)) passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
   exit 1
 fi

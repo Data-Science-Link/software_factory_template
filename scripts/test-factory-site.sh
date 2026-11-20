@@ -350,6 +350,26 @@ else
   failed=$((failed + 1))
 fi
 
+# ---- test 14: UX controls render on the offline sample site ----
+ok14=1
+for page in index.html financials.html backlog.html dbt.html; do
+  grep -qF 'id="theme-toggle"' "site/$page" || ok14=0
+done
+grep -qF 'id="backlog-filter-bar"' site/backlog.html || ok14=0
+grep -qF 'data-filter="high-priority"' site/backlog.html || ok14=0
+grep -qF 'id="backlog-filter-count"' site/backlog.html || ok14=0
+grep -qF 'id="financials-export-csv"' site/financials.html || ok14=0
+grep -qF 'id="financials-runs-table"' site/financials.html || ok14=0
+grep -qF 'class="copy-btn"' site/index.html || ok14=0
+grep -qF 'id="quickstart-cmd-0"' site/index.html || ok14=0
+if [ "$ok14" = 1 ]; then
+  echo "PASS  theme toggle, backlog filters, CSV export, and copy buttons render"
+  passed=$((passed + 1))
+else
+  echo "FAIL  UX controls missing from sample site HTML"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
