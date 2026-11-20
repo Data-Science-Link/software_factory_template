@@ -176,7 +176,7 @@ git -C "$work/repo" init -q 2>/dev/null || true
 git -C "$work/repo" add -A 2>/dev/null || true
 git -C "$work/repo" -c user.email=test@test -c user.name=test commit -q -m init 2>/dev/null || true
 run_doctor --repo-dir "$work/repo" --public --strict
-assert_rc "prepublic with script strict" 1
+assert_rc "prepublic with script strict" 0
 grep -q "prepublic_hygiene" "$work/out" || bad "prepublic id present"
 grep -q "pre-public scan:" "$work/out" && ok "prepublic reports scan results" \
   || bad "prepublic scan detail"

@@ -37,7 +37,75 @@ SENTINEL="sk-test-sentinel-31-do-not-print"
 new_case() {
   d="$work/$1"; mkdir -p "$d/art/usage" "$d/stub"
   cp tests/factory-usage/opencode-export-session-*.json "$d/art/usage/"
-  cp factory/specs/issue-133.md "$d/art/spec.md"
+  cat >"$d/art/spec.md" <<'SPEC'
+<!-- factory-spec v1 -->
+---
+spec_version: 1
+issue: 133
+title: Run-finish inline fixture (issue 133 usage totals)
+status: approved
+complexity: standard
+complexity_reason: offline run-finish harness fixture
+risk: high
+work_type: code
+model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo
+model_override_reason:
+model_reason: fixture
+predicted_tokens_in: 1000000
+predicted_tokens_cached: 800000
+predicted_tokens_out: 50000
+predicted_cost_usd: 0.1900
+budget_cap_usd: 1.00
+price_table_version: 2026-11-02
+approved_by: michael
+approved_at: 2026-11-07T10:42:00-06:00
+drafted_by: grok-bot
+---
+## Outcome
+Offline fixture for scripts/test-run-finish.sh (usage totals and gates).
+## Context
+Mirrors factory/specs/issue-133.md acceptance numbers without editing the approved spec file.
+## Scope
+Harness-only; no worker changes.
+## Out of scope
+Live factory/specs/issue-133.md.
+## Files
+- Read: tests/factory-usage/opencode-export-session-1.json
+## Acceptance criteria
+- [ ] factory-usage totals match $0.00164 on the real export fixtures.
+## Bad inputs and edge cases
+- Unparseable usage JSON, unknown token keys, or duplicate session ids → factory-usage.py exit 3, empty stdout (see issue #133 acceptance matrix).
+## Verification
+```bash
+bash scripts/test-factory-usage.sh
+```
+## Classification
+Standard, high.
+## Cost forecast
+Fixture only.
+## Manual steps for Michael
+None.
+## Dependencies
+PR #137 fixtures on main.
+## Worker prompt
+Harness fixture only.
+## Design / approach
+fixture
+## Alternatives considered
+fixture
+## Risks, rollback and revert trigger
+fixture
+## What changes in production on merge
+Nothing.
+## Success metric (baseline, target, how measured)
+fixture
+## Test plan detail (broken case shown blocked)
+fixture
+## Security and liability review (`liability-gates.md`)
+fixture
+## Milestones / split plan
+fixture
+SPEC
   printf '{"base_sha": "%s", "ended_at": "2026-11-09T22:04:10Z", "started_at": "2026-11-09T22:00:00Z"}\n' \
     aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$d/art/run-clock.json"
   cat >"$d/art/run-start.json" <<J
@@ -86,7 +154,7 @@ else bad "build run (rc=$rc)"; cat "$work/c1/out.txt"; fi
 # 2. Run start can read the posted comment back as this issue's spend (#91 prior-spend format).
 if posted c1 | python3 -c '
 import importlib.util, sys
-s = importlib.util.spec_from_file_location("rs", "scripts/factory-run-start.py"); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+s = importlib.util.spec_from_file_location("spend", "scripts/factory-issue-spend.py"); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
 body = sys.stdin.read(); spend = {}; warned = []
 m.load_comments_spend([{"user": {"login": "github-actions[bot]"}, "body": body}], 133, spend, warned)
 sys.exit(0 if spend == {"gha-42400000031-1": 0.00164} and not warned else 1)'; then
