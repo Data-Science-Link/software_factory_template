@@ -300,6 +300,154 @@ else
   failed=$((failed + 1))
 fi
 
+# ---- test 12: malformed fixture JSON exits with ERROR on stderr, no traceback ----
+printf '{not-json' >"$tmpdir/bad-backlog.json"
+set +e
+"$PYTHON" scripts/factory-backlog.py --from-json "$tmpdir/bad-backlog.json" \
+  --out "$tmpdir/bad-out.json" 2>"$tmpdir/bad-backlog.err"
+bad_rc=$?
+set -e
+if [ "$bad_rc" -ne 0 ] \
+  && grep -q '^ERROR:' "$tmpdir/bad-backlog.err" \
+  && ! grep -q Traceback "$tmpdir/bad-backlog.err"; then
+  echo "PASS  malformed fixture JSON exits cleanly (ERROR on stderr, no traceback)"
+  passed=$((passed + 1))
+else
+  echo "FAIL  malformed fixture JSON (rc=$bad_rc)"
+  cat "$tmpdir/bad-backlog.err" || true
+  failed=$((failed + 1))
+fi
+
+# ---- test 13: non-UTF-8 fixture rejected cleanly ----
+printf '\xff\xfe' >"$tmpdir/noutf8-backlog.json"
+set +e
+"$PYTHON" scripts/factory-backlog.py --from-json "$tmpdir/noutf8-backlog.json" \
+  --out "$tmpdir/noutf8-out.json" 2>"$tmpdir/noutf8.err"
+utf8_rc=$?
+set -e
+if [ "$utf8_rc" -ne 0 ] \
+  && grep -q '^ERROR:' "$tmpdir/noutf8.err" \
+  && ! grep -q Traceback "$tmpdir/noutf8.err"; then
+  echo "PASS  non-UTF-8 fixture rejected cleanly"
+  passed=$((passed + 1))
+else
+  echo "FAIL  non-UTF-8 fixture (rc=$utf8_rc)"
+  failed=$((failed + 1))
+fi
+
+# ---- test 14: top-level JSON object (not array) is rejected ----
+printf '{"issues":[]}\n' >"$tmpdir/not-array.json"
+set +e
+"$PYTHON" scripts/factory-backlog.py --from-json "$tmpdir/not-array.json" \
+  --out "$tmpdir/not-array-out.json" 2>"$tmpdir/not-array.err"
+na_rc=$?
+set -e
+if [ "$na_rc" -ne 0 ] && grep -q 'must be a JSON array' "$tmpdir/not-array.err"; then
+  echo "PASS  fixture root must be a JSON array"
+  passed=$((passed + 1))
+else
+  echo "FAIL  non-array fixture root (rc=$na_rc)"
+  failed=$((failed + 1))
+fi
+
+# ---- test 15: edge fixture (unicode, duplicate labels, missing labels) ----
+edge_out="$tmpdir/edge-backlog.json"
+if "$PYTHON" scripts/factory-backlog.py \
+  --from-json tests/edge-cases/backlog-edge.json \
+  --out "$edge_out" >/dev/null; then
+  if "$PYTHON" - "$edge_out" <<'PY'
+import json, sys
+items = json.load(open(sys.argv[1], encoding="utf-8"))
+assert len(items) == 2
+u = next(i for i in items if i["number"] == 9001)
+assert u["priority"] == "high" and u["risk"] == "medium"
+n = next(i for i in items if i["number"] == 9002)
+assert n["priority"] == "none" and n["risk"] == "unlabeled"
+PY
+  then
+    echo "PASS  edge fixture normalizes unicode titles and label edge cases"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  edge fixture normalization"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  edge fixture backlog run"
+  failed=$((failed + 1))
+fi
+
+# ---- test 16: epic with non-numeric subIssuesSummary does not traceback ----
+"$PYTHON" - "$tmpdir/epic-bad-summary.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+json.dump([
+    {
+        "number": 88,
+        "title": "Epic bad summary",
+        "labels": [{"name": "epic"}],
+        "subIssuesSummary": {"done": "n/a", "total": -3},
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-02T00:00:00Z",
+        "url": "https://github.com/example/factory/issues/88",
+    }
+], open(path, "w", encoding="utf-8"), indent=2)
+PY
+epic_out="$tmpdir/epic-bad-out.json"
+set +e
+"$PYTHON" scripts/factory-backlog.py --from-json "$tmpdir/epic-bad-summary.json" \
+  --out "$epic_out" 2>"$tmpdir/epic-bad.err"
+epic_rc=$?
+set -e
+if [ "$epic_rc" -eq 0 ] && ! grep -q Traceback "$tmpdir/epic-bad.err"; then
+  if "$PYTHON" - "$epic_out" <<'PY'
+import json, sys
+row = json.load(open(sys.argv[1], encoding="utf-8"))[0]
+assert row["number"] == 88
+assert row["done"] == 0 and row["total"] == 0
+PY
+  then
+    echo "PASS  epic with invalid subIssuesSummary counts falls back to 0/0"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  epic bad summary output"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  epic bad summary (rc=$epic_rc)"
+  cat "$tmpdir/epic-bad.err" || true
+  failed=$((failed + 1))
+fi
+
+# ---- test 17: output JSON is deterministic and uses sort_keys on each object ----
+"$PYTHON" scripts/factory-backlog.py \
+  --from-json tests/site/fixtures/issues.json \
+  --out "$tmpdir/det-a.json" >/dev/null
+"$PYTHON" scripts/factory-backlog.py \
+  --from-json tests/site/fixtures/issues.json \
+  --out "$tmpdir/det-b.json" >/dev/null
+if cmp -s "$tmpdir/det-a.json" "$tmpdir/det-b.json"; then
+  if "$PYTHON" - "$tmpdir/det-a.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1], encoding="utf-8").read()
+items = json.loads(raw)
+if not items:
+    raise SystemExit("no items")
+keys = list(items[0].keys())
+if keys != sorted(keys):
+    raise SystemExit("output object keys not sorted: %r" % keys)
+PY
+  then
+    echo "PASS  backlog JSON output is byte-identical across runs with sorted keys"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  backlog output keys not sorted"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  backlog JSON output is not deterministic across runs"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
