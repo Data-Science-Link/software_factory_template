@@ -13,9 +13,9 @@ summary as (
     select
         cast(null as integer) as issue,
         count(*) as runs,
-        sum(spend_usd) as spend_usd,
-        bool_and(under_target) as under_target,
-        bool_and(under_cap) as under_cap
+        coalesce(sum(spend_usd), 0) as spend_usd,
+        coalesce(bool_and(under_target), true) as under_target,
+        coalesce(bool_and(under_cap), true) as under_cap
     from per_issue
 ),
 

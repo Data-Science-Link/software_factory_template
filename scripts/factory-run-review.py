@@ -16,6 +16,7 @@ using cmp.
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -25,6 +26,7 @@ import tempfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FACTORY_USAGE = os.path.join(REPO_ROOT, "scripts", "factory-usage.py")
+FACTORY_FIX_POLICY = os.path.join(REPO_ROOT, "scripts", "factory-fix-policy.py")
 
 # The real /oc workflow names. Do not use a --workflow=opencode filter; the
 # names are opencode-spike (builds), opencode-spec, and opencode-fix.
@@ -52,6 +54,12 @@ PERMISSION_DENIED_RE = re.compile(
 _ROLE_PREFIX_RE = re.compile(r"^[A-Za-z]+\s+(?=[→✱✗*>\-])")
 SCAN_PASS_RE = re.compile(r"artifact-scan:\s*passed", re.I)
 SCAN_FAIL_RE = re.compile(r"artifact-scan:\s*FAIL", re.I)
+VERIFY_PASS_RE = re.compile(r"Result:\s*PASS", re.I)
+VERIFY_FAIL_RE = re.compile(r"Result:\s*FAIL", re.I)
+VERIFY_NOT_RUN_RE = re.compile(r"Verification run by the harness:\s*not run", re.I)
+VERIFY_RESULTS_FAIL_RE = re.compile(
+    r"Results:\s*\d+\s+passed,\s*([1-9][0-9]*)\s+failed", re.I
+)
 
 # Always-readable paths that are legitimately opened by a worker regardless of
 # the approved spec's `## Files` list (method docs, rules, the review target).
@@ -96,6 +104,14 @@ FINDING_CODES = {
     "timeout_hit": {
         "severity": "low",
         "meaning": "run hit the wall-clock timeout",
+    },
+    "verification_failed": {
+        "severity": "high",
+        "meaning": "harness Verification failed",
+    },
+    "complex_fix_round_waste": {
+        "severity": "high",
+        "meaning": "complex build burned multiple failed fix rounds or >2x issue target without passing Verification; apply the 1-fix-round circuit breaker (scripts/factory-fix-policy.py)",
     },
 }
 
@@ -178,13 +194,15 @@ def out_of_spec_reads(tool_events, spec_files):
     return sorted(reads)
 
 
-def compute_findings(run, cost, out_spec, longest_gap, avg_turn):
+def compute_findings(run, cost, out_spec, longest_gap, avg_turn, verification_status):
     """Map run facts to a fixed-catalog list of finding codes."""
     codes = []
     conclusion = run.get("conclusion")
     status = run.get("status")
     if conclusion in ("failure", "timed_out") or (conclusion is None and status != "completed"):
         codes.append("run_failed")
+    if verification_status == "fail":
+        codes.append("verification_failed")
     if cost is not None and cost > COST_OVERRUN_USD:
         codes.append("cost_overrun")
     scan = run.get("scan") or {}
@@ -208,6 +226,43 @@ def compute_findings(run, cost, out_spec, longest_gap, avg_turn):
             {"code": code, "severity": entry["severity"], "meaning": entry["meaning"]}
         )
     return findings
+
+
+def verification_status_from_text(text):
+    """Map harness verification output to pass|fail|not_run|unknown."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    if VERIFY_NOT_RUN_RE.search(text):
+        return "not_run"
+    if VERIFY_FAIL_RE.search(text) or VERIFY_RESULTS_FAIL_RE.search(text):
+        return "fail"
+    if VERIFY_PASS_RE.search(text):
+        return "pass"
+    return "unknown"
+
+
+_FIX_POLICY = None
+
+
+def _fix_policy_module():
+    """Load scripts/factory-fix-policy.py once (hyphenated filename)."""
+    global _FIX_POLICY
+    if _FIX_POLICY is not None:
+        return _FIX_POLICY
+    spec = importlib.util.spec_from_file_location(
+        "factory_fix_policy", FACTORY_FIX_POLICY
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    _FIX_POLICY = mod
+    return mod
+
+
+def effective_gates_passed(gate_passed, verification_status):
+    """Gate line must not read passed when harness Verification failed (#161, #233)."""
+    if verification_status == "fail":
+        return False
+    return bool(gate_passed)
 
 
 def _tokens_from_run(run, usage):
@@ -238,10 +293,16 @@ def review_run(run):
         cost = usage.get("opencode_cost_usd")
     else:
         cost = run.get("cost_usd")
-    findings = compute_findings(run, cost, out_spec, longest_gap, avg_turn)
+    verification_status = run.get("verification_status")
+    if verification_status is None:
+        verification_status = verification_status_from_text(run.get("verification_text"))
+    findings = compute_findings(
+        run, cost, out_spec, longest_gap, avg_turn, verification_status
+    )
 
     scan = run.get("scan") or {}
     evidence = run.get("evidence") or {}
+    gates_passed = effective_gates_passed(run.get("gate_passed"), verification_status)
 
     out = {
         "run_id": run.get("run_id"),
@@ -271,6 +332,12 @@ def review_run(run):
         out["gate"] = run.get("gate")
     if "gate_passed" in run:
         out["gate_passed"] = run.get("gate_passed")
+    if gates_passed is not None and (
+        "gate_passed" in run or verification_status is not None
+    ):
+        out["gates_passed"] = gates_passed
+    if verification_status is not None:
+        out["verification_status"] = verification_status
     if run.get("artifacts_unavailable"):
         out["artifacts_unavailable"] = True
     return out
@@ -316,6 +383,10 @@ def render_markdown(review):
         lines.append("- artifacts unavailable")
     if "gate_passed" in review:
         lines.append(f"- gate_passed: {review['gate_passed']}")
+    if "gates_passed" in review:
+        lines.append(f"- gates_passed: {review['gates_passed']}")
+    if review.get("verification_status") is not None:
+        lines.append(f"- verification: {review['verification_status']}")
     lines.append("- findings:")
     for f in review["findings"]:
         lines.append(f"  - `{f['code']}` ({f['severity']}): {f['meaning']}")
@@ -911,6 +982,8 @@ def facts_from_record(record):
     facts = {
         "run_id": run_id,
         "workflow": workflow_from_record(record),
+        "complexity": record.get("complexity"),
+        "issue_spend_to_date_usd": record.get("issue_spend_to_date_usd"),
         "status": "completed" if record.get("outcome") else None,
         "conclusion": conclusion_from_outcome(record.get("outcome")),
         "model": record.get("model"),
@@ -929,6 +1002,8 @@ def facts_from_record(record):
         "tokens": tokens,
         "gate": gate,
         "gate_passed": record.get("gate_passed"),
+        "verification_status": record.get("verification_status"),
+        "verification_text": record.get("verification_text"),
     }
     return facts
 
@@ -942,6 +1017,10 @@ def apply_record_to_facts(facts, record):
         "tokens",
         "gate",
         "gate_passed",
+        "complexity",
+        "issue_spend_to_date_usd",
+        "verification_status",
+        "verification_text",
         "workflow",
         "status",
         "conclusion",
@@ -1006,8 +1085,13 @@ def parse_artifacts(artifacts_dir):
                 "detail": scan.get("detail"),
             }
 
-        if os.path.isfile(os.path.join(root, "evidence.md")):
+        evidence_md = _read_text(os.path.join(root, "evidence.md"))
+        if evidence_md:
             evidence_found = True
+            facts["verification_text"] = evidence_md
+            vstat = verification_status_from_text(evidence_md)
+            if vstat:
+                facts["verification_status"] = vstat
 
         export = _read_json(os.path.join(root, "opencode-export.json"))
         if export is not None:
@@ -1218,7 +1302,17 @@ def enrich_from_artifacts(item, run_id, log_text=""):
                         item[key] = value
                     continue
                 if value is not None and value != []:
-                    if key in ("model", "cost_usd", "tokens", "gate", "gate_passed"):
+                    if key in (
+                        "model",
+                        "cost_usd",
+                        "tokens",
+                        "gate",
+                        "gate_passed",
+                        "verification_status",
+                        "verification_text",
+                        "complexity",
+                        "issue_spend_to_date_usd",
+                    ):
                         # Keep a record value already set.
                         if item.get(key) in (None, {}, {"in": None, "cached": None, "out": None, "reasoning": None}):
                             item[key] = value
@@ -1378,6 +1472,108 @@ def fetch_runs_live_dir(live_dir):
     return [facts_by_id[k] for k in sorted(facts_by_id)]
 
 
+def _finding_entry(code):
+    entry = FINDING_CODES[code]
+    return {"code": code, "severity": entry["severity"], "meaning": entry["meaning"]}
+
+
+def summary_gates_passed(reviews):
+    """Aggregate gates_passed across runs; never true when any Verification failed."""
+    if not reviews:
+        return None
+    saw = False
+    for review in reviews:
+        if review.get("verification_status") == "fail":
+            return False
+        gp = review.get("gates_passed")
+        if gp is not None:
+            saw = True
+            if not gp:
+                return False
+        elif review.get("gate_passed") is not None:
+            saw = True
+            if not review.get("gate_passed"):
+                return False
+    if not saw:
+        return None
+    return True
+
+
+def summarize_pr_reviews(runs, reviews):
+    """PR/issue-level rollup used by post-merge review."""
+    mod = _fix_policy_module()
+    budget = mod.load_budget()
+    target = budget["issue_target_usd"]
+
+    total_cost = 0.0
+    saw_cost = False
+    any_verification_pass = False
+    failed_fix_verification_rounds = 0
+    complexity = None
+    issue_spend = None
+    worst_verification = None
+
+    for run, review in zip(runs, reviews):
+        cost = review.get("cost_usd")
+        if isinstance(cost, (int, float)):
+            total_cost += cost
+            saw_cost = True
+        vstat = review.get("verification_status")
+        if vstat == "pass":
+            any_verification_pass = True
+        if vstat == "fail":
+            worst_verification = "fail"
+        elif worst_verification is None and vstat:
+            worst_verification = vstat
+        workflow = run.get("workflow") or review.get("workflow")
+        if workflow == FIX_WORKFLOW and vstat == "fail":
+            failed_fix_verification_rounds += 1
+        if run.get("complexity"):
+            complexity = run.get("complexity")
+        if run.get("issue_spend_to_date_usd") is not None:
+            issue_spend = run.get("issue_spend_to_date_usd")
+
+    if issue_spend is None and saw_cost:
+        issue_spend = round(total_cost, 6)
+
+    complex_build = mod.is_complex_build(complexity, None, issue_spend, target)
+    findings = []
+    if any(review.get("verification_status") == "fail" for review in reviews):
+        findings.append(_finding_entry("verification_failed"))
+
+    waste = (
+        complex_build
+        and not any_verification_pass
+        and (
+            failed_fix_verification_rounds >= 2
+            or (issue_spend is not None and issue_spend > 2 * target)
+        )
+    )
+    if waste:
+        findings.append(_finding_entry("complex_fix_round_waste"))
+
+    policy = mod.evaluate_fix_policy(
+        complexity=complexity,
+        issue_spend_usd=issue_spend,
+        failed_fix_rounds=failed_fix_verification_rounds,
+        verification_failed_after_last_fix=failed_fix_verification_rounds >= 1,
+        proposed_fix_round=failed_fix_verification_rounds + 1,
+    )
+
+    findings = sorted(findings, key=lambda f: f["code"])
+    return {
+        "complex_build": complex_build,
+        "failed_fix_verification_rounds": failed_fix_verification_rounds,
+        "findings": findings,
+        "fix_policy_recommendation": policy.get("recommendation"),
+        "gates_passed": summary_gates_passed(reviews),
+        "issue_spend_usd": issue_spend,
+        "issue_target_usd": round(target, 4),
+        "total_cost_usd": round(total_cost, 6) if saw_cost else None,
+        "verification_status": worst_verification,
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr", type=int, default=None, help="PR number")
@@ -1411,7 +1607,10 @@ def main(argv=None):
     if args.live_dir is not None:
         runs = fetch_runs_live_dir(args.live_dir)
         reviews = [review_run(run) for run in runs]
-        payload = {"runs": reviews}
+        payload = {
+            "runs": reviews,
+            "summary": summarize_pr_reviews(runs, reviews),
+        }
         text = json.dumps(payload, indent=2, sort_keys=True)
         if args.output:
             with open(args.output, "w", encoding="utf-8") as fh:
@@ -1429,10 +1628,26 @@ def main(argv=None):
     args.repo = args.repo or ""
     runs = fetch_runs(args)
     if not runs:
-        print(json.dumps({"runs": [], "findings": []}, indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "runs": [],
+                    "summary": {
+                        "findings": [],
+                        "gates_passed": None,
+                        "verification_status": None,
+                    },
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
         return 0
     reviews = [review_run(run) for run in runs]
-    payload = {"runs": reviews}
+    payload = {
+        "runs": reviews,
+        "summary": summarize_pr_reviews(runs, reviews),
+    }
     text = json.dumps(payload, indent=2, sort_keys=True)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:

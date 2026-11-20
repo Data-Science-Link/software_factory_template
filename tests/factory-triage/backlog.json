@@ -1,0 +1,92 @@
+[
+  {
+    "number": 100,
+    "title": "Epic: factory tooling",
+    "body": "Tracks #101, #102, and #110.",
+    "state": "open",
+    "labels": [{"name": "epic"}, {"name": "priority:high"}, {"name": "risk:high"}],
+    "url": "https://github.com/example/factory/issues/100",
+    "subIssuesSummary": {"done": 1, "total": 3}
+  },
+  {
+    "number": 101,
+    "title": "Owner pastes workflow YAML",
+    "body": "Manual step for the owner.",
+    "state": "open",
+    "labels": [
+      {"name": "owner-action"},
+      {"name": "priority:high"},
+      {"name": "risk:low"}
+    ],
+    "url": "https://github.com/example/factory/issues/101"
+  },
+  {
+    "number": 102,
+    "title": "Unlabeled task",
+    "body": "Needs triage.",
+    "state": "open",
+    "labels": [],
+    "url": "https://github.com/example/factory/issues/102"
+  },
+  {
+    "number": 103,
+    "title": "Missing risk label",
+    "body": "Only priority set.",
+    "state": "open",
+    "labels": [{"name": "priority:low"}],
+    "url": "https://github.com/example/factory/issues/103"
+  },
+  {
+    "number": 104,
+    "title": "Add triage helper",
+    "body": "Implement scripts/factory-issue-triage.py for the manager.",
+    "state": "open",
+    "labels": [
+      {"name": "priority:high"},
+      {"name": "risk:low"},
+      {"name": "factory:selected"}
+    ],
+    "url": "https://github.com/example/factory/issues/104"
+  },
+  {
+    "number": 105,
+    "title": "Lower priority improvement",
+    "body": "Nice to have.",
+    "state": "open",
+    "labels": [{"name": "priority:low"}, {"name": "risk:medium"}],
+    "url": "https://github.com/example/factory/issues/105"
+  },
+  {
+    "number": 106,
+    "title": "Ship existing helper",
+    "body": "Create `scripts/existing-helper.sh` for offline tests.",
+    "state": "open",
+    "labels": [{"name": "priority:low"}, {"name": "risk:low"}],
+    "url": "https://github.com/example/factory/issues/106"
+  },
+  {
+    "number": 107,
+    "title": "Blocked follow-up",
+    "body": "Waits on another issue.",
+    "state": "open",
+    "labels": [{"name": "priority:high"}, {"name": "risk:low"}],
+    "url": "https://github.com/example/factory/issues/107",
+    "issue_dependencies_summary": {"blocked_by": 2, "total_blocked_by": 2}
+  },
+  {
+    "number": 110,
+    "title": "Closed child of epic",
+    "body": "Done.",
+    "state": "closed",
+    "labels": [{"name": "priority:low"}, {"name": "risk:low"}],
+    "url": "https://github.com/example/factory/issues/110"
+  },
+  {
+    "number": 111,
+    "title": "Open child of epic",
+    "body": "Still open.",
+    "state": "open",
+    "labels": [{"name": "priority:low"}, {"name": "risk:low"}],
+    "url": "https://github.com/example/factory/issues/111"
+  }
+]

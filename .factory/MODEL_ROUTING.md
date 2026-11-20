@@ -21,13 +21,32 @@ Scripts read `models.yaml` directly; do not duplicate prices in this file.
 - `/oc spec` keeps its own preflight in `scripts/opencode-spec-run.sh` (rule 2 V4 Pro for high risk, else rule 9 V4 Flash; predicted cost under the cap).
 - **Over-target gate:** when the spec's own build prediction is above `budget.issue_target_usd` ($0.15), run start refuses (`over_target_unapproved`) unless the approved spec has `over_target_approved_by: michael`, whatever the risk. Michael sets it with `factory-approve-spec.py ... --approved-by michael --over-target-ok`. The draft comment's first line says `Over $0.15 target: needs Michael's approval`. Harness retries and fallbacks (rules 4 and 5) don't need a second approval.
 
-**Spend rules (unchanged):** never enable on-demand spend (Cursor or elsewhere). Workers and the manager stay within the issue cap ($1 hard, $0.15 target, above which Michael approves explicitly) and the Actions-only DeepInfra key limit ($10/month per `.factory/DECISIONS.md`).
+**Spend rules (unchanged):** never enable on-demand spend (Cursor or elsewhere). Workers and the manager stay within the issue cap ($1 hard, $0.15 target, above which the owner approves explicitly) and the Actions-only DeepInfra key limit ($10/month per `.factory/DECISIONS.md`).
+
+### Two-tier utilization waterfall (optional, #127)
+
+After the DeepInfra open-weights loop is proven end-to-end, the factory may use a **simple two-tier** policy. Tier 1 is required; tier 2 is optional headroom spend only.
+
+| Tier | When | What runs | Marginal model spend |
+|---|---|---|---|
+| **Primary backbone** | Always | GitHub Actions + OpenCode + DeepInfra (`/oc`) | Transparent per-token DeepInfra pricing; works with **zero** subscription pool regardless of weekly reset |
+| **Optional $0 bonus** | Only when tier 1 is healthy **and** the shared weekly Cursor/X subscription pool has comfortable headroom before reset (enough for 3–4 Factory Manager cloud-agent turns without starving coordination) | Factory Manager may dispatch **complex** specs, architecture spikes, or thorny multi-file builds to a **Cursor Cloud Agent** (`grok-4.7`, `composer-2.5`, etc.) | $0 incremental while pool headroom lasts |
+
+**Fallback:** As weekly pool usage rises, or credits disappear, drop straight back to DeepInfra `/oc` for all coding work. If subscription credits vanished tomorrow, `/oc` alone still runs the full factory unchanged (zero lock-in).
+
+**Factory Manager rules for tier 2:**
+
+1. Never starve manager/coordinator runs: reserve headroom before launching bonus-tier build agents.
+2. Pin the model on every cloud launch (see the Cursor table below); record harness, provider, model, and cloud run id in the PR body (`AI disclosure`) so run records and `fct_agent_runs` can compare DeepInfra `/oc` vs optional cloud runs.
+3. Raw third-party **Console API keys** (e.g. billed `api.x.ai` usage) stay **out of GitHub Actions** unless a later decision explicitly allows them—they bill separately from the shared subscription pool and are not part of the optional $0 waterfall.
+
+**Spend rules still apply:** tier 2 does not turn on Cursor on-demand spending. Tier 1 issue caps and DeepInfra monthly limits still govern `/oc` runs.
 
 ---
 
-## Cursor cloud agents (Grok Bot manager + backup workers)
+## Cursor cloud agents (Factory Manager + backup workers)
 
-How the factory manager picks a model for each **Cursor cloud agent** it launches. The goal is the cheapest model that can do the job well, with escalation only when needed. Each repo may tune this table; keep the structure.
+How the Factory Manager picks a model for each **Cursor cloud agent** it launches. The goal is the cheapest model that can do the job well, with escalation only when needed. Each repo may tune this table; keep the structure.
 
 Defaults below assume **Cursor Pro+** (as of 2026-10). Cursor has two monthly pools:
 - **Cursor Models** (Grok 4.7 / 4.6 / 4.5, Composer 2.5): much larger included allowance; use first.

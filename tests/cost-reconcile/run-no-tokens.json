@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "run_id": "test-no-tokens-1",
+  "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "actual_cost_usd": null,
+  "cost_method": "not_measured"
+}

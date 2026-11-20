@@ -1,0 +1,32 @@
+{
+  "pull_requests": [
+    {
+      "number": 101,
+      "state": "OPEN",
+      "headRefName": "oc/issue-99-open",
+      "mergedAt": null,
+      "closedAt": null
+    },
+    {
+      "number": 50,
+      "state": "MERGED",
+      "headRefName": "oc/issue-50-merged",
+      "mergedAt": "2026-11-05T00:00:00Z",
+      "closedAt": "2026-11-05T00:00:00Z"
+    },
+    {
+      "number": 40,
+      "state": "CLOSED",
+      "headRefName": "oc/issue-40-closed-old",
+      "mergedAt": null,
+      "closedAt": "2026-10-15T00:00:00Z"
+    },
+    {
+      "number": 41,
+      "state": "CLOSED",
+      "headRefName": "oc/issue-41-closed-recent",
+      "mergedAt": null,
+      "closedAt": "2026-11-19T00:00:00Z"
+    }
+  ]
+}

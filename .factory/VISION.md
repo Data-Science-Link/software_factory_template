@@ -3,7 +3,7 @@
 - **Status:** Proposed, 2026-11-01; the ten design decisions in [§18](#18-decisions-2026-11-02) were **accepted on 2026-11-02**: "All recommended" (Michael, 2026-11-02 12:19 AM CT, in chat). The vision PR itself still waits for Michael's review. Nothing here is live until the child issues of the epic land.
 - **Owner:** Michael Link (CEO). **Drafted by:** the Software Factory Builder (Grok Bot) from Michael's notes of 2026-11-01.
 - **Epic:** [#38](https://github.com/Data-Science-Link/software_factory_template/issues/38) · **Lives at:** `.factory/VISION.md` (method docs live in `.factory/`, per the README).
-- **Replaces as the default path:** the Local open-weights harness (desktop Cursor + DeepInfra) described in `MODEL_ROUTING.md` and `skills/local-open-weights-run.md`. See [What's retired](#14-whats-retired-and-whats-kept).
+- **Replaces as the default path:** the Local open-weights harness (desktop Cursor + DeepInfra) described in `MODEL_ROUTING.md` and `skills/local-open-weights-run.md`. See [What's retired](#15-whats-retired-and-whats-kept).
 
 > Words used here match the rest of `.factory/`. **Complexity** is `simple | standard | complex` (it picks the model). **Risk class** is `trivial | normal | high` (it sets the merge gate). When Michael says "medium or high complexity" that means **standard or complex**; "medium or high risk" means **normal or high**.
 
@@ -220,7 +220,7 @@ One JSON file per agent run, written by `scripts/factory-run-end.sh`, validated 
 
 ## 9. The pre-spin-down gate
 
-`scripts/factory-gate.sh` runs as the last steps of the run job with `if: always()`, so it runs even when the harness fails. It writes its results into the run record and the job summary, posts a short comment on the issue, and exits non-zero on any failed check, which turns the run red. The VM asks itself, in order:
+`scripts/factory-run-finish.sh` runs as the last steps of the run job with `if: always()`, so it runs even when the harness fails. It writes its results into the run record and the job summary, posts a short comment on the issue, and exits non-zero on any failed check, which turns the run red. The VM asks itself, in order:
 
 1. **Did I track cost from start to finish?** A start timestamp was taken before the harness started; usage was read after the harness ended; usage covers every session the harness ran; tokens are non-zero if any model call happened.
 2. **Did I put the cost into a log?** `factory/runs/<run_id>.json` exists, validates against the schema, and is committed to the PR branch (or, with no PR, posted on the issue). A copy is in the job summary and uploaded as an artifact.
@@ -286,7 +286,7 @@ key spend (opt)─┘                                         │
 ```
 
 - **Capture (deterministic).** OpenCode records token usage per message in its session data; the run end step reads it (exact source, such as `opencode export` or `opencode stats`, is confirmed by the spike) and multiplies by the price table. When the DeepInfra key's spend can be read before and after (`scripts/deepinfra-cost.sh`, `GET /payment/key-limits`), it's recorded as a cross-check; when other runs overlapped on the same key, the check is `skipped_concurrent`.
-- **Every dollar counts.** Records are committed in the PR **and** posted as an issue comment (marker `<!-- factory-run-record -->`, trusted only from `github-actions[bot]`). `scripts/factory-collect-runs.sh` pulls comment copies for runs with no merged PR (failed, rejected, closed), so spend on abandoned work still lands in the dataset.
+- **Every dollar counts.** Records are committed in the PR **and** posted as an issue comment (marker `<!-- factory-run-record -->`, trusted only from `github-actions[bot]`). `scripts/factory-collect-runs.py` pulls comment copies for runs with no merged PR (failed, rejected, closed), so spend on abandoned work still lands in the dataset.
 - **Seeds.** `factory-runs-to-seeds.py` flattens `factory/runs/*.json` into `agent_runs.csv` and `agent_run_gates.csv`, and writes `model_prices.csv` from `models.yaml`. Hand-kept seeds: `fixed_costs.csv` (Cursor plan about $20/month for Grok Bot, any other subscriptions) and `budget.csv` (monthly DeepInfra budget and forecast).
 - **dbt-duckdb.** `factory/dbt/` with an in-repo `profiles.yml` pointing at a local DuckDB file. No warehouse, no credentials. `dbt build` runs seeds, models and tests in CI or on any laptop.
 - **Staging** cleans and types: dedupe on `run_id`, UTC timestamps, recompute cost from tokens × price as a test, normalize model IDs.
@@ -375,7 +375,7 @@ These were the open questions in the first draft of this vision. Michael accepte
 
 | # | Question | Decision | What it means for the build |
 |---|---|---|---|
-| 1 | Where run records live | Each run record is committed in the run's PR as `factory/runs/<run_id>.json`, **plus** a copy posted on the issue (`<!-- factory-run-record -->`, trusted only from `github-actions[bot]`). No separate data branch. | Failed, rejected and closed runs still count: `factory-collect-runs.sh` pulls issue copies that aren't in `factory/runs/`. |
+| 1 | Where run records live | Each run record is committed in the run's PR as `factory/runs/<run_id>.json`, **plus** a copy posted on the issue (`<!-- factory-run-record -->`, trusted only from `github-actions[bot]`). No separate data branch. | Failed, rejected and closed runs still count: `scripts/factory-collect-runs.py` pulls issue copies that aren't in `factory/runs/`. |
 | 2 | Dashboard format | A generated markdown page, `factory/financials/README.md`, with Mermaid charts. **Not** GitHub Pages. | Works on a private GitHub Free repo and on GitHub mobile. |
 | 3 | GitHub identity for runs | The default `GITHUB_TOKEN`, with `pr-check.sh` and gitleaks run **inside the run job**, plus a `factory-gate` commit status. No OpenCode GitHub App, no extra token. | The harness action runs with `use_github_token: true`; the gate is the in-job check of record. |
 | 4 | DeepInfra key for Actions | A **new DeepInfra key used only by Actions**, with its own spending limit. It supersedes the 2026-10-31 single-key decision for Actions runs only; the local key stays as is. | Separates Actions spend and limits the blast radius; the key-spend cross-check reads that key. |
