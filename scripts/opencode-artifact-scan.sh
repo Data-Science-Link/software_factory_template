@@ -50,6 +50,7 @@ FORBIDDEN_PATTERNS=(
   'AGENTS.md' '*/AGENTS.md'
   '.factory/actions-security.md'
   '.factory/models.yaml'
+  '.factory/mode.yml'
   'factory/budget.yml'
   'requirements-factory.txt'
   'scripts'
@@ -108,6 +109,29 @@ PROTECTED_SCRIPTS=(
 # (and chmod between 100644 and 100755). Default-branch scripts may be content-edited only when
 # they are not on PROTECTED_SCRIPTS; delete, rename and chmod stay forbidden for every existing script.
 BASE_SCRIPTS_FILE=''
+# template | product — from .factory/mode.yml (issue #69). Missing, invalid, or corrupt file => product.
+FACTORY_MODE='product'
+
+load_factory_mode() {
+  case "${FACTORY_MODE_OVERRIDE:-}" in
+    template | product)
+      FACTORY_MODE="$FACTORY_MODE_OVERRIDE"
+      return
+      ;;
+  esac
+  local f="$ROOT/.factory/mode.yml" raw
+  FACTORY_MODE=product
+  [ -f "$f" ] || return
+  raw="$(
+    grep -E '^[[:space:]]*mode:[[:space:]]*' "$f" 2>/dev/null | head -n1 \
+      | sed -E 's/^[[:space:]]*mode:[[:space:]]*//' | tr -d '\r' \
+      | sed -E 's/[[:space:]]+#.*$//' | sed -E 's/[[:space:]]+$//'
+  )"
+  case "$raw" in
+    template | product) FACTORY_MODE="$raw" ;;
+  esac
+}
+
 in_base_scripts() { # $1 = path; true when it exists on the base branch
   [ -n "$BASE_SCRIPTS_FILE" ] && grep -qxF -- "$1" "$BASE_SCRIPTS_FILE"
 }
@@ -120,18 +144,39 @@ is_protected_script() { # $1 = path
 }
 
 list_rules() {
+  load_factory_mode
   cat <<'RULES'
 Path policy (enforced by scripts/opencode-artifact-scan.sh; bash globs, * also matches /).
 If your change breaks ANY rule, the scan discards the WHOLE run and all your work.
 
+Repo mode comes from owner-only .factory/mode.yml (`mode: template` or `mode: product`).
+If the file is missing, unreadable, or `mode` is anything else, the scan fails closed to
+product mode (no changes under scripts/ or .factory/). Workers must never edit .factory/mode.yml
+in either mode.
+RULES
+  if [ "$FACTORY_MODE" = product ]; then
+    cat <<'RULES'
+
+This repo is in product mode: never create, edit, rename or delete anything under scripts/
+or .factory/ (the whole trees are owner-only).
+RULES
+  else
+    cat <<'RULES'
+
+This repo is in template mode: the relaxed scripts/ and .factory/ rules below apply.
+RULES
+  fi
+  cat <<'RULES'
+
 Always forbidden: never create, edit, rename or delete a path matching:
 RULES
   printf -- '- %s\n' "${FORBIDDEN_PATTERNS[@]}"
-  cat <<'RULES'
+  if [ "$FACTORY_MODE" = template ]; then
+    cat <<'RULES'
 ".*" and "*/.*" cover every dot-file and dot-directory at any depth (.cursor/, .env,
 factory/x/.env), with two exceptions:
-- .factory/: you may edit and add docs under .factory/, except .factory/actions-security.md
-  and .factory/models.yaml (owner-only: security policy, model routing and budget caps).
+- .factory/: you may edit and add docs under .factory/, except the owner-only files listed
+  above (including .factory/mode.yml, actions-security.md, and models.yaml).
 - .gitignore files: you may only ADD lines. Never delete or change an existing line, and
   never delete, rename or chmod a .gitignore.
 
@@ -147,9 +192,12 @@ content of existing scripts except the protected spend/security list below.
   protected script needs a change, stop and say so in your final message instead.
   Protected list (also printed by --list-protected):
 RULES
-  printf -- '- %s\n' "${PROTECTED_SCRIPTS[@]}"
-  cat <<'RULES'
+    printf -- '- %s\n' "${PROTECTED_SCRIPTS[@]}"
+    cat <<'RULES'
 - New scripts are not run by CI unless a workflow calls them, and workflows are owner-only.
+RULES
+  fi
+  cat <<'RULES'
 
 Also forbidden everywhere: symlinks, submodules, binary files, ".." in paths, and file
 names with spaces or special characters. Other tooling can go under factory/<area>/
@@ -163,7 +211,8 @@ factory/budget.yml (the weekly and monthly budgets the site reports against) is 
 workers may not change their own budget. If the spec needs a budget change, stop and say so.
 RULES
   if [ "${1:-}" = fix ]; then
-    cat <<'RULES'
+    if [ "$FACTORY_MODE" = template ]; then
+      cat <<'RULES'
 
 Fix runs only: a script under scripts/ that this PR added (it is not on the default branch)
 may be EDITED in place (content changes; a mode change only between 100644 and 100755). You
@@ -171,6 +220,12 @@ still may not delete or rename it. A script that exists on the default branch ma
 content-edited only if it is not on the protected spend/security list; delete, rename
 and chmod stay forbidden for every existing script, and protected scripts stay locked.
 RULES
+    else
+      cat <<'RULES'
+
+Fix runs only: product mode still forbids any change under scripts/ or .factory/.
+RULES
+    fi
   fi
 }
 
@@ -182,6 +237,7 @@ path_has_dot_component() {
 # Echoes the class of a path: forbidden | gitignore | scripts | ok.
 path_class() {
   local p="$1" pat base
+  load_factory_mode
   case "$p" in
     '' | /* | ../* | */../* | */.. | .. | ./* | */./* | */. | . | *//*) echo forbidden; return ;;
   esac
@@ -191,6 +247,12 @@ path_class() {
     # shellcheck disable=SC2254 # unquoted on purpose: pattern match
     case "$p" in $pat) echo forbidden; return ;; esac
   done
+  if [ "$FACTORY_MODE" = product ]; then
+    case "$p" in
+      scripts | scripts/*) echo forbidden; return ;;
+      .factory | .factory/*) echo forbidden; return ;;
+    esac
+  fi
   base="${p##*/}"
   if [ "$base" = .gitignore ]; then
     # A .gitignore inside another dot-dir (other than .factory/) stays forbidden.
