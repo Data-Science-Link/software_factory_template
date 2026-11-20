@@ -643,6 +643,51 @@ tr:nth-child(even) td { background: var(--fs-row-alt); }
 }
 .sortable-table th.sortable[data-sort-dir="asc"]::after { content: " \\2191"; }
 .sortable-table th.sortable[data-sort-dir="desc"]::after { content: " \\2193"; }
+.dbt-filter {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+}
+.dbt-search {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.3rem;
+  background: var(--fs-bg);
+  color: var(--fs-text);
+  font: inherit;
+}
+.dbt-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+.dbt-filter-count { font-size: 0.85rem; color: var(--fs-muted); margin: 0.35rem 0 0; }
+.dbt-meta-badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-accent-soft);
+  color: var(--fs-text);
+}
+#dbt-models-table tbody tr.is-filtered-out { display: none; }
+.dbt-model.is-filtered-out { display: none; }
+.dbt-lineage .dbt-lineage-node { cursor: pointer; }
+.dbt-lineage.is-muted .dbt-lineage-node,
+.dbt-lineage.is-muted .dbt-lineage-edge { opacity: 0.22; }
+.dbt-lineage.is-muted .dbt-lineage-node.is-lineage-focus,
+.dbt-lineage.is-muted .dbt-lineage-node.is-lineage-related,
+.dbt-lineage.is-muted .dbt-lineage-edge.is-lineage-focus { opacity: 1; }
+.dbt-lineage-node.is-lineage-focus rect { stroke: var(--fs-accent); stroke-width: 2.2; }
+.dbt-lineage-node.is-lineage-related rect { stroke: var(--fs-accent); stroke-width: 1.6; }
 </style>"""
 
 
@@ -841,6 +886,82 @@ def site_enhancement_script():
         trs.forEach(function (tr) { tbody.appendChild(tr); });
       });
     });
+  }
+
+  var dbtFilter = document.getElementById("dbt-filter-bar");
+  var dbtSvg = document.querySelector("svg.dbt-lineage");
+  var dbtGraphEl = document.getElementById("dbt-lineage-graph");
+  var dbtClear = document.getElementById("dbt-lineage-clear");
+  var dbtSearch = document.getElementById("dbt-model-search");
+  var dbtCount = document.getElementById("dbt-filter-count");
+  var dbtGraph = null;
+  if (dbtGraphEl && dbtGraphEl.textContent) {
+    try { dbtGraph = JSON.parse(dbtGraphEl.textContent); } catch (e) {}
+  }
+  function dbtApplySearch() {
+    if (!dbtFilter) return;
+    var q = (dbtSearch && dbtSearch.value || "").trim().toLowerCase();
+    var rows = dbtFilter.querySelectorAll(".dbt-model-row");
+    var sections = document.querySelectorAll(".dbt-model");
+    var shown = 0;
+    rows.forEach(function (row) {
+      var blob = (row.getAttribute("data-search") || "").toLowerCase();
+      var match = !q || blob.indexOf(q) !== -1;
+      row.classList.toggle("is-filtered-out", !match);
+      if (match) shown += 1;
+    });
+    sections.forEach(function (sec) {
+      var blob = (sec.getAttribute("data-search") || "").toLowerCase();
+      var match = !q || blob.indexOf(q) !== -1;
+      sec.classList.toggle("is-filtered-out", !match);
+    });
+    if (dbtCount) {
+      dbtCount.textContent = "Showing " + shown + " of " + rows.length + " models";
+    }
+  }
+  function dbtClearLineage() {
+    if (!dbtSvg) return;
+    dbtSvg.classList.remove("is-muted");
+    dbtSvg.querySelectorAll(".is-lineage-focus, .is-lineage-related").forEach(function (el) {
+      el.classList.remove("is-lineage-focus", "is-lineage-related");
+    });
+    dbtSvg.querySelectorAll(".dbt-lineage-edge").forEach(function (el) {
+      el.classList.remove("is-lineage-focus");
+    });
+  }
+  function dbtHighlightLineage(modelName) {
+    if (!dbtSvg || !dbtGraph || !modelName) return;
+  dbtClearLineage();
+    var meta = (dbtGraph.nodes || {})[modelName];
+    if (!meta) return;
+    var related = {};
+    related[modelName] = true;
+    (dbtGraph.upstream[modelName] || []).forEach(function (n) { related[n] = true; });
+    (dbtGraph.downstream[modelName] || []).forEach(function (n) { related[n] = true; });
+    dbtSvg.classList.add("is-muted");
+    dbtSvg.querySelectorAll(".dbt-lineage-node").forEach(function (g) {
+      var name = g.getAttribute("data-model") || "";
+      if (name === modelName) g.classList.add("is-lineage-focus");
+      else if (related[name]) g.classList.add("is-lineage-related");
+    });
+    dbtSvg.querySelectorAll(".dbt-lineage-edge").forEach(function (line) {
+      var from = line.getAttribute("data-from") || "";
+      var to = line.getAttribute("data-to") || "";
+      if (from === modelName || to === modelName) line.classList.add("is-lineage-focus");
+      else if (related[from] && related[to]) line.classList.add("is-lineage-focus");
+    });
+  }
+  if (dbtSearch) dbtSearch.addEventListener("input", dbtApplySearch);
+  if (dbtFilter) dbtApplySearch();
+  if (dbtSvg && dbtGraph) {
+    dbtSvg.querySelectorAll(".dbt-lineage-node").forEach(function (g) {
+      g.addEventListener("click", function () {
+        dbtHighlightLineage(g.getAttribute("data-model") || "");
+      });
+    });
+  }
+  if (dbtClear) {
+    dbtClear.addEventListener("click", dbtClearLineage);
   }
 })();
 </script>"""
@@ -1919,6 +2040,51 @@ DBT_LAYERS = ("seed", "staging", "marts")
 DBT_LAYER_DEPTH = {"seed": 0, "staging": 1, "marts": 2, "other": 3}
 
 
+def _dbt_export_module():
+    path = Path(__file__).with_name("factory-site-dbt-export.py")
+    spec = importlib.util.spec_from_file_location("factory_site_dbt_export", path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _dbt_offline_manifest_roots(repo_root):
+    repo = Path(repo_root)
+    template_root = Path(__file__).resolve().parent.parent
+    if (repo / "factory" / "dbt" / "models").is_dir():
+        return [repo]
+    if _dbt_manifest_path(repo_root).is_file():
+        return [template_root]
+    if (repo / "factory" / "dbt" / "target").is_dir():
+        return [template_root]
+    return [repo]
+
+
+def _dbt_manifest_for_site(repo_root):
+    export = _dbt_export_module()
+    offline = None
+    if export is not None:
+        for root in _dbt_offline_manifest_roots(repo_root):
+            candidate = export.build_offline_manifest(root)
+            model_count = sum(
+                1
+                for n in (candidate.get("nodes") or {}).values()
+                if isinstance(n, dict) and n.get("resource_type") == "model"
+            )
+            if model_count:
+                offline = candidate
+                break
+    manifest_path = _dbt_manifest_path(repo_root)
+    on_disk = _load_json(manifest_path) if manifest_path.is_file() else None
+    if offline is None:
+        return on_disk
+    if on_disk is None:
+        return offline
+    return export.merge_manifests(on_disk, offline)
+
+
 def _dbt_manifest_path(repo_root):
     return Path(repo_root) / "factory" / "dbt" / "target" / "manifest.json"
 
@@ -2048,32 +2214,108 @@ def _dbt_docs_banner(out_dir):
     )
 
 
+def _dbt_badge(value, label):
+    return '<span class="dbt-meta-badge" title="{}">{}</span>'.format(
+        esc(label), esc(str(value))
+    )
+
+
+def _dbt_model_search_blob(node):
+    bits = [
+        node.get("name") or "",
+        _dbt_layer(node),
+        _dbt_materialization(node),
+        _dbt_description(node),
+    ]
+    return " ".join(bits)
+
+
+def _dbt_filter_toolbar(model_count):
+    return "\n".join(
+        [
+            '<div class="dbt-filter" id="dbt-filter-bar">',
+            '<label class="backlog-search-label" for="dbt-model-search">'
+            "Filter models</label>",
+            '<input type="search" id="dbt-model-search" class="dbt-search" '
+            'autocomplete="off" placeholder="Name, layer, or description" />',
+            '<div class="dbt-filter-toolbar">',
+            '<button type="button" class="btn-secondary" id="dbt-lineage-clear">'
+            "Clear lineage highlight</button>",
+            "</div>",
+            '<p class="dbt-filter-count" id="dbt-filter-count">Showing '
+            "{} of {} models</p>".format(model_count, model_count),
+            "</div>",
+        ]
+    )
+
+
+def _dbt_lineage_graph_json(nodes, upstream, downstream, by_id):
+    graph = {"nodes": {}, "upstream": {}, "downstream": {}}
+    for node in nodes:
+        name = node.get("name") or ""
+        if not name:
+            continue
+        uid = node.get("unique_id") or ""
+        graph["nodes"][name] = {"unique_id": uid, "layer": _dbt_layer(node)}
+        up = []
+        for parent_id in upstream.get(uid) or []:
+            parent = by_id.get(parent_id)
+            if parent and parent.get("name"):
+                up.append(parent["name"])
+        down = []
+        for child_id in downstream.get(uid) or []:
+            child = by_id.get(child_id)
+            if child and child.get("name"):
+                down.append(child["name"])
+        graph["upstream"][name] = sorted(up)
+        graph["downstream"][name] = sorted(down)
+    payload = json.dumps(graph, sort_keys=True, separators=(",", ":"))
+    payload = payload.replace("</", "<\\/")
+    return (
+        '<script type="application/json" id="dbt-lineage-graph">'
+        + payload
+        + "</script>"
+    )
+
+
 def _dbt_model_table(nodes, by_name, test_counts):
     if not nodes:
         return '<p class="note">No models found in manifest.</p>'
-    header = [
-        "Name",
-        "Layer",
-        "Materialization",
-        "Description",
-        "Columns",
-        "Tests",
+    parts = [
+        '<table id="dbt-models-table"><thead><tr>',
+        "<th>Name</th><th>Layer</th><th>Materialization</th>",
+        "<th>Description</th><th>Columns</th><th>Tests</th>",
+        "</tr></thead><tbody>",
     ]
-    rows = [header]
     for node in nodes:
         uid = node.get("unique_id") or ""
         name = node.get("name") or ""
-        rows.append(
-            [
-                name,
-                _dbt_layer(node),
-                _dbt_materialization(node),
-                _dbt_description(node),
-                str(_dbt_column_count(node)),
-                str(test_counts.get(uid, 0)),
-            ]
+        col_count = _dbt_column_count(node)
+        test_count = test_counts.get(uid, 0)
+        parts.append(
+            '<tr class="dbt-model-row" data-search="{}">'.format(
+                esc(_dbt_model_search_blob(node))
+            )
         )
-    return render_table(rows)
+        parts.append(
+            '<td><a href="#model-{}">{}</a></td>'.format(esc(name), esc(name))
+        )
+        parts.append("<td>{}</td>".format(esc(_dbt_layer(node))))
+        parts.append("<td>{}</td>".format(esc(_dbt_materialization(node))))
+        parts.append("<td>{}</td>".format(esc(_dbt_description(node))))
+        parts.append(
+            "<td>{}</td>".format(
+                _dbt_badge(col_count, "Column count") if col_count else "—"
+            )
+        )
+        parts.append(
+            "<td>{}</td>".format(
+                _dbt_badge(test_count, "Attached tests") if test_count else "—"
+            )
+        )
+        parts.append("</tr>")
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
 
 
 def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
@@ -2082,7 +2324,11 @@ def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
     for node in nodes:
         uid = node.get("unique_id") or ""
         name = node.get("name") or ""
-        parts.append('<section class="dbt-model" id="model-{}">'.format(esc(name)))
+        parts.append(
+            '<section class="dbt-model" id="model-{}" data-search="{}">'.format(
+                esc(name), esc(_dbt_model_search_blob(node))
+            )
+        )
         parts.append("<h3>{}</h3>".format(esc(name)))
         parts.append("<p>{}</p>".format(esc(_dbt_description(node))))
         up_links = []
@@ -2153,6 +2399,7 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
     height = margin * 2 + max_rows * (node_h + gap_y)
     width = margin * 2 + len(DBT_LAYERS) * col_w + (len(DBT_LAYERS) - 1) * gap_x
     positions = {}
+    by_uid = {n.get("unique_id"): n for n in nodes if n.get("unique_id")}
     parts = [
         '<svg class="dbt-lineage" viewBox="0 0 {} {}" role="img" '
         'aria-label="dbt model lineage by layer">'.format(width, height)
@@ -2176,6 +2423,12 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
             name = node.get("name") or ""
             positions[uid] = (x + col_w / 2, y + node_h / 2, x, y)
             parts.append(
+                '<g class="dbt-lineage-node" data-model="{}" tabindex="0" '
+                'role="button" aria-label="Highlight lineage for {}">'.format(
+                    esc(name), esc(name)
+                )
+            )
+            parts.append(
                 '<rect x="{}" y="{}" width="{}" height="{}" rx="5" '
                 'fill="#eef0f4" stroke="#1f2430" stroke-width="1.2"/>'.format(
                     x, y, col_w, node_h
@@ -2188,26 +2441,30 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
                     x + col_w / 2, y + node_h / 2 + 3, esc(label)
                 )
             )
+            parts.append("</g>")
     for node in nodes:
         uid = node.get("unique_id")
         if uid not in positions:
             continue
+        to_name = node.get("name") or ""
         cx, cy, _, _ = positions[uid]
         for parent_id in upstream.get(uid) or []:
             if parent_id not in positions:
                 continue
-            px, py, plx, ply = positions[parent_id]
-            _, _, px0, py0 = positions[parent_id]
-            _, _, nx0, ny0 = positions[uid]
-            # parent right edge to child left edge
+            px, py, _, _ = positions[parent_id]
+            _, _, px0, _ = positions[parent_id]
+            _, _, nx0, _ = positions[uid]
             x1 = px0 + col_w
             y1 = py
             x2 = nx0
             y2 = cy
+            par_node = by_uid.get(parent_id)
+            from_name = (par_node.get("name") or "") if par_node else ""
             parts.append(
-                '<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
+                '<line class="dbt-lineage-edge" data-from="{}" data-to="{}" '
+                'x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
                 'stroke-width="1.5" marker-end="url(#dbt-arrow)"/>'.format(
-                    x1, y1, x2, y2
+                    esc(from_name), esc(to_name), x1, y1, x2, y2
                 )
             )
     parts.append("</svg>")
@@ -2215,8 +2472,7 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
 
 
 def dbt_html(repo_root, out_dir):
-    manifest_path = _dbt_manifest_path(repo_root)
-    manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    manifest = _dbt_manifest_for_site(repo_root)
     if manifest is None:
         return placeholder_html("dbt")
 
@@ -2241,19 +2497,26 @@ def dbt_html(repo_root, out_dir):
 
     by_name = _dbt_unique_by_name(nodes)
     test_counts, test_names = _dbt_tests_by_model(manifest)
-    upstream, downstream, _by_id = _dbt_lineage_sets(nodes)
+    upstream, downstream, by_id = _dbt_lineage_sets(nodes)
 
     parts = [
         "<h2>dbt</h2>",
         _dbt_docs_banner(out_dir),
-        "<p>Models and lineage for the factory cost dataset (from manifest.json).</p>",
+        "<p>Models and lineage for the factory cost dataset "
+        "(manifest plus offline schema/SQL discovery).</p>",
     ]
     if catalog_note:
         parts.append(catalog_note)
     parts.append("<h2>Models</h2>")
+    parts.append(_dbt_filter_toolbar(len(nodes)))
     parts.append(_dbt_model_table(nodes, by_name, test_counts))
     parts.append("<h2>Lineage</h2>")
+    parts.append(
+        '<p class="note">Click a node to highlight upstream and downstream lineage. '
+        "Works without JavaScript as a static diagram.</p>"
+    )
     parts.append(_dbt_lineage_svg(nodes, upstream, by_name))
+    parts.append(_dbt_lineage_graph_json(nodes, upstream, downstream, by_id))
     parts.append(_dbt_model_details(nodes, by_name, upstream, downstream, test_names))
     return "\n".join(parts)
 

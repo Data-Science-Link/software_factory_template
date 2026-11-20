@@ -67,7 +67,8 @@ html = open(sys.argv[1], encoding="utf-8").read()
 models = ["agent_runs", "stg_agent_runs", "fct_agent_runs",
           "agg_spend_daily", "agg_spend_by_issue", "agg_spend_by_model",
           "fct_forecast_vs_actual", "rpt_run_rate", "agg_spend_weekly",
-          "agg_spend_monthly", "rpt_issue_target_compliance"]
+          "agg_spend_monthly", "rpt_issue_target_compliance",
+          "mart_model_efficiency", "mart_monthly_cfo", "mart_spend_by_work_type"]
 for m in models:
     if m not in html:
         raise SystemExit("missing model %s" % m)
@@ -108,29 +109,33 @@ else
   fail "dbt-docs link when dbt-docs.html is present"
 fi
 
-# ---- 3. Missing manifest -> placeholder ----
+# ---- 3. Missing manifest -> offline DAG from template models ----
 repo_miss="$tmpdir/repo_miss"
 out_miss="$tmpdir/out_miss"
 data_miss="$tmpdir/data_miss"
 setup_repo "$repo_miss"
 render_dbt "$repo_miss" "$out_miss" "$data_miss"
-if grep -q "This tab is not available yet" "$out_miss/dbt.html"; then
-  pass "missing manifest shows placeholder"
+if grep -q "stg_agent_runs" "$out_miss/dbt.html" \
+   && grep -q "mart_monthly_cfo" "$out_miss/dbt.html" \
+   && ! grep -q "This tab is not available yet" "$out_miss/dbt.html"; then
+  pass "missing manifest falls back to offline DAG discovery"
 else
-  fail "missing manifest shows placeholder"
+  fail "missing manifest falls back to offline DAG discovery"
 fi
 
-# ---- 4. Empty manifest -> note, not crash ----
+# ---- 4. Empty manifest -> merged offline models, not crash ----
 repo_empty="$tmpdir/repo_empty"
 out_empty="$tmpdir/out_empty"
 data_empty="$tmpdir/data_empty"
 setup_repo "$repo_empty"
 install_manifest "$repo_empty" tests/site/fixtures/manifest-empty.json
 render_dbt "$repo_empty" "$out_empty" "$data_empty"
-if grep -q "no models or seeds" "$out_empty/dbt.html"; then
-  pass "zero-model manifest shows clean note"
+if grep -q "mart_model_efficiency" "$out_empty/dbt.html" \
+   && grep -q 'class="dbt-lineage"' "$out_empty/dbt.html" \
+   && ! grep -q "no models or seeds" "$out_empty/dbt.html"; then
+  pass "zero-node manifest merges offline models"
 else
-  fail "zero-model manifest shows clean note"
+  fail "zero-node manifest merges offline models"
 fi
 
 # ---- 5. Model without description -> no description ----
@@ -203,7 +208,52 @@ else
   tail -20 "$build_log" 2>/dev/null || true
 fi
 
-# ---- 9. Wide graph: seven-plus children downstream of fct ----
+# ---- 9. Offline manifest export includes CFO marts + metadata ----
+manifest_json="$tmpdir/offline-manifest.json"
+if "$PYTHON" scripts/factory-site-dbt-export.py \
+    --repo-root "$ROOT" \
+    --manifest-out "$manifest_json" \
+    --skip-marts \
+    && "$PYTHON" - "$manifest_json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+nodes = data.get("nodes") or {}
+for name in ("mart_model_efficiency", "mart_monthly_cfo", "mart_spend_by_work_type"):
+    uid = f"model.factory.{name}"
+    node = nodes.get(uid)
+    if not node:
+        raise SystemExit("missing %s" % name)
+    cols = node.get("columns") or {}
+    if len(cols) < 3:
+        raise SystemExit("%s column metadata thin" % name)
+model_uid = uid
+tests = [
+    n for n in nodes.values()
+    if isinstance(n, dict) and n.get("resource_type") == "test"
+    and model_uid in ((n.get("depends_on") or {}).get("nodes") or [])
+]
+if not tests:
+    raise SystemExit("no tests linked to %s" % name)
+PY
+then
+  pass "offline manifest export lists CFO marts with columns and tests"
+else
+  fail "offline manifest export lists CFO marts with columns and tests"
+fi
+
+# ---- 10. Interactive dbt controls in rendered HTML ----
+if grep -q 'id="dbt-filter-bar"' "$html1" \
+   && grep -q 'id="dbt-model-search"' "$html1" \
+   && grep -q 'id="dbt-lineage-clear"' "$html1" \
+   && grep -q 'dbt-meta-badge' "$html1" \
+   && grep -q 'data-model="mart_monthly_cfo"' "$html1" \
+   && grep -q 'id="dbt-lineage-graph"' "$html1"; then
+  pass "dbt tab renders search, badges, lineage graph data, and CFO nodes"
+else
+  fail "dbt tab renders search, badges, lineage graph data, and CFO nodes"
+fi
+
+# ---- 11. Wide graph: seven-plus children downstream of fct ----
 if "$PYTHON" - "$html1" <<'PY'
 import re, sys
 html = open(sys.argv[1], encoding="utf-8").read()
