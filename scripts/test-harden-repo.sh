@@ -94,7 +94,7 @@ run_harden() { # label expect-substring ...
     bash "$root/scripts/harden-repo.sh" "$@" >"$work/out" 2>&1
   local rc=$?
   set -e
-  if grep -qF "$expect" "$work/out"; then
+  if grep -qF -- "$expect" "$work/out"; then
   if [ "$rc" -eq 0 ]; then ok "$label"; else bad "$label (rc=$rc, wanted 0)"; fi
   else
     bad "$label (missing: $expect)"
@@ -121,8 +121,20 @@ run_harden "API permission failure" "needs Administration" --repo test-org/no-ad
 grep -q 'Dependabot alerts.*fail' "$work/out" && ok "dependabot fail on 403" || bad "dependabot fail on 403"
 
 export FAKE_API_FAIL= FAKE_VISIBILITY=PUBLIC FAKE_RULESET_ID=42
-run_harden "public apply (fake gh)" "updated id 99" --repo other/unrelated-clone
+run_harden "public apply (fake gh)" "updated (99)" --repo other/unrelated-clone
 grep -q 'Full-history gitleaks.*skip' "$work/out" && ok "gitleaks skipped for non-matching clone" || bad "gitleaks skip"
+
+export FAKE_RULESET_ID= FAKE_VISIBILITY=PUBLIC
+run_harden "skip branch protection flag" "--skip-branch-protection" \
+  --repo test-org/public-template --skip-branch-protection --dry-run
+
+export FAKE_RULESET_ID= FAKE_VISIBILITY=PUBLIC
+run_harden "skip empty required checks" "no required checks configured" \
+  --repo test-org/public-template --required-checks none --dry-run
+
+export FAKE_RULESET_ID= FAKE_VISIBILITY=PUBLIC
+run_harden "custom checks dry-run invokes protect-main" "protect-main.sh --dry-run (checks: build,pytest)" \
+  --dry-run --repo test-org/public-template --required-checks build,pytest
 
 export FAKE_REPO_VIEW_FAIL=1
 set +e

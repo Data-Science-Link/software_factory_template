@@ -34,6 +34,8 @@ fixture
 fixture
 ## Acceptance criteria
 fixture
+## Bad inputs and edge cases
+- N/A (offline run-start test fixture only).
 ## Verification
 fixture
 ## Classification

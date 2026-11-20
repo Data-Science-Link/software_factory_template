@@ -190,7 +190,7 @@ fi
 tmpe="$tmpdir/edited.md"
 cp tests/predict/pass-simple-flash.md "$tmpe"
 "${PY[@]}" "$tmpe" --write >/dev/null 2>&1
-sed -i 's/^complexity: simple$/complexity: complex/' "$tmpe"
+sed 's/^complexity: simple$/complexity: complex/' "$tmpe" >"$tmpe.tmp" && mv "$tmpe.tmp" "$tmpe"
 "${PY[@]}" "$tmpe" --write >/dev/null 2>&1
 if grep -qx 'model: Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo' "$tmpe"; then
   echo "PASS  pass-simple-flash edited to complex (--write re-routes to Qwen3-Coder)"
