@@ -1094,7 +1094,15 @@ def _issue_key(row):
 
 
 def _assert_non_negative_spend(collection, name):
-    spend_keys = ("spend_usd", "mtd_variable_usd", "actual_cost_usd", "predicted_cost_usd", "predicted_usd", "actual_usd")
+    spend_keys = (
+        "spend_usd",
+        "mtd_variable_usd",
+        "actual_cost_usd",
+        "predicted_cost_usd",
+        "predicted_usd",
+        "actual_usd",
+        "total_cost_usd",
+    )
     for item in collection:
         if not isinstance(item, dict):
             raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
@@ -1192,6 +1200,141 @@ def _card(class_warn, title, amount_html, detail_html):
     )
 
 
+def _default_duckdb_path(repo_root):
+    return Path(repo_root) / "factory" / "dbt" / "target" / "factory.duckdb"
+
+
+def _duckdb_query_mart(repo_root, table_name):
+    """Return mart rows as dicts from DuckDB when the table exists; else None."""
+    db_path = _default_duckdb_path(repo_root)
+    if not db_path.is_file():
+        return None
+    try:
+        import duckdb
+    except ImportError:
+        return None
+
+    con = None
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+        exists = con.sql(
+            "select 1 from information_schema.tables "
+            "where table_schema = 'main' and table_name = ? limit 1",
+            [table_name],
+        ).fetchone()
+        if not exists:
+            try:
+                con.sql(f"select * from {table_name} limit 0")
+            except Exception:
+                return None
+        rel = con.sql(f"select * from {table_name}")
+        columns = [d[0] for d in rel.description]
+        out = []
+        for row in rel.fetchall():
+            item = {}
+            for col, val in zip(columns, row):
+                if isinstance(val, (datetime.date, datetime.datetime)):
+                    item[col] = val.isoformat()
+                else:
+                    item[col] = val
+            out.append(item)
+        return out
+    except Exception:
+        return None
+    finally:
+        if con is not None:
+            con.close()
+
+
+def _mart_rows(marts, repo_root, name):
+    """Prefer exported JSON marts; fall back to a live DuckDB read."""
+    rows = marts.get(name)
+    if rows:
+        return rows
+    queried = _duckdb_query_mart(repo_root, name)
+    return queried if queried is not None else []
+
+
+def _fmt_fin_currency(value):
+    if value is None:
+        return "—"
+    try:
+        return f"${float(value):,.4f}"
+    except (TypeError, ValueError):
+        return esc(str(value))
+
+
+def _fmt_fin_pct(value):
+    if value is None:
+        return "—"
+    try:
+        return f"{float(value):.1f}%"
+    except (TypeError, ValueError):
+        return esc(str(value))
+
+
+def _render_monthly_cfo_table(rows):
+    if not rows:
+        return '<p class="note">No monthly CFO mart data available.</p>'
+    parts = [
+        '<table id="monthly-cfo-table">',
+        "<thead><tr>",
+        "<th>Month</th><th>Distinct issues</th><th>Avg cost / issue</th>",
+        "<th>Pass rate</th><th>Budget used</th>",
+        "</tr></thead><tbody>",
+    ]
+    for row in sorted(rows, key=lambda r: str(r.get("month_start", ""))):
+        month = str(row.get("month_start", ""))[:10] or "—"
+        parts.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(month),
+                esc(row.get("distinct_issues", "—")),
+                esc(_fmt_fin_currency(row.get("avg_cost_per_issue_usd"))),
+                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
+                esc(_fmt_fin_pct(row.get("budget_used_pct"))),
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
+def _render_model_efficiency_table(rows):
+    if not rows:
+        return '<p class="note">No model efficiency mart data available.</p>'
+    parts = [
+        '<table id="model-efficiency-table">',
+        "<thead><tr>",
+        "<th>Model</th><th>Harness</th><th>Provider</th><th>Runs</th>",
+        "<th>Pass rate</th><th>Total cost</th><th>Avg cost</th>",
+        "<th>Cost / passed run</th>",
+        "</tr></thead><tbody>",
+    ]
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (
+            -float(r.get("total_cost_usd") or 0),
+            str(r.get("model", "")),
+            str(r.get("harness", "")),
+        ),
+    )
+    for row in sorted_rows:
+        parts.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td>"
+            "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(row.get("model", "—")),
+                esc(row.get("harness", "—")),
+                esc(row.get("provider", "—")),
+                esc(row.get("run_count", "—")),
+                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
+                esc(_fmt_fin_currency(row.get("total_cost_usd"))),
+                esc(_fmt_fin_currency(row.get("avg_cost_usd"))),
+                esc(_fmt_fin_currency(row.get("cost_per_passed_run_usd"))),
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
 def financials_html(data_dir, repo_root=".", as_of_utc=None):
     """Generate the Financials tab content from marts data."""
     marts_dir, marts = _load_marts(data_dir)
@@ -1215,6 +1358,8 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
     agg_spend_by_model = marts.get("agg_spend_by_model", [])
     fct_forecast_vs_actual = marts.get("fct_forecast_vs_actual", [])
     fct_agent_runs = marts.get("fct_agent_runs", [])
+    mart_model_efficiency = _mart_rows(marts, repo_root, "mart_model_efficiency")
+    mart_monthly_cfo = _mart_rows(marts, repo_root, "mart_monthly_cfo")
 
     _assert_non_negative_spend(rpt_run_rate, "rpt_run_rate")
     _assert_non_negative_spend(agg_spend_weekly, "agg_spend_weekly")
@@ -1230,6 +1375,12 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
             if not isinstance(item, dict):
                 raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
         _assert_non_negative_spend(collection, name)
+    _assert_non_negative_spend(mart_model_efficiency, "mart_model_efficiency")
+    for row in mart_monthly_cfo:
+        if not isinstance(row, dict):
+            raise ValueError(
+                f"Expected dict in mart_monthly_cfo, got {type(row)}: {row}"
+            )
 
     as_of = _financials_as_of(as_of_utc, rpt_run_rate)
     parts = []
@@ -1310,6 +1461,11 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
     parts.append('<details><summary>Table fallback</summary>')
     parts.append(table_monthly)
     parts.append("</details>")
+
+    parts.append(
+        '<h2>Monthly CFO summary <small>(source: mart_monthly_cfo)</small></h2>'
+    )
+    parts.append(_render_monthly_cfo_table(mart_monthly_cfo))
 
     parts.append(
         "<h2>Per-Issue Economics <small>(sources: agg_spend_by_issue, rpt_issue_target_compliance)</small></h2>"
@@ -1432,6 +1588,11 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
         parts.append("</tbody></table>")
     elif not agg_spend_by_model:
         parts.append("<p>No model/work-type data available.</p>")
+
+    parts.append(
+        '<h2>Model Efficiency <small>(source: mart_model_efficiency)</small></h2>'
+    )
+    parts.append(_render_model_efficiency_table(mart_model_efficiency))
 
     parts.append(
         '<h2>Prediction Accuracy <small>(source: fct_forecast_vs_actual)</small></h2>'
