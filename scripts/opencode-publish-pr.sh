@@ -130,6 +130,7 @@ if git diff --cached --quiet; then
 fi
 
 git commit -m "OpenCode: issue #${OC_ISSUE_NUMBER} (run ${OC_RUN_ID})"
+pr_head_sha="$(git rev-parse HEAD)"
 
 body_file="$OC_ARTIFACT_DIR/pr-body.md"
 usage_metrics="$OC_ARTIFACT_DIR/usage-metrics.md"
@@ -223,9 +224,11 @@ ${note_block}
 
 ${facts}
 
-Verification output (run by the harness in a sandbox, not by the model; capped):
+<!-- factory-verification:start -->
+Verification output (run by the harness in a sandbox, not by the model; capped). Run \`gha-${OC_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}\`, head \`${pr_head_sha}\`:
 
 ${evidence_block}
+<!-- factory-verification:end -->
 
 ${usage_block}
 

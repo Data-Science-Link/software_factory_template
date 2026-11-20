@@ -406,6 +406,118 @@ EOF
     || { echo "FAIL: Gate line"; grep '^Gate' <<<"$body"; return 1; }
 }
 
+make_run_record() { # $1 = run id suffix
+  cat > "$TEMP_FACTORY_RUNS_DIR/gha-90000000187-$1.json" <<EOF
+{
+  "run_id": "gha-90000000187-$1",
+  "workflow_run_url": "https://github.com/test/repo/actions/runs/187",
+  "model": "test-model",
+  "tokens_in": 100,
+  "tokens_cached": 0,
+  "tokens_out": 200,
+  "predicted_cost_usd": 0.01,
+  "actual_cost_usd": 0.02,
+  "cost_method": "usage_x_price_table",
+  "cost_check": "match",
+  "actions_minutes": 1,
+  "head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+  "gate": { "budget_cap": "pass", "cost_recorded": "pass", "gitleaks": "skip", "no_workflow_changes": "pass",
+    "pr_check": "skip", "pr_template": "pass", "run_record_valid": "pass", "spec_present": "pass" },
+  "gate_passed": true
+}
+EOF
+}
+
+# #187: marked Verification block inserted on first refresh with evidence.
+test_verification_marked_insert() {
+  cat > "$TEMP_WORK_DIR/test_pr_body.txt" <<'EOF'
+## Summary
+Closes #187
+## Evidence
+<!-- factory-run:start -->
+Run ID: old
+<!-- factory-run:end -->
+
+Cost: $0.00 (placeholder)
+EOF
+  make_run_record 1
+  echo 'Result: PASS: every command exited 0' >"$TEMP_WORK_DIR/evidence-pass.md"
+  rm -f "$TEMP_WORK_DIR/gh_calls.log" "$TEMP_WORK_DIR/edited_pr_body.txt"
+  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" OC_VERIFICATION_EVIDENCE="$TEMP_WORK_DIR/evidence-pass.md" \
+    "$SCRIPT_DIR/factory-run-body.sh" 187 gha-90000000187-1 >/dev/null
+  local body; body=$(cat "$TEMP_WORK_DIR/edited_pr_body.txt")
+  grep -qF '<!-- factory-verification:start -->' <<<"$body" \
+    && grep -qF 'Result: PASS: every command exited 0' <<<"$body" \
+    && grep -qF 'Run `gha-90000000187-1`' <<<"$body" \
+    && grep -qF 'Closes #187' <<<"$body" \
+    && grep -qF 'dddddddddddddddddddddddddddddddddddddddd' <<<"$body" \
+    && grep -qF 'Cost: $0.02 on DeepInfra' <<<"$body"
+}
+
+# #187: fix round 2 replaces fail output inside markers; other sections stay.
+test_verification_fix_round_replace() {
+  cat > "$TEMP_WORK_DIR/test_pr_body.txt" <<'EOF'
+## Summary
+Closes #187
+Quotes from approval stay here.
+## Evidence
+<!-- factory-run:start -->
+Run ID: round1
+<!-- factory-run:end -->
+
+<!-- factory-verification:start -->
+Verification output (run by the harness in a sandbox, not by the model; capped). Run `gha-round1-1`, head `0b9c0ba41281`:
+
+```text
+Result: FAIL: 1 command(s) exited non-zero
+Tree: 0b9c0ba41281
+```
+<!-- factory-verification:end -->
+
+## Token usage (opencode stats)
+
+Cost: $0.01 on DeepInfra (old)
+EOF
+  make_run_record 2
+  printf '%s\n' 'Result: PASS: every command exited 0' 'Tree: feedfacecafe' >"$TEMP_WORK_DIR/evidence-round2.md"
+  rm -f "$TEMP_WORK_DIR/gh_calls.log" "$TEMP_WORK_DIR/edited_pr_body.txt"
+  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" OC_VERIFICATION_EVIDENCE="$TEMP_WORK_DIR/evidence-round2.md" \
+    "$SCRIPT_DIR/factory-run-body.sh" 187 gha-90000000187-2 >/dev/null
+  local body; body=$(cat "$TEMP_WORK_DIR/edited_pr_body.txt")
+  ! grep -qF '0b9c0ba41281' <<<"$body" || { echo "FAIL: stale round-1 tree"; return 1; }
+  ! grep -qF 'FAIL: 1 command' <<<"$body" || { echo "FAIL: stale round-1 fail"; return 1; }
+  grep -qF 'Result: PASS: every command exited 0' <<<"$body" \
+    && grep -qF 'Quotes from approval stay here.' <<<"$body" \
+    && grep -qF '## Token usage (opencode stats)' <<<"$body" \
+    && [ "$(grep -c '<!-- factory-verification:start -->' <<<"$body")" -eq 1 ]
+}
+
+# #187: legacy PR bodies without markers: replace through the old fenced block.
+test_verification_legacy_replace() {
+  cat > "$TEMP_WORK_DIR/test_pr_body.txt" <<'EOF'
+## Evidence
+<!-- factory-run:start -->
+Run ID: old
+<!-- factory-run:end -->
+
+Verification output (run by the harness in a sandbox, not by the model; capped):
+
+```text
+Result: FAIL from round 1
+```
+
+Cost: $0.00 (old)
+EOF
+  make_run_record 3
+  echo 'Result: PASS on round 2' >"$TEMP_WORK_DIR/evidence-legacy.md"
+  rm -f "$TEMP_WORK_DIR/gh_calls.log" "$TEMP_WORK_DIR/edited_pr_body.txt"
+  FACTORY_RUNS_DIR="$TEMP_FACTORY_RUNS_DIR" OC_VERIFICATION_EVIDENCE="$TEMP_WORK_DIR/evidence-legacy.md" \
+    "$SCRIPT_DIR/factory-run-body.sh" 187 gha-90000000187-3 >/dev/null
+  local body; body=$(cat "$TEMP_WORK_DIR/edited_pr_body.txt")
+  ! grep -qF 'FAIL from round 1' <<<"$body" || { echo "FAIL: legacy block not replaced"; return 1; }
+  grep -qF 'Result: PASS on round 2' <<<"$body" && grep -qF '<!-- factory-verification:start -->' <<<"$body"
+}
+
 # Main test execution
 main() {
   setup_test_env
@@ -415,6 +527,9 @@ main() {
   run_test "missing markers exits 2 with no gh pr edit" test_missing_markers
   run_test "all-skip gates: one Gate line, record URL, issue total (#31)" test_skip_gates_one_line
   run_test "PR gate: passed and skipped checks named (#162)" test_mixed_gate_line
+  run_test "#187 marked Verification block insert" test_verification_marked_insert
+  run_test "#187 fix round replaces Verification (FAIL -> PASS)" test_verification_fix_round_replace
+  run_test "#187 legacy Verification block replacement" test_verification_legacy_replace
   
   echo "1..$TEST_COUNT"
   if [ $FAILED -eq 0 ]; then
