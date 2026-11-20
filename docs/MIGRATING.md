@@ -44,7 +44,7 @@ It does **not** modify `.github/workflows/` unless you pass `--write-workflows` 
 
 ## 4. Owner paste workflows
 
-Copy each file from `.factory/migration-callers/` into `.github/workflows/` (replace legacy copies). Adjust `YOUR_OWNER_GITHUB_LOGIN` per [reusable-workflows/README.md](reusable-workflows/README.md).
+Copy each file from `.factory/migration-callers/` into `.github/workflows/` (replace legacy copies). Re-run migrate with `--owner <github-login>` when generating callers if you want `YOUR_OWNER_GITHUB_LOGIN` filled automatically; otherwise adjust per [reusable-workflows/README.md](reusable-workflows/README.md).
 
 Validate with:
 
@@ -83,6 +83,7 @@ bash scripts/test-factory-migrate-adopter.sh
 | `--repo-dir` | Product repo root (required) |
 | `--tag` | Semver pin `vX.Y.Z` (required format) |
 | `--template-repo` | Default `Data-Science-Link/software_factory_template` |
+| `--owner` | Substitute `YOUR_OWNER_GITHUB_LOGIN` in generated callers (optional) |
 | `--template-dir` | Local template checkout for SHA compares (default: this repo) |
 | `--apply` | Write mode.yml and migration-callers (default: dry-run only) |
 | `--force` | Overwrite migration-callers; replace non-product mode.yml |
