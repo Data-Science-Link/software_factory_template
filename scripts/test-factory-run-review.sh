@@ -281,6 +281,36 @@ else
   fail "opencode.log fallback (blocked find not reported)"
 fi
 
+# Quoted-marker regression: opencode.log quotes the permission-denial marker in
+# model prose and echoed read-file contents after `→ Read` lines, plus real
+# `✗ ... failed` denials. Only the failed tool lines become blocked_calls.
+quoted_dir="$FIX_DIR/quoted-marker/live"
+set +e
+"${REVIEW[@]}" --live-dir "$quoted_dir" > "$tmpdir/out-quoted.json" 2>"$tmpdir/err-quoted.txt"
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  fail "quoted-marker regression (script exited non-zero)"
+elif python3 - "$tmpdir/out-quoted.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1]).read()
+data, _ = json.JSONDecoder().raw_decode(raw)
+runs = {r["run_id"]: r for r in data["runs"]}
+r = runs[43076343835]
+blocked = r["blocked_calls"]
+assert len(blocked) == 2, blocked
+assert all(b.startswith("✗") for b in blocked), blocked
+assert not any("→ Read" in b for b in blocked), blocked
+assert any("ls -R tests/factory-run-review" in b for b in blocked), blocked
+assert any("git check-ignore" in b for b in blocked), blocked
+assert any(f["code"] == "blocked_call" for f in r["findings"]), r["findings"]
+PY
+then
+  note "quoted-marker regression (prose/read echoes ignored; only ✗ failed lines blocked)"
+else
+  fail "quoted-marker regression (false Read blocks or missing real denials)"
+fi
+
 # Artifacts-unavailable marker: unavailable/live has no artifacts/ directory, so
 # the review must emit the marker instead of silent empties.
 unavailable_dir="$FIX_DIR/unavailable/live"

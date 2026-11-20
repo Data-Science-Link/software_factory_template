@@ -1,0 +1,7 @@
+Run 43076343835
+Attempt 1
+Preparing job 'fix'
+Run actions/checkout@v4
+Pre Harden runner (audit egress)
+[model] opencode agent starting
+Post job cleanup
