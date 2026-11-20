@@ -4,18 +4,52 @@ AI workers run on GitHub issues; the **owner** and **Factory Manager** keep the 
 
 Playbook: [`.factory/FACTORY.md`](.factory/FACTORY.md). **New repo:** [docs/SETUP.md](docs/SETUP.md). **Stuck:** [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
+## Three-step quickstart (public `v0.1.0`)
+
+Same flow as [README.md](README.md); run from a template checkout with `pip install -r requirements-factory.txt` once.
+
+1. **Preview spend and site tabs** — golden run records only, no network:
+
+   ```bash
+   bash scripts/factory-site-build.sh --offline --runs-dir examples/sample-runs --now "2026-11-20 12:00:00"
+   ```
+
+   Open `site/index.html`. Optional 30-day packet: `python3 scripts/factory-monthly-review.py --runs-dir examples/sample-runs --as-of 2026-11-20` ([docs/MONTHLY_REVIEW.md](docs/MONTHLY_REVIEW.md)).
+
+2. **Bootstrap a product repo** — dry-run first, then write callers pinned to your org:
+
+   ```bash
+   python3 scripts/factory-init-repo.py \
+     --target /path/to/product-repo \
+     --owner YOUR_GITHUB_LOGIN \
+     --template-repo YOUR_ORG/software_factory_template \
+     --tag v0.1.0 \
+     --dry-run
+
+   python3 scripts/factory-init-repo.py \
+     --target /path/to/product-repo \
+     --owner YOUR_GITHUB_LOGIN \
+     --template-repo YOUR_ORG/software_factory_template \
+     --tag v0.1.0
+   ```
+
+   Compare output to [examples/minimal-product-repo/](examples/minimal-product-repo/). Detail: [docs/INIT_REPO.md](docs/INIT_REPO.md).
+
+3. **Verify and pilot** — `python3 scripts/factory-doctor.py --repo-dir /path/to/product-repo --public`, then follow [docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md). Template owners cutting a public release: [docs/PUBLIC_LAUNCH_RUNBOOK.md](docs/PUBLIC_LAUNCH_RUNBOOK.md) and pending workflow pastes in [docs/OWNER_WORKFLOW_SYNC.md](docs/OWNER_WORKFLOW_SYNC.md).
+
 ## Bootstrap and health (CLI)
 
-From a checkout of this template ([docs/CLI.md](docs/CLI.md)):
+`python3 scripts/factory-cli.py` wraps the same tools ([docs/CLI.md](docs/CLI.md)):
 
 ```bash
 python3 scripts/factory-cli.py init --target /path/to/product-repo
-python3 scripts/factory-cli.py doctor --repo-dir /path/to/product-repo
+python3 scripts/factory-cli.py doctor --repo-dir /path/to/product-repo --public
 python3 scripts/factory-cli.py migrate-adopter --repo-dir /path/to/product-repo --tag v0.1.0
-python3 scripts/factory-cli.py owner-pack --version v0.1.0
 ```
 
-Compare the stamped layout to [examples/minimal-product-repo/](examples/minimal-product-repo/). Detail: [docs/INIT_REPO.md](docs/INIT_REPO.md), [docs/MIGRATING.md](docs/MIGRATING.md), [docs/DOCTOR.md](docs/DOCTOR.md).
+Template owners before a public tag: `python3 scripts/factory-cli.py owner-pack --version v0.1.0` ([docs/PUBLIC_LAUNCH_RUNBOOK.md](docs/PUBLIC_LAUNCH_RUNBOOK.md)).
+
+Compare the stamped layout to [examples/minimal-product-repo/](examples/minimal-product-repo/). Detail: [docs/MIGRATING.md](docs/MIGRATING.md), [docs/DOCTOR.md](docs/DOCTOR.md).
 
 ## For people
 

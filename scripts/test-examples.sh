@@ -32,6 +32,8 @@ require_script scripts/factory-cost-digest.py
 require_script scripts/factory-site.py
 require_script scripts/factory-site-data.py
 require_script scripts/factory-site-smoke.py
+require_script scripts/factory-monthly-review.py
+require_script scripts/factory-site-build.sh
 
 if ! "$PYTHON" -c "import yaml" 2>/dev/null; then
   echo "FAIL  PyYAML required (pip install -r requirements-factory.txt)"
@@ -274,6 +276,67 @@ PY
   fi
 else
   bad "Financials code/review work types (no financials.html)"
+fi
+
+set +e
+mr_out="$(
+  "$PYTHON" scripts/factory-monthly-review.py \
+    --runs-dir "$SAMPLE_RUNS" \
+    --as-of "$DIGEST_AS_OF" \
+    --json 2>&1
+)"
+mr_rc=$?
+set -e
+if [ "$mr_rc" -eq 0 ]; then
+  mr_keys="$(
+    printf '%s' "$mr_out" | "$PYTHON" -c '
+import json, sys
+data = json.load(sys.stdin)
+needed = ("as_of_date", "action_prompts", "budget_paths", "volume_reliability")
+missing = [k for k in needed if k not in data]
+if missing:
+    print("missing:" + ",".join(missing), file=sys.stderr)
+    raise SystemExit(1)
+print(data["as_of_date"])
+'
+  )"
+  if [ "$mr_keys" = "$DIGEST_AS_OF" ]; then
+    ok "factory-monthly-review.py sample-runs JSON"
+  else
+    bad "factory-monthly-review.py sample-runs JSON (as_of=$mr_keys)"
+  fi
+else
+  bad "factory-monthly-review.py sample-runs (rc=$mr_rc)"
+  printf '%s\n' "$mr_out" | head -16
+fi
+
+git_before="$(git status --porcelain)"
+set +e
+fsb_out="$(
+  bash scripts/factory-site-build.sh --offline --runs-dir "$SAMPLE_RUNS" --now "$PINNED_NOW" 2>&1
+)"
+fsb_rc=$?
+set -e
+git_after="$(git status --porcelain)"
+if [ "$fsb_rc" -eq 0 ] \
+  && [ -f site/index.html ] \
+  && [ "$git_before" = "$git_after" ]; then
+  set +e
+  fsb_smoke="$("$PYTHON" scripts/factory-site-smoke.py site 2>&1)"
+  fsb_smoke_rc=$?
+  set -e
+  if [ "$fsb_smoke_rc" -eq 0 ] && printf '%s\n' "$fsb_smoke" | grep -q '^OK'; then
+    ok "factory-site-build.sh offline sample-runs (untracked site only)"
+  else
+    bad "factory-site-build.sh offline smoke (rc=$fsb_smoke_rc)"
+    printf '%s\n' "$fsb_smoke" | head -12
+  fi
+else
+  bad "factory-site-build.sh offline sample-runs (rc=$fsb_rc tracked_dirty=$([ -n "$git_after" ] && echo yes || echo no))"
+  printf '%s\n' "$fsb_out" | sed 's/^/       /' | head -16
+  if [ -n "$git_before" ] || [ -n "$git_after" ]; then
+    printf '%s\n' "$git_after" | sed 's/^/       /' | head -8
+  fi
 fi
 
 set +e
