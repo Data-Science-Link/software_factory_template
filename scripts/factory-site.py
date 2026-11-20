@@ -122,18 +122,51 @@ def strip_markdown(text):
     return text
 
 
-def render_table(rows):
+def repo_agnostic_copy(text):
+    """Replace template-repo owner/bot names with role labels for the public site."""
+    text = str(text)
+    text = re.sub(r"\bMichael's\b", "the owner's", text)
+    text = re.sub(r"\bMichael\b", "the owner", text)
+    text = re.sub(r"\bGrok Bot\b", "the Factory Manager", text)
+    return text
+
+
+def render_inline_markdown(text, agnostic=False):
+    """Render `**bold**` and `code` as HTML; escape everything else."""
+    if agnostic:
+        text = repo_agnostic_copy(text)
+    text = str(text)
+    parts = []
+    pos = 0
+    for m in re.finditer(r"\*\*(.+?)\*\*|`([^`]+)`", text):
+        if m.start() > pos:
+            parts.append(esc(text[pos:m.start()]))
+        if m.group(1) is not None:
+            parts.append("<strong>{}</strong>".format(esc(m.group(1))))
+        else:
+            parts.append("<code>{}</code>".format(esc(m.group(2))))
+        pos = m.end()
+    if pos < len(text):
+        parts.append(esc(text[pos:]))
+    return "".join(parts) if parts else esc(text)
+
+
+def render_table(rows, agnostic=False):
     if not rows:
         return ""
     out = ["<table><thead><tr>"]
     for cell in rows[0]:
-        out.append("<th>{}</th>".format(esc(strip_markdown(cell))))
+        out.append("<th>{}</th>".format(render_inline_markdown(cell, agnostic=agnostic)))
     out.append("</tr></thead><tbody>")
     for row in rows[1:]:
         out.append("<tr>")
         for i, cell in enumerate(row):
             tag = "th" if i == 0 else "td"
-            out.append("<{}>{}</{}>".format(tag, esc(strip_markdown(cell)), tag))
+            out.append(
+                "<{}>{}</{}>".format(
+                    tag, render_inline_markdown(cell, agnostic=agnostic), tag
+                )
+            )
         out.append("</tr>")
     out.append("</tbody></table>")
     return "\n".join(out)
@@ -142,21 +175,25 @@ def render_table(rows):
 def render_loop_cards(steps):
     out = ['<div class="loop-cards">']
     for num, text in steps:
-        body = strip_markdown(text).strip()
+        body = repo_agnostic_copy(text).strip()
         title = str(num)
         desc = ""
-        m = re.match(r"^\d+\.\s*(.*?)\s*(?:—|-)\s*(.*)$", body)
+        m = re.match(r"^\d+\.\s*(.*?)\s*(?:—|-)\s*(.*)$", body, re.DOTALL)
         if m:
             title = m.group(1).strip()
             desc = m.group(2).strip()
         else:
-            m2 = re.match(r"^\d+\.\s*(.*)$", body)
+            m2 = re.match(r"^\d+\.\s*(.*)$", body, re.DOTALL)
             if m2:
                 title = m2.group(1).strip()
         out.append('<div class="loop-card">')
-        out.append('<h3 class="loop-card-title">{}</h3>'.format(esc(title)))
+        out.append(
+            '<h3 class="loop-card-title">{}</h3>'.format(render_inline_markdown(title))
+        )
         if desc:
-            out.append('<p class="loop-card-desc">{}</p>'.format(esc(desc)))
+            out.append(
+                '<p class="loop-card-desc">{}</p>'.format(render_inline_markdown(desc))
+            )
         out.append("</div>")
     out.append("</div>")
     return "\n".join(out)
@@ -267,14 +304,35 @@ def depth_links():
     )
 
 
+def _format_when_value(value):
+    if isinstance(value, list):
+        bits = []
+        for item in value:
+            if isinstance(item, dict):
+                bits.append(
+                    ", ".join(
+                        "{}={}".format(k, item[k]) for k in sorted(item.keys())
+                    )
+                )
+            else:
+                bits.append(str(item))
+        return "[{}]".format(" | ".join(bits))
+    if isinstance(value, dict):
+        return "{{{}}}".format(
+            ", ".join("{}={}".format(k, v) for k, v in sorted(value.items()))
+        )
+    return str(value)
+
+
 def when_text(when):
     if not when:
         return "(always)"
     if isinstance(when, dict):
         return ", ".join(
-            "{}={}".format(esc(k), esc(v)) for k, v in sorted(when.items())
+            "{}={}".format(k, _format_when_value(v))
+            for k, v in sorted(when.items())
         )
-    return esc(when)
+    return str(when)
 
 
 def architecture_html(repo_root, models_data, factory_md):
@@ -311,7 +369,7 @@ def architecture_html(repo_root, models_data, factory_md):
     if roles is None:
         parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Roles)")))
     else:
-        rendered = render_table(parse_markdown_table(roles))
+        rendered = render_table(parse_markdown_table(roles), agnostic=True)
         if rendered:
             parts.append(rendered)
         else:
@@ -325,7 +383,7 @@ def architecture_html(repo_root, models_data, factory_md):
     if merge is None:
         parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Merge authority)")))
     else:
-        rendered = render_table(parse_markdown_table(merge))
+        rendered = render_table(parse_markdown_table(merge), agnostic=True)
         if rendered:
             parts.append(rendered)
         else:
@@ -351,7 +409,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     m.get("status", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     # Routing rules in first-match order with their model.
     parts.append("<h2>Routing rules (first match wins)</h2>")
@@ -370,7 +428,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     r.get("model", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     # Guard checks.
     parts.append("<h2>Guard checks</h2>")
@@ -389,7 +447,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     c.get("action", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     return "\n".join(parts)
 
@@ -912,17 +970,45 @@ STATUS_LABELS = {
 }
 
 
+def _issues_missing_priority_or_risk(issues):
+    return sum(
+        1
+        for i in issues
+        if i.get("priority") == "none" or i.get("risk") == "unlabeled"
+    )
+
+
+def _unlabeled_notice(issues):
+    unlabeled = _issues_missing_priority_or_risk(issues)
+    if unlabeled == 0:
+        return ""
+    return (
+        '<div class="backlog-unlabeled note">'
+        "<p><strong>Unlabeled issues:</strong> "
+        "{} open issue(s) lack <code>priority:*</code> and/or "
+        "<code>risk:*</code> GitHub labels. "
+        "In the issue sidebar, add labels such as "
+        "<code>priority:high</code>, <code>priority:low</code>, "
+        "<code>risk:high</code>, <code>risk:medium</code>, or "
+        "<code>risk:low</code> so the priority × risk grid reflects triage.</p>"
+        "</div>".format(esc(unlabeled))
+    )
+
+
 def _summary_cards(issues):
     open_count = len(issues)
     high = sum(1 for i in issues if i.get("priority") == "high")
     owner_action = sum(1 for i in issues if i.get("status") == "owner-action")
     selected = sum(1 for i in issues if i.get("status") == "factory:selected")
+    unlabeled = _issues_missing_priority_or_risk(issues)
     cards = [
         ("Open", open_count),
         ("High priority", high),
         ("Owner-action", owner_action),
         ("Selected", selected),
     ]
+    if unlabeled > 0:
+        cards.append(("Unlabeled", unlabeled))
     out = ['<div class="cards">']
     for label, count in cards:
         out.append(
@@ -1011,6 +1097,7 @@ def backlog_html(data_dir):
     out = [
         "<h2>Backlog</h2>",
         _summary_cards(issues),
+        _unlabeled_notice(issues),
         "<h2>Open issues by priority and risk</h2>",
         _priority_risk_table(issues),
     ]
