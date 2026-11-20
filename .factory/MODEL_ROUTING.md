@@ -9,7 +9,7 @@ GitHub Actions workers (OpenCode + DeepInfra) pick models from **`.factory/model
 - Ordered **routing rules** for model selection (first match wins) plus a **checks** block (rules 6 and 8) applied after a model is picked (see `.factory/VISION.md` §10)
 - **Budget** caps (`deepinfra_monthly_limit_usd`, per-issue cap and target, Actions minutes warning)
 
-**Default worker model:** `deepseek-ai/DeepSeek-V4-Flash-0731` for most runs. **Architect:** `deepseek-ai/DeepSeek-V4-Pro-0813` for `/oc spec` runs on **high-risk** issues (rule 2, listed before rule 1), plus one retry after Flash fails on standard work (rule 4). `/oc spec` on any other issue uses V4 Flash (rule 9, a trial from #64; Michael, 2026-11-07). The spec run counts as high risk only from a structured signal (#153): the issue has the `risk:high` label, or the guidance starts with `risk: high` (`/oc spec risk: high ...`); prose such as "high-risk" or "risk high" in the issue or comment never routes. No issue context or label list fails closed to V4 Pro. **Complex builder:** `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` for high-risk or complex `/oc` builds and `/oc fix` runs (rule 1, #128). It is a fast non-thinking coder (about 2–4 s per tool turn vs about 35 s on V4 Pro), and the spec already holds the hard thinking. It is also the **fallback** when DeepSeek hits tool-call or reasoning-format errors (rule 5).
+**Default worker model:** `deepseek-ai/DeepSeek-V4-Flash-0731` for most runs. **Architect:** `deepseek-ai/DeepSeek-V4-Pro-0813` for `/oc spec` runs on **high-risk** issues (rule 2, listed before rule 1), plus one retry after Flash fails on standard work (rule 4). `/oc spec` on any other issue uses V4 Flash (rule 9). The spec run counts as high risk only from a structured signal (#153): the issue has the `risk:high` label, or the guidance starts with `risk: high` (`/oc spec risk: high ...`); prose such as "high-risk" or "risk high" in the issue or comment never routes. No issue context or label list fails closed to V4 Pro. **Complex builder:** `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` for high-risk or complex `/oc` builds and `/oc fix` runs (rule 1, #128). It is a fast non-thinking coder (about 2–4 s per tool turn vs about 35 s on V4 Pro), and the spec already holds the hard thinking. It is also the **fallback** when DeepSeek hits tool-call or reasoning-format errors (rule 5).
 
 Scripts read `models.yaml` directly; do not duplicate prices in this file.
 
@@ -19,7 +19,7 @@ Scripts read `models.yaml` directly; do not duplicate prices in this file.
 - **Retry and fallback:** read from the #84 failure comments (`github-actions[bot]` only) posted since the owner's previous trigger of the same kind. If the worker step failed on DeepSeek with a tool-call or reasoning-format error (`scripts/factory-classify-failure.py` on the log), the next run uses Qwen3-Coder (rule 5). If it failed on Flash on standard work, the next run uses Pro once (rule 4). If that Pro retry fails too, routing goes back to the spec's own rule. Retry keys in a spec are ignored; an owner who wants a model sets `model` + `model_override_reason`.
 - **Cap:** prior spend on the issue (run records) plus the predicted cost must stay under `budget.issue_cap_usd`. A refusal stops the job and the notify job posts the reason, with "no DeepInfra spend".
 - `/oc spec` keeps its own preflight in `scripts/opencode-spec-run.sh` (rule 2 V4 Pro for high risk, else rule 9 V4 Flash; predicted cost under the cap).
-- **Over-target gate:** when the spec's own build prediction is above `budget.issue_target_usd` ($0.15), run start refuses (`over_target_unapproved`) unless the approved spec has `over_target_approved_by: michael`, whatever the risk. Michael sets it with `factory-approve-spec.py ... --approved-by michael --over-target-ok`. The draft comment's first line says `Over $0.15 target: needs Michael's approval`. Harness retries and fallbacks (rules 4 and 5) don't need a second approval.
+- **Over-target gate:** when the spec's own build prediction is above `budget.issue_target_usd` ($0.15), run start refuses (`over_target_unapproved`) unless the approved spec has `over_target_approved_by: michael`, whatever the risk. The owner sets it with `python3 scripts/factory-approve-spec.py ... --approved-by michael --over-target-ok`. The draft comment's first line says `Over $0.15 target: needs the owner's approval`. Harness retries and fallbacks (rules 4 and 5) don't need a second approval.
 
 **Spend rules (unchanged):** never enable on-demand spend (Cursor or elsewhere). Workers and the manager stay within the issue cap ($1 hard, $0.15 target, above which the owner approves explicitly) and the Actions-only DeepInfra key limit ($10/month per `.factory/DECISIONS.md`).
 
@@ -30,40 +30,40 @@ After the DeepInfra open-weights loop is proven end-to-end, the factory may use 
 | Tier | When | What runs | Marginal model spend |
 |---|---|---|---|
 | **Primary backbone** | Always | GitHub Actions + OpenCode + DeepInfra (`/oc`) | Transparent per-token DeepInfra pricing; works with **zero** subscription pool regardless of weekly reset |
-| **Optional $0 bonus** | Only when tier 1 is healthy **and** the shared weekly Cursor/X subscription pool has comfortable headroom before reset (enough for 3–4 Factory Manager cloud-agent turns without starving coordination) | Factory Manager may dispatch **complex** specs, architecture spikes, or thorny multi-file builds to a **Cursor Cloud Agent** (`grok-4.7`, `composer-2.5`, etc.) | $0 incremental while pool headroom lasts |
+| **Optional $0 bonus** | Only when tier 1 is healthy **and** the shared weekly hosted-agent subscription pool has comfortable headroom before reset (enough for 3–4 Factory Manager coordination turns without starving coordination) | Factory Manager may dispatch **complex** specs, architecture spikes, or thorny multi-file builds to a **hosted cloud agent** (pin model per table below) | $0 incremental while pool headroom lasts |
 
 **Fallback:** As weekly pool usage rises, or credits disappear, drop straight back to DeepInfra `/oc` for all coding work. If subscription credits vanished tomorrow, `/oc` alone still runs the full factory unchanged (zero lock-in).
 
 **Factory Manager rules for tier 2:**
 
 1. Never starve manager/coordinator runs: reserve headroom before launching bonus-tier build agents.
-2. Pin the model on every cloud launch (see the Cursor table below); record harness, provider, model, and cloud run id in the PR body (`AI disclosure`) so run records and `fct_agent_runs` can compare DeepInfra `/oc` vs optional cloud runs.
+2. Pin the model on every hosted launch (see the cloud-agent table below); record harness, provider, model, and cloud run id in the PR body (`AI disclosure`) so run records and `fct_agent_runs` can compare DeepInfra `/oc` vs optional cloud runs.
 3. Raw third-party **Console API keys** (e.g. billed `api.x.ai` usage) stay **out of GitHub Actions** unless a later decision explicitly allows them—they bill separately from the shared subscription pool and are not part of the optional $0 waterfall.
 
-**Spend rules still apply:** tier 2 does not turn on Cursor on-demand spending. Tier 1 issue caps and DeepInfra monthly limits still govern `/oc` runs.
+**Spend rules still apply:** tier 2 does not turn on on-demand subscription spend. Tier 1 issue caps and DeepInfra monthly limits still govern `/oc` runs.
 
 ---
 
-## Cursor cloud agents (Factory Manager + backup workers)
+## Hosted cloud agents (Factory Manager + backup workers)
 
-How the Factory Manager picks a model for each **Cursor cloud agent** it launches. The goal is the cheapest model that can do the job well, with escalation only when needed. Each repo may tune this table; keep the structure.
+How the Factory Manager picks a model for each **hosted cloud agent** it launches. The goal is the cheapest model that can do the job well, with escalation only when needed. Each repo may tune this table; keep the structure.
 
-Defaults below assume **Cursor Pro+** (as of 2026-10). Cursor has two monthly pools:
-- **Cursor Models** (Grok 4.7 / 4.6 / 4.5, Composer 2.5): much larger included allowance; use first.
-- **Other Models** (third-party: Claude, GPT, Gemini, …): small allowance at API prices; exceptions only.
+Defaults below assume a plan with two monthly pools:
+- **Included vendor models** (e.g. `composer-2.5`, `grok-4.7`): larger included allowance; use first.
+- **Other models** (third-party IDs): small allowance at API prices; exceptions only.
 
-Prices per million tokens (input / output): Composer 2.5 $0.50 / $2.50 · Grok 4.7 $2 / $6 · Claude Opus 5.5 $4 / $20 · GPT-5.6 Sol $4 / $20. Check https://cursor.com/docs/models when updating.
+Recheck list prices in your provider's model catalog when updating this table.
 
 ## Routing table
 
 | Work | Model (pin it) | Pool |
 |---|---|---|
-| **Simple**: docs, typos, issue filing, rebases, Dependabot, playbook syncs | `composer-2.5` | Cursor |
-| **Standard**: features, bug fixes, UI | `composer-2.5`; escalate to `grok-4.7` (effort medium) after one failed attempt | Cursor |
-| **Complex**: workflows, algorithms (clustering, ML), data stores, security, multi-file refactors, tech specs | `grok-4.7` (effort high) | Cursor |
-| **Writing**: product specs, roadmap, methodology / user-facing copy | `grok-4.7` (effort medium) | Cursor |
-| **Agent review** | A different model than the builder (e.g. Grok reviews Composer work) | Cursor |
-| **Stuck after two Cursor-model attempts**, or a second opinion on high-risk work | `claude-opus-5-5` or `gpt-5.6-sol` | Other — only if the pool has room or a human approves |
+| **Simple**: docs, typos, issue filing, rebases, Dependabot, playbook syncs | `composer-2.5` | Included |
+| **Standard**: features, bug fixes, UI | `composer-2.5`; escalate to `grok-4.7` (effort medium) after one failed attempt | Included |
+| **Complex**: workflows, algorithms (clustering, ML), data stores, security, multi-file refactors, tech specs | `grok-4.7` (effort high) | Included |
+| **Writing**: product specs, roadmap, methodology / user-facing copy | `grok-4.7` (effort medium) | Included |
+| **Agent review** | A different model than the builder | Included |
+| **Stuck after two included-model attempts**, or a second opinion on high-risk work | `claude-opus-5-5` or `gpt-5.6-sol` | Other — only if the pool has room or a human approves |
 
 ## Cost rules
 
@@ -77,21 +77,21 @@ Prices per million tokens (input / output): Composer 2.5 $0.50 / $2.50 · Grok 4
 
 ## When limits are hit
 
-- **Other Models used up** → keep working on Cursor Models only. Don't ask; don't enable on-demand.
-- **Cursor Models used up** → finish nothing new. Tell the human and ask: enable on-demand spending, or wait for the monthly reset.
+- **Other pool used up** → keep working on included models only. Don't ask; don't enable on-demand.
+- **Included pool used up** → finish nothing new. Tell the human and ask: enable on-demand spending, or wait for the monthly reset.
 - **Never turn on on-demand spending yourself.**
 
 ## Human's editor default
 
-Recommended Cursor default model: `composer-2.5` (cheapest, Cursor pool, and the fallback for any unpinned launch). Switch to Grok 4.7 by hand for hard work.
+Recommended default for unpinned launches: `composer-2.5` (cheapest included tier). Escalate to `grok-4.7` for hard work.
 
 ## Local open-weights harness (retired as default, optional)
 
 **Status:** Retired as the default worker path (see `.factory/VISION.md` §14–15). Actions + DeepInfra (`/oc run`) is the standard. This section remains for optional desktop Cursor runs when needed.
 
-The human runs desktop Cursor locally with their own key for an OpenAI-compatible provider and picks the model the issue's handoff block names (see `skills/local-open-weights-run.md`). Default filled-in provider: **DeepInfra** (base URL `https://api.deepinfra.com/v1/openai`). Same loop, review and human gates as cloud runs; only the harness and model change.
+The human runs a local desktop harness with their own key for an OpenAI-compatible provider and follows the approved spec **Worker prompt** (see `skills/local-open-weights-run.md`). Default filled-in provider: **DeepInfra** (base URL `https://api.deepinfra.com/v1/openai`). Same loop, review and human gates as cloud runs; only the harness and model change.
 
-**Cloud vs local:** cloud agents ignore the Local open-weights line in an issue's handoff block and use the model they were launched with. Local agents (Cursor desktop or another harness on the human's machine using an open-weights provider such as DeepInfra) use the Local open-weights model the handoff block names and follow `skills/local-open-weights-run.md`.
+**Cloud vs local:** hosted cloud agents use the model they were launched with. Local agents use the model named in the spec worker prompt and follow `skills/local-open-weights-run.md`.
 
 **Default model:** `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` for every tier and all agentic runs (approved by the human, 2026-10-27). The other rows are kept but each needs a test first.
 
@@ -102,7 +102,7 @@ The human runs desktop Cursor locally with their own key for an OpenAI-compatibl
 | **M** — standard writing | `moonshotai/Kimi-K2.6` | $0.75 / $3.50 | Needs test¹ |
 | **L** — complex, high-risk code, specs, user-facing / high-stakes writing | `deepseek-ai/DeepSeek-V4-Pro` | $1.30 / $2.60 | Needs test¹ |
 
-¹ **Needs test:** known Cursor custom-key bug - reasoning_content not returned after tool calls, thinking-mode DeepSeek V4/Kimi fail with 400 (Cursor staff, Jul 2026: https://forum.cursor.com/t/the-deepseek-v4-pro-api-cannot-be-used-normally/159042). Use only after a short local test with thinking off passes.
+¹ **Needs test:** some desktop harnesses do not return `reasoning_content` after tool calls; thinking-mode DeepSeek V4/Kimi may fail with 400. Use only after a short local test with thinking off passes.
 
 Checked 2026-10-27 on https://deepinfra.com/models (model pages) and https://api.deepinfra.com/v1/openai/models. Re-check IDs and prices before relying on them; providers retire models.
 
@@ -111,4 +111,4 @@ Checked 2026-10-27 on https://deepinfra.com/models (model pages) and https://api
 - **Strongest tier for high stakes.** Specs, user-facing or high-stakes writing and high-risk work use the **L** row once it has passed the local test; until then they run on the default model and keep the full review and human gates.
 - **Per-issue budget** (owner, 2026-10-28): each issue aims for under $0.10 of provider spend; complex (L) issues may go higher but never above a hard cap of $1 per issue. Split any issue likely to need more. When spend gets close to $1, the local agent or human stops and comments on the issue with the spend so far.
 - Pin the model ID exactly as listed; no long-context or priority tiers unless a human asks.
-- The API key lives only in the human's local Cursor settings or environment — **never** in the repo, an issue, or a PR.
+- The API key lives only in the human's local editor settings or environment — **never** in the repo, an issue, or a PR.

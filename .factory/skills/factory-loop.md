@@ -6,23 +6,23 @@ Also follow `liability-gates.md` on every change.
 
 ## Before you start
 
-1. **Sync to latest default branch** before you branch or push. Cursor cloud agents (and local checkouts) can be slightly stale — fetch and rebase/merge onto current `main` (or the repo’s default branch) first; do not build on an outdated tip.
+1. **Sync to latest default branch** before you branch or push. Hosted cloud agents (and local checkouts) can be slightly stale — fetch and rebase/merge onto current `main` (or the repo’s default branch) first; do not build on an outdated tip.
 2. Read `.factory/FACTORY.md`, `.factory/DOCS.md`, `.factory/skills/liability-gates.md`, and recent `.factory/DECISIONS.md`.
 3. Open the issue. Ensure a one-sentence outcome is visible (comment if needed). If still unclear, ask once on the issue — then stop guessing.
 
 ## Selection
 
-- **Michael chooses the work.** Not every issue becomes agent work. Only issues Michael selects (`factory:selected` on GitHub, or "select #N" to Grok Bot) get a spec and an Actions run.
+- **The owner chooses the work.** Not every issue becomes agent work. Only issues the owner selects (`factory:selected` on GitHub, or "select #N" to the Factory Manager) get a spec and an Actions run.
 - If the issue is not selected, stop after intake (or help refine the outcome on the issue). Do not write a spec or start `/oc run` without selection.
-- Epic/build issues may be worked by Cursor cloud agents per their issue scope; the default **project** path is still selection → spec → `/oc run`.
+- Epic/build issues may be worked by hosted cloud agents per their issue scope; the default **project** path is still selection → spec → `/oc run`.
 
 ## Spec (replaces the old handoff block)
 
 For every **selected** issue ready to work, the Factory Manager writes a **spec** from `.factory/templates/spec.md` (same base sections every time; standard/complex add extended sections — the template file lands in the spec-template issue). Until that file exists in the repo, use the section list in `.factory/VISION.md` §5.
 
 - Post the spec as a comment on the issue (`<!-- factory-spec v1 -->`). The Actions run commits the approved copy into its PR as `factory/specs/issue-<N>.md`.
-- **Classify** in the spec front matter: complexity (`simple | standard | complex` + reason), risk class (`trivial | normal | high`), model, predicted cost, budget cap. When Michael says medium/high **complexity**, use **standard/complex**; medium/high **risk** means **normal/high**. Complexity picks the model; risk class alone decides the merge gate. Never use risk words for complexity.
-- **Spec approval:** by risk class (Michael, 2026-11-02): Grok Bot reviews and approves **trivial** and **normal** risk (`approved_by: grok-bot`); **high** risk goes to Michael (`approved_by: michael`). When the owner must decide, use **Recommendation + Why** (below).
+- **Classify** in the spec front matter: complexity (`simple | standard | complex` + reason), risk class (`trivial | normal | high`), model, predicted cost, budget cap. When the owner says medium/high **complexity**, use **standard/complex**; medium/high **risk** means **normal/high**. Complexity picks the model; risk class alone decides the merge gate. Never use risk words for complexity.
+- **Spec approval:** by risk class (see `DECISIONS.md`): the Factory Manager reviews and approves **trivial** and **normal** risk (`approved_by: grok-bot`); **high** risk goes to the owner (`approved_by: michael`). When the owner must decide, use **Recommendation + Why** (below).
 - Scope each spec to hit the budget target (most issues under $0.10; hard cap $1 per issue). Split anything predicted above $1 before a run; split proposals use **Recommendation + Why**.
 - **Local open-weights fallback:** the approved spec's **Worker prompt** section is what the local agent runs (`skills/local-open-weights-run.md`); there is no separate handoff block.
 
@@ -46,9 +46,9 @@ Use the same shape in **approval packs** and when marking a PR **ready for revie
 ## Build
 
 - **Default:** `/oc run` on a selected issue with an approved spec — the Actions worker syncs, branches, implements the spec, and opens or updates the PR.
-- **Epic / template build / backup:** Cursor cloud agent (or local open-weights): sync latest default branch, branch from default, open a PR that references the issue.
+- **Epic / template build / backup:** hosted cloud agent (or local open-weights): sync latest default branch, branch from default, open a PR that references the issue.
 - Run at most 4 coding agents at once (or the repo's number in DECISIONS); keep a restart list on the issue (running agent, branch, next step). Outside coding agents follow this same loop and need the owner's cost yes first (see FACTORY.md Rules).
-- **Complex-build fix circuit breaker:** for **complex** work, multi-section specs, or issue spend already above the per-issue target (`factory/budget.yml` → `issue_target_usd`), if the **first** `/oc fix` round still fails harness **Verification**, **stop** — do not post a second `/oc fix` on the same PR. Escalate: stronger model per `.factory/MODEL_ROUTING.md`, a Cursor cloud agent, or owner intervention. Evaluate with `python3 scripts/factory-fix-policy.py` before each fix round. Simple/standard builds within budget keep the usual **two** fix rounds.
+- **Complex-build fix circuit breaker:** for **complex** work, multi-section specs, or issue spend already above the per-issue target (`factory/budget.yml` → `issue_target_usd`), if the **first** `/oc fix` round still fails harness **Verification**, **stop** — do not post a second `/oc fix` on the same PR. Escalate: stronger model per `.factory/MODEL_ROUTING.md`, a hosted cloud agent, or owner intervention. Evaluate with `python3 scripts/factory-fix-policy.py` or `python3 scripts/factory-cli.py fix-policy` before each fix round. Simple/standard builds within budget keep the usual **two** fix rounds.
 - Stay inside issue scope. Lasting choices → `.factory/DECISIONS.md`.
 - Follow repo conventions via `.factory/DOCS.md` and any repo-specific skills here.
 - **Fill the whole PR template**, especially the **Factory loop** section (steps 1–8). That checklist is how humans audit process adherence — leave it blank only if a step is truly N/A, with a one-line note.
@@ -85,7 +85,7 @@ When a human gives product-gate (or similar) approval in **chat**, on the issue,
 1. **Edit the PR description before you merge** — do not merge on chat approval alone.
    - A human approver's "approve #N" (naming the PR) in the factory room or a 1:1 chat is a direct instruction to merge that PR on their behalf. Merge it yourself once the PR body, up-to-date, and green-head rules are met; don't ask them to re-confirm in another chat. It covers only the PRs they name, never follow-ups or a bot's relay. If a catch-up changes the PR's behavior, re-ask.
 2. Check **Factory loop step 7 (Product gate)** as done.
-3. Set **AI disclosure → Human reviewed before merge: yes** and name who (e.g. the repo owner; in the source repos this template came from, "Michael / @User").
+3. Set **AI disclosure → Human reviewed before merge: yes** and name who (e.g. the repo owner handle).
 4. Update any other matching fields (spec gate, safety “did not auto-merge”, Notes) so the PR body matches reality.
 5. Then merge per risk class.
 

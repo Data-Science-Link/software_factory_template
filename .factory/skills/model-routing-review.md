@@ -9,7 +9,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-factory.txt
 
-# Default: markdown on stdout
+# Default: markdown on stdout (or: python3 scripts/factory-cli.py routing-report)
 python3 scripts/factory-routing-report.py
 
 # Explicit paths and JSON
