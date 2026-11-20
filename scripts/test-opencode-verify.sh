@@ -80,6 +80,12 @@ else bad "text-block cap"; fi
 out="$(bash scripts/opencode-text-block.sh fence "$work/missing" 100 "(nothing here)")"
 if grep -qx '(nothing here)' <<<"$out"; then ok "text-block fence: missing file -> empty message"; else bad "text-block empty"; fi
 
+spec_pass="$root/tests/opencode-verify/spec-pass.md"
+if [ -f "$spec_pass" ] && python3 scripts/factory-spec-check.py "$spec_pass" >/dev/null 2>&1 \
+  && grep -qF '## Bad inputs and edge cases' "$spec_pass"; then
+  ok "verify fixture: spec-pass.md passes factory-spec-check with Bad inputs section"
+else bad "verify fixture: spec-pass.md"; python3 scripts/factory-spec-check.py "$spec_pass" 2>&1 | tail -5 || true; fi
+
 # --- verify: unit cases
 mkrepo() { rm -rf "$1"; git init -q "$1"; mkdir -p "$1/factory/x"; echo base >"$1/factory/x/base.md"; git -C "$1" add -A; git -C "$1" commit -qm base; }
 mkrepo "$work/vb"
@@ -296,9 +302,9 @@ publish() { # artifact-dir -> rc; body in <dir>/pr-body.md
   set +e
   git -C "$pub" checkout -qf "$base_branch"; git -C "$pub" clean -fdq; git -C "$pub" branch -D oc/issue-7-555 >/dev/null 2>&1
   (cd "$pub" && \
-    env -u GH_TOKEN OC_ISSUE_NUMBER=7 OC_RUN_ID=555 OC_ARTIFACT_DIR="$1" GITHUB_WORKSPACE="$pub" \
-    GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=o/r OC_SPEC_FIXTURE="$work/spec-fixture.json" \
-    bash scripts/opencode-publish-pr.sh) >"$1.publish.log" 2>&1
+    env -u GH_TOKEN FACTORY_MODE_OVERRIDE=template OC_ISSUE_NUMBER=7 OC_RUN_ID=555 OC_ARTIFACT_DIR="$1" \
+    GITHUB_WORKSPACE="$pub" GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=o/r \
+    OC_SPEC_FIXTURE="$work/spec-fixture.json" bash scripts/opencode-publish-pr.sh) >"$1.publish.log" 2>&1
   rc=$?
   set -e
 }

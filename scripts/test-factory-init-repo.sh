@@ -84,10 +84,16 @@ for rel in \
   docs/specs/.gitkeep \
   .github/pull_request_template.md \
   .github/dependabot.yml \
-  .github/workflows/pr-check.yml \
-  .github/workflows/secret-scan.yml; do
+  .github/workflows/factory-site.yml \
+  .github/workflows/opencode-fix.yml \
+  .github/workflows/opencode-run.yml \
+  .github/workflows/opencode-spec.yml \
+  .github/workflows/pr-check.yml; do
   assert_file "scaffold $rel" "$repo/$rel"
 done
+wf_n="$(find "$repo/.github/workflows" -maxdepth 1 -name '*.yml' | wc -l | tr -d ' ')"
+[ "$wf_n" -eq 5 ] && ok "five caller workflows under .github/workflows" \
+  || bad "five caller workflows under .github/workflows (got $wf_n)"
 
 mode="$(python3 -c "import yaml; print(yaml.safe_load(open('$repo/.factory/mode.yml'))['mode'])")"
 [ "$mode" = product ] && ok "mode is product" || bad "mode is product (got $mode)"
