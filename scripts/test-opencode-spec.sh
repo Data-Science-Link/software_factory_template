@@ -426,5 +426,44 @@ set -e
 if [ "$r" -ne 0 ] && grep -q 'handled by the opencode-spec workflow' <<<"$out"; then ok "agent-run: '/oc spec' starts no build worker"
 else bad "agent-run: /oc spec guard"; fi
 
+# --- edge cases (opencode-spec-draft.py is protected; tests only)
+if draft --help >/dev/null 2>&1; then ok "spec-draft: --help exits 0"
+else bad "spec-draft: --help"; fi
+printf '{broken' >"$work/bad-comments.json"
+set +e
+cmt_out="$(draft preflight --issue 7 --context "$work/lbl-none/issue-context.md" \
+  --comments-json "$work/bad-comments.json" 2>&1)"
+cmt_rc=$?
+set -e
+if [ "$cmt_rc" -eq 0 ] && grep -q 'invalid comments JSON bad-comments.json' <<<"$cmt_out" \
+  && ! grep -q Traceback <<<"$cmt_out"; then
+  ok "preflight: malformed comments-json warned, continues (no traceback)"
+else bad "preflight: malformed comments-json"; echo "$cmt_out"; fi
+printf '{"not": "an-array"}' >"$work/obj-comments.json"
+set +e
+cmt2="$(draft preflight --issue 7 --context "$work/lbl-none/issue-context.md" \
+  --comments-json "$work/obj-comments.json" 2>&1)"
+set -e
+if grep -q 'must be an array' <<<"$cmt2"; then ok "preflight: non-array comments-json warned"
+else bad "preflight: non-array comments-json"; echo "$cmt2"; fi
+set +e
+inv_out="$(draft preflight --issue abc 2>&1)"; inv_rc=$?
+set -e
+if [ "$inv_rc" -ne 0 ] && grep -q 'issue must be digits' <<<"$inv_out" && ! grep -q Traceback <<<"$inv_out"; then
+  ok "preflight: non-digit issue refused cleanly"
+else bad "preflight: non-digit issue"; echo "$inv_out"; fi
+if draft preflight --issue 7 --context "$work/lbl-none/issue-context.md" \
+  --comments-json "$work/no-such-comments.json" 2>/dev/null | grep -qx 'prior_spend_usd=0.0000'; then
+  ok "preflight: missing comments-json path ignored (protected script)"
+else bad "preflight: missing comments-json path"; fi
+printf '[{"body": "café 🔥", "author_association": "OWNER"}' >"$work/trunc-comments.json"
+set +e
+trunc_out="$(draft preflight --issue 7 --context "$work/lbl-none/issue-context.md" \
+  --comments-json "$work/trunc-comments.json" 2>&1)"
+set -e
+if grep -q 'invalid comments JSON trunc-comments.json' <<<"$trunc_out" && ! grep -q Traceback <<<"$trunc_out"; then
+  ok "preflight: truncated comments-json warned (protected script, no traceback)"
+else bad "preflight: truncated comments-json"; echo "$trunc_out"; fi
+
 echo "Results: ${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]
