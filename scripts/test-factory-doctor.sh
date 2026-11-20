@@ -125,6 +125,61 @@ run_doctor --repo-dir "$root" --json
 assert_json_schema "template repo json schema" "$work/out"
 grep -q '"category": "workflow_hygiene"' "$work/out" || bad "template json includes workflow_hygiene"
 grep -q '"category": "protected_scripts"' "$work/out" || bad "template json includes protected_scripts"
+grep -q '"category": "docs_links"' "$work/out" || bad "template json includes docs_links"
+
+# docs_links: skip when factory-check-docs.py absent in target repo
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --strict
+grep -q "docs_links" "$work/out" && grep -q "skip" "$work/out" && ok "docs_links skips without check script" \
+  || bad "docs_links skip when script missing"
+
+# docs_links: pass with bundled check script and clean markdown
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-check-docs.py" "$work/repo/scripts/"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "docs_links healthy fixture" 0
+grep -q "docs_links" "$work/out" || bad "docs_links id present"
+grep -qE "PASS.*docs_links|\"status\": \"pass\".*docs_links" "$work/out" 2>/dev/null \
+  || grep -q "docs check: clean" "$work/out" && ok "docs_links pass on healthy" \
+  || bad "docs_links pass on healthy"
+
+# docs_links: fail on broken anchor
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-check-docs.py" "$work/repo/scripts/"
+printf '# Bad\n\nSee [nope](#missing-anchor)\n' >"$work/repo/broken.md"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "docs_links broken anchor strict" 1
+grep -q "docs_links" "$work/out" || bad "docs_links fail row"
+
+# prepublic: omitted by default (category absent or only skip in unrelated checks — no prepublic row)
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --json
+python3 - <<'PY' "$work/out"
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+cats = {c["category"] for c in data["checks"]}
+assert "prepublic" not in cats, f"prepublic should not run without --public: {cats}"
+print("ok")
+PY
+ok "prepublic omitted without --public"
+
+# prepublic: skip when script missing
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --public
+grep -q "prepublic" "$work/out" && grep -q "skip" "$work/out" && ok "prepublic skips without script" \
+  || bad "prepublic skip when script missing"
+
+# prepublic: runs with --public when script is present (bundled script is in the scan set)
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-prepublic-check.py" "$work/repo/scripts/"
+git -C "$work/repo" init -q 2>/dev/null || true
+git -C "$work/repo" add -A 2>/dev/null || true
+git -C "$work/repo" -c user.email=test@test -c user.name=test commit -q -m init 2>/dev/null || true
+run_doctor --repo-dir "$work/repo" --public --strict
+assert_rc "prepublic with script strict" 1
+grep -q "prepublic_hygiene" "$work/out" || bad "prepublic id present"
+grep -q "pre-public scan:" "$work/out" && ok "prepublic reports scan results" \
+  || bad "prepublic scan detail"
 
 echo ""
 echo "factory-doctor tests: $passed passed, $failed failed"
