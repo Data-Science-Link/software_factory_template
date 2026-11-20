@@ -2,17 +2,34 @@
 
 Use this when adding the factory to another repo. Names only for secrets and variables; never put values in the repo, issues, PRs, or chat.
 
-Until reusable workflows land (**planned, #156**), copy the factory files into the new repo, then fill in the per-repo config below. After #156, the product repo will keep only this config local and pin the rest at a release tag (see [RELEASING.md](RELEASING.md)).
+Reusable workflows pin a template release tag (**#156**). Bootstrap with the CLI or copy the tree below, then fill in per-repo config. After #156, the product repo keeps only local config and pins `factory_ref` at a tag (see [RELEASING.md](RELEASING.md)).
 
-## 1. Copy the factory (until #156)
+**Stuck?** [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+## 0. Five-minute path (recommended)
+
+From a checkout of this template ([docs/CLI.md](CLI.md)):
+
+```bash
+python3 scripts/factory-cli.py init --target /path/to/product-repo
+python3 scripts/factory-cli.py doctor --repo-dir /path/to/product-repo
+```
+
+1. **Bootstrap** — `init` scaffolds `.factory/`, caller workflow stubs, and doc starters ([docs/INIT_REPO.md](INIT_REPO.md)). Compare output to [examples/minimal-product-repo/](../examples/minimal-product-repo/).
+2. **Legacy copy** — Repos with full copied `scripts/` and workflows: [docs/MIGRATING.md](MIGRATING.md) and `python3 scripts/factory-cli.py migrate-adopter --repo-dir /path/to/product-repo --tag v0.1.0`.
+3. **Launch gate** — `python3 scripts/factory-cli.py owner-pack --version v0.1.0` (doctor, docs, workflow audit, release checks).
+
+## 1. Copy the factory (manual alternative)
 
 1. Copy `.factory/`, `scripts/`, and `.github/` (workflows, the PR template, and the `protect-main` ruleset) into the repo.
-2. Fill in [`.factory/DOCS.md`](../.factory/DOCS.md) with that repo's real paths, secret *names* (never values), key view, and health numbers.
-3. Add repo-specific skills under `.factory/skills/` as needed.
-4. Keep `.factory/DECISIONS.md` append-only for that repo's own decisions.
-5. Set [`.factory/MODEL_ROUTING.md`](../.factory/MODEL_ROUTING.md) and review [`.factory/models.yaml`](../.factory/models.yaml) for the models and caps you will use.
-6. In each clone, run `scripts/install-hooks.sh`. Once per repo, as an admin, run `scripts/protect-main.sh` (step 4).
-7. Copy the starters in `.factory/sketches/` into place if the repo does not already have them, and add your own `LICENSE` and `SECURITY.md`.
+2. Set **product** mode in owner-only [`.factory/mode.yml`](../.factory/mode.yml): `mode: product` (workers must not edit this file). The template repo keeps `mode: template` so factory work can still add scripts and edit `.factory/` docs; if `mode` is missing or invalid, the artifact scan fails closed to product mode (no changes under `scripts/` or `.factory/`).
+3. Fill in [`.factory/DOCS.md`](../.factory/DOCS.md) with that repo's real paths, secret *names* (never values), key view, and health numbers.
+4. Add repo-specific skills under `.factory/skills/` as needed.
+5. Keep `.factory/DECISIONS.md` append-only for that repo's own decisions.
+6. Set [`.factory/MODEL_ROUTING.md`](../.factory/MODEL_ROUTING.md) and review [`.factory/models.yaml`](../.factory/models.yaml) for the models and caps you will use (`python3 scripts/factory-cli.py models-check --models-yaml .factory/models.yaml`).
+7. In each clone, run `scripts/install-hooks.sh`. Once per repo, as an admin, run `scripts/protect-main.sh` (step 4).
+8. Copy the starters in `.factory/sketches/` into place if the repo does not already have them, and add your own `LICENSE` and `SECURITY.md`.
+9. Or install thin caller stubs from [docs/reusable-workflows/](reusable-workflows/README.md) once pinned at a template tag instead of copying full workflow bodies.
 
 ## 2. DeepInfra key (secret + variable)
 
@@ -28,11 +45,11 @@ Create these labels (names must match exactly):
 | Label | What it's for |
 |---|---|
 | `epic` | Parent issue that tracks child issues |
-| `owner-action` | A manual step Michael has to do (workflow paste, secret, setting) |
-| `factory:selected` | Michael has chosen this issue to be specced and worked |
+| `owner-action` | A manual step the owner must do (workflow paste, secret, setting) |
+| `factory:selected` | The owner has chosen this issue to be specced and worked |
 | `priority:low` | Do when convenient |
 | `priority:high` | Failed run, wasted spend, guardrail bypass, or factory mechanics bug |
-| `risk:high` | High-risk issue: `/oc spec` uses V4 Pro and needs Michael's spec approval |
+| `risk:high` | High-risk issue: `/oc spec` uses V4 Pro and needs the owner's spec approval |
 
 Standard GitHub labels (`bug`, `documentation`, `enhancement`, and so on) can stay. There is no `priority:medium` or `risk:normal` label; risk class for trivial and normal work lives on the spec and the PR, not as a label.
 
@@ -61,10 +78,11 @@ These stay local to the install repo. After #156, factory scripts and workflows 
 
 | File | What you set |
 |---|---|
+| `.factory/mode.yml` | `mode: product` in product repos (`mode: template` only in this template repo). Owner-only: workers must not edit it. Missing or invalid `mode` fails closed to product (no worker changes under `scripts/` or `.factory/`). |
 | `.factory/models.yaml` | Model routing, prices, and today's spend caps (`budget.issue_target_usd`, `budget.issue_cap_usd`, `budget.deepinfra_monthly_limit_usd`). Owner-only: workers must not edit it. |
 | `factory/budget.yml` | Weekly and monthly site budgets (**#169 D3**, added by #170). Starting values (**#169 D4**): $10 per month, $2.50 per week. Owner-only (#56): workers must not edit it, and the path-policy scan rejects any worker patch that does. |
 | Protected-path list | Spend and security scripts workers must not edit. Printed by `bash scripts/opencode-artifact-scan.sh --list-protected`. The list lives in that script today; after #156 it comes from the pinned tag. |
-| `.factory/DOCS.md`, `.factory/DECISIONS.md`, repo `AGENTS.md` | That repo's doc map, decision log, and standing agent rules. |
+| `.factory/DOCS.md`, `.factory/DECISIONS.md`, repo `AGENTS.md` | That repo's doc map, decision log, and standing agent rules. Validate: `python3 scripts/factory-cli.py decision-log check --file .factory/DECISIONS.md`. |
 
 ## 7. Site hosting
 
@@ -76,27 +94,30 @@ Per epic #169 decision D1:
 The site workflow is `.github/workflows/factory-site.yml`, an owner paste (high risk, #56). It runs on every push to `main` that touches the site inputs, weekly (Mondays 13:23 UTC), and on demand from the Actions tab (**#169 D5**). It checks the repo's visibility at run time: a public repo deploys to Pages, a private repo only uploads a `factory-site` artifact.
 
 **Turning on Pages (public repos only):**
-1. Paste `.github/workflows/factory-site.yml`.
+1. Paste `.github/workflows/factory-site.yml` (or the thin caller that delegates to the template reusable workflow).
 2. Go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions** (not "Deploy from a branch"). There is no branch or folder to pick.
 3. Run the workflow once from the Actions tab (factory-site → Run workflow). The deploy job's summary links the site, normally `https://<owner>.github.io/<repo>/`.
 
 The first deploy creates the `github-pages` environment. If a run fails with "Get Pages site failed" or a 404 on deploy, the Source setting in step 2 isn't saved yet. On a private repo, skip steps 2 and 3 and download the artifact from the run page instead.
 
-## 8. Actions access while this template is private
+## 8. Actions access to this template
 
-Until this template is public, other repos can call its workflows only if you set **Settings → Actions → Actions permissions / Access** so the workflows are accessible from repositories owned by the same account (Data-Science-Link). This matters once reusable workflows land (**planned, #156**). The step goes away when the template is public (#185). The current plan is to go public before #56, which is before the #156 gate, so this setting may never be needed.
+When the template repo is **public**, product repos reference its reusable workflows by org/repo path; no extra Actions access setting is required.
+
+While the template is still **private**, sibling repos in the same GitHub account or org may need **Settings → Actions → General → Access** so workflows are reachable. That step goes away once the template is public (#185).
 
 ## 9. Workflow owner login
 
-The `/oc` workflows in this template only run when the comment author is the GitHub account `Data-Science-Link` and the author association is `OWNER`. In a product repo, change that login to that repo's owner account when you paste or copy the workflow files.
+The `/oc` workflows in this template only run when the comment author is the template **owner** GitHub account and the author association is `OWNER`. In a product repo, change that login to your repo's owner account when you paste or copy the workflow files.
 
 ## Check the install
 
+- [ ] `python3 scripts/factory-cli.py doctor --repo-dir .` passes (add `--public` before launching a public repo)
 - [ ] Secret `DEEPINFRA_API_KEY` and variable `FACTORY_DEEPINFRA_KEY_NAME` are set (values never committed)
 - [ ] The labels in step 3 exist
 - [ ] `scripts/protect-main.sh` has been run (or the Free-plan limitation is recorded)
 - [ ] The `gh` token has no `workflow` scope
-- [ ] Per-repo config is filled in; no secrets are in those files
+- [ ] `.factory/mode.yml` is `mode: product` and per-repo config is filled in; no secrets are in those files; layout matches [examples/minimal-product-repo/](../examples/minimal-product-repo/) where applicable
 - [ ] Site hosting matches whether the repo is private or public
 - [ ] Workflow comment login matches the repo owner
 - [ ] A first selected issue can take `/oc spec` from the owner account

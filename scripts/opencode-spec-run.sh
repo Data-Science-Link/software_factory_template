@@ -32,7 +32,11 @@ if [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then echo "spec-run: a GitHub token 
 # context, or guidance starting with `risk: high`; prose never routes), or when there is no context
 # or label list (fail closed); else rule 9 (V4 Flash).
 context_file="$OC_ARTIFACT_DIR/issue-context.md"
-preflight="$(python3 scripts/opencode-spec-draft.py preflight --context "$context_file" --guidance="$guidance")" || exit 1
+preflight_args=(preflight --issue "$OC_ISSUE_NUMBER" --context "$context_file" --guidance="$guidance"
+  --runs-dir factory/runs)
+comments_json="$OC_ARTIFACT_DIR/issue-comments.json"
+if [ -f "$comments_json" ]; then preflight_args+=(--comments-json "$comments_json"); fi
+preflight="$(python3 scripts/opencode-spec-draft.py "${preflight_args[@]}")" || exit 1
 model="$(sed -n 's/^model=//p' <<<"$preflight")"
 [[ "$model" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "spec-run: bad model id from models.yaml" >&2; exit 1; }
 
@@ -65,14 +69,14 @@ log="$OC_ARTIFACT_DIR/opencode.log"
 timeout_s="${OC_SPEC_TIMEOUT:-720}"
 case "$timeout_s" in '' | *[!0-9]*) timeout_s=720 ;; esac
 # #31: the spec run's own start state for factory-run-record.py (model, spec-run prediction, cap).
-# Prior issue spend is not read here (no token in this step): records say 0 for spec runs.
 python3 - "$OC_ARTIFACT_DIR/run-start.json" "$model" "$preflight" <<'PY' || true
 import json, os, sys
 kv = dict(l.split("=", 1) for l in sys.argv[3].splitlines() if "=" in l)
 run = "gha-%s-%s" % (os.environ.get("GITHUB_RUN_ID", "0"), os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
 json.dump({"run_id": run, "model_id": sys.argv[2], "model": "deepinfra/" + sys.argv[2],
            "predicted_cost_usd": float(kv.get("predicted_spec_run_usd", 0) or 0),
-           "cap_usd": float(kv.get("cap_usd", 0) or 0), "prior_spend_usd": 0,
+           "cap_usd": float(kv.get("cap_usd", 0) or 0),
+           "prior_spend_usd": float(kv.get("prior_spend_usd", 0) or 0),
            "risk_class": kv.get("risk_class", "high"), "kind": "spec"},
           open(sys.argv[1], "w"), indent=2, sort_keys=True)
 PY

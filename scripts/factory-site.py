@@ -6,12 +6,14 @@ Usage:
 
 Writes index.html (Architecture), financials.html, backlog.html and dbt.html with a
 shared header and tab nav. Uses only stdlib string.Template + PyYAML. All text is
-html.escape-d. No JS and no external CSS, fonts or images (style lives in
-factory/site/style.css, linked from factory/site/base.html).
+html.escape-d. Optional inline enhancement script (theme, filters, export; no
+external assets). Base style lives in factory/site/style.css, linked from
+factory/site/base.html.
 """
 import argparse
 import datetime
 import html
+import importlib.util
 import json
 import os
 import re
@@ -304,6 +306,687 @@ def depth_links():
     )
 
 
+QUICKSTART_COMMANDS = (
+    "bash scripts/install-hooks.sh",
+    "python3 scripts/factory-doctor.py",
+    "bash scripts/factory-site-build.sh --sample",
+)
+
+
+def render_copyable_codeblock(command, block_id):
+    """Architecture quickstart row with a one-click copy control."""
+    return (
+        '<div class="codeblock-wrap">'
+        '<pre class="codeblock"><code id="{}">{}</code></pre>'.format(
+            esc(block_id), esc(command)
+        )
+        + '<button type="button" class="copy-btn" data-copy-source="{}" '
+        'aria-label="Copy command to clipboard">Copy</button>'.format(esc(block_id))
+        + "</div>"
+    )
+
+
+def architecture_quickstart():
+    blocks = []
+    for idx, cmd in enumerate(QUICKSTART_COMMANDS):
+        blocks.append(render_copyable_codeblock(cmd, "quickstart-cmd-{}".format(idx)))
+    return (
+        "<h2>Quickstart</h2>"
+        '<p class="quickstart-intro">Run these from the repository root after cloning. '
+        "They install hooks, verify guardrails, and build the offline sample site.</p>"
+        + "".join(blocks)
+    )
+
+
+def _backlog_filter_bar(total):
+    pills = (
+        ("all", "All"),
+        ("high-priority", "High priority"),
+        ("high-risk", "High risk"),
+        ("unlabeled", "Unlabeled"),
+    )
+    pill_html = []
+    for key, label in pills:
+        active = ' is-active' if key == "all" else ""
+        pill_html.append(
+            '<button type="button" class="filter-pill{}" data-filter="{}" '
+            'aria-pressed="{}">{}</button>'.format(
+                active,
+                esc(key),
+                "true" if key == "all" else "false",
+                esc(label),
+            )
+        )
+    return (
+        '<div class="backlog-filter" id="backlog-filter-bar">'
+        '<div class="backlog-filter-row">'
+        '<label class="backlog-search-label" for="backlog-search">Search titles</label>'
+        '<input type="search" id="backlog-search" class="backlog-search" '
+        'placeholder="Filter by title…" autocomplete="off" spellcheck="false">'
+        "</div>"
+        '<div class="filter-pills" role="group" aria-label="Backlog filters">'
+        + "".join(pill_html)
+        + "</div>"
+        '<p id="backlog-filter-count" class="backlog-filter-count" aria-live="polite">'
+        "Showing {} of {}</p>".format(esc(total), esc(total))
+        + "</div>"
+    )
+
+
+def _agent_runs_table(rows):
+    """Financials agent-runs table with sortable columns and CSV export hook."""
+    if not rows:
+        return '<p class="note">No agent run records available.</p>'
+    valid = [r for r in rows if isinstance(r, dict)]
+    if not valid:
+        return '<p class="note">No agent run records available.</p>'
+    ordered = sorted(
+        valid,
+        key=lambda r: str(r.get("started_at_utc") or r.get("run_date") or ""),
+        reverse=True,
+    )
+    parts = [
+        '<div class="financials-runs-toolbar">',
+        '<button type="button" id="financials-export-csv" class="btn-secondary">'
+        "Export CSV</button>",
+        "</div>",
+        '<table id="financials-runs-table" class="sortable-table">',
+        "<thead><tr>",
+        '<th scope="col" class="sortable" data-sort="date" data-sort-type="date">Date</th>',
+        '<th scope="col" class="sortable" data-sort="issue" data-sort-type="number">Issue</th>',
+        '<th scope="col" class="sortable" data-sort="model" data-sort-type="text">Model</th>',
+        '<th scope="col" class="sortable" data-sort="cost" data-sort-type="number">Cost (USD)</th>',
+        "</tr></thead><tbody>",
+    ]
+    for row in ordered:
+        issue = _issue_key(row)
+        if issue is None:
+            issue = row.get("issue", "")
+        model = row.get("model_id") or row.get("model") or ""
+        cost = float(row.get("actual_cost_usd", 0) or 0)
+        date_raw = row.get("run_date") or str(row.get("started_at_utc") or "")[:10]
+        parts.append(
+            '<tr data-date="{}" data-issue="{}" data-model="{}" data-cost="{:.6f}">'
+            "<td>{}</td><td>#{}</td><td>{}</td><td>${:.4f}</td></tr>".format(
+                esc(date_raw),
+                esc(issue),
+                esc(model),
+                cost,
+                esc(date_raw),
+                esc(issue),
+                esc(model),
+                cost,
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
+def site_enhancement_css():
+    return """<style id="factory-site-enhancements">
+:root {
+  color-scheme: light dark;
+  --fs-bg: #f7f7f9;
+  --fs-surface: #ffffff;
+  --fs-text: #1a1a1a;
+  --fs-muted: #555d6b;
+  --fs-border: #cfd4dd;
+  --fs-header-bg: #1f2430;
+  --fs-header-text: #ffffff;
+  --fs-tab-bg: #2c3444;
+  --fs-tab-text: #d7dce6;
+  --fs-tab-active-bg: #ffffff;
+  --fs-tab-active-text: #1f2430;
+  --fs-th-bg: #e8ebf1;
+  --fs-row-alt: #f0f2f6;
+  --fs-pitch-bg: #eef4ff;
+  --fs-note-bg: #fff4d6;
+  --fs-accent: #3d5afe;
+  --fs-accent-soft: #e8edff;
+  --fs-shadow: 0 1px 2px rgba(31, 36, 48, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fs-bg: #12151c;
+    --fs-surface: #1a1f2b;
+    --fs-text: #e8ebf1;
+    --fs-muted: #a8b0bd;
+    --fs-border: #343b4a;
+    --fs-header-bg: #0d1017;
+    --fs-header-text: #f0f2f6;
+    --fs-tab-bg: #252b3a;
+    --fs-tab-text: #c5ccd8;
+    --fs-tab-active-bg: #3d4556;
+    --fs-tab-active-text: #ffffff;
+    --fs-th-bg: #252b3a;
+    --fs-row-alt: #1f2433;
+    --fs-pitch-bg: #1c2640;
+    --fs-note-bg: #3a3218;
+    --fs-accent: #8ea4ff;
+    --fs-accent-soft: #2a3558;
+    --fs-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+}
+:root[data-theme="dark"] {
+  --fs-bg: #12151c;
+  --fs-surface: #1a1f2b;
+  --fs-text: #e8ebf1;
+  --fs-muted: #a8b0bd;
+  --fs-border: #343b4a;
+  --fs-header-bg: #0d1017;
+  --fs-header-text: #f0f2f6;
+  --fs-tab-bg: #252b3a;
+  --fs-tab-text: #c5ccd8;
+  --fs-tab-active-bg: #3d4556;
+  --fs-tab-active-text: #ffffff;
+  --fs-th-bg: #252b3a;
+  --fs-row-alt: #1f2433;
+  --fs-pitch-bg: #1c2640;
+  --fs-note-bg: #3a3218;
+  --fs-accent: #8ea4ff;
+  --fs-accent-soft: #2a3558;
+  --fs-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+body {
+  background: var(--fs-bg);
+  color: var(--fs-text);
+}
+.site-header {
+  background: var(--fs-header-bg);
+  color: var(--fs-header-text);
+  box-shadow: var(--fs-shadow);
+}
+.site-header h1 { color: var(--fs-header-text); }
+.tabs a {
+  background: var(--fs-tab-bg);
+  color: var(--fs-tab-text);
+}
+.tabs a.active {
+  background: var(--fs-tab-active-bg);
+  color: var(--fs-tab-active-text);
+}
+.site-footer {
+  background: var(--fs-surface);
+  color: var(--fs-muted);
+  border-color: var(--fs-border);
+}
+th { background: var(--fs-th-bg); border-color: var(--fs-border); }
+td { border-color: var(--fs-border); }
+tr:nth-child(even) td { background: var(--fs-row-alt); }
+.pitch { background: var(--fs-pitch-bg); border-color: var(--fs-border); }
+.note, .placeholder, .loop-card, .card, .human-decides {
+  background: var(--fs-surface);
+  border-color: var(--fs-border);
+  color: var(--fs-text);
+}
+.site-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.site-header-row h1 { margin: 0; flex: 1 1 12rem; }
+#theme-toggle {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fs-header-text);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+#theme-toggle:hover { background: rgba(255, 255, 255, 0.16); }
+#theme-toggle:focus-visible {
+  outline: 2px solid var(--fs-accent);
+  outline-offset: 2px;
+}
+.quickstart-intro { color: var(--fs-muted); margin-top: 0; }
+.codeblock-wrap {
+  position: relative;
+  margin: 0.75rem 0 1rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+}
+.codeblock {
+  margin: 0;
+  padding: 0.75rem 4.5rem 0.75rem 1rem;
+  overflow-x: auto;
+  font-size: 0.9rem;
+}
+.codeblock code { background: transparent; padding: 0; }
+.copy-btn, .btn-secondary, .filter-pill {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 0.3rem;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-surface);
+  color: var(--fs-text);
+}
+.copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+}
+.copy-btn:hover, .btn-secondary:hover, .filter-pill:hover {
+  border-color: var(--fs-accent);
+}
+.copy-btn.is-copied { border-color: #2e7d32; color: #2e7d32; }
+.financials-runs-toolbar { margin: 0.5rem 0 0.75rem; }
+.btn-secondary {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.9rem;
+  background: var(--fs-accent-soft);
+  border-color: var(--fs-accent);
+}
+.backlog-filter {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+}
+.backlog-search {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.3rem;
+  background: var(--fs-bg);
+  color: var(--fs-text);
+  font: inherit;
+}
+.backlog-search-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--fs-muted);
+  margin-bottom: 0.35rem;
+}
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0.35rem;
+}
+.filter-pill {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+.filter-pill.is-active {
+  background: var(--fs-accent-soft);
+  border-color: var(--fs-accent);
+  font-weight: 600;
+}
+.backlog-filter-count {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--fs-muted);
+}
+.sortable-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.sortable-table th.sortable::after {
+  content: " \\2195";
+  font-size: 0.75rem;
+  color: var(--fs-muted);
+}
+.sortable-table th.sortable[data-sort-dir="asc"]::after { content: " \\2191"; }
+.sortable-table th.sortable[data-sort-dir="desc"]::after { content: " \\2193"; }
+.dbt-filter {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+}
+.dbt-search {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.3rem;
+  background: var(--fs-bg);
+  color: var(--fs-text);
+  font: inherit;
+}
+.dbt-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+.dbt-filter-count { font-size: 0.85rem; color: var(--fs-muted); margin: 0.35rem 0 0; }
+.dbt-meta-badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-accent-soft);
+  color: var(--fs-text);
+}
+#dbt-models-table tbody tr.is-filtered-out { display: none; }
+.dbt-model.is-filtered-out { display: none; }
+.dbt-lineage .dbt-lineage-node { cursor: pointer; }
+.dbt-lineage.is-muted .dbt-lineage-node,
+.dbt-lineage.is-muted .dbt-lineage-edge { opacity: 0.22; }
+.dbt-lineage.is-muted .dbt-lineage-node.is-lineage-focus,
+.dbt-lineage.is-muted .dbt-lineage-node.is-lineage-related,
+.dbt-lineage.is-muted .dbt-lineage-edge.is-lineage-focus { opacity: 1; }
+.dbt-lineage-node.is-lineage-focus rect { stroke: var(--fs-accent); stroke-width: 2.2; }
+.dbt-lineage-node.is-lineage-related rect { stroke: var(--fs-accent); stroke-width: 1.6; }
+</style>"""
+
+
+def theme_toggle_markup():
+    return (
+        '<button type="button" id="theme-toggle" aria-pressed="false" '
+        'title="Toggle light and dark theme">Theme</button>'
+    )
+
+
+def site_enhancement_script():
+    return """<script>
+(function () {
+  var THEME_KEY = "factory-site-theme";
+  var root = document.documentElement;
+  var themeBtn = document.getElementById("theme-toggle");
+  function systemDark() {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function isDark(theme) {
+    if (theme === "dark") return true;
+    if (theme === "light") return false;
+    return systemDark();
+  }
+  function applyTheme(theme) {
+    if (theme === "light" || theme === "dark") {
+      root.setAttribute("data-theme", theme);
+    } else {
+      root.removeAttribute("data-theme");
+    }
+    if (!themeBtn) return;
+    var dark = isDark(theme || null);
+    themeBtn.setAttribute("aria-pressed", dark ? "true" : "false");
+    themeBtn.textContent = dark ? "Light mode" : "Dark mode";
+  }
+  var saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+  if (saved === "light" || saved === "dark") applyTheme(saved);
+  else applyTheme(null);
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var current = root.getAttribute("data-theme");
+      var dark = isDark(current);
+      var next = dark ? "light" : "dark";
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+      applyTheme(next);
+    });
+  }
+
+  document.querySelectorAll(".copy-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = btn.getAttribute("data-copy-source");
+      var el = id ? document.getElementById(id) : null;
+      if (!el) return;
+      var text = el.textContent || "";
+      function done(ok) {
+        if (!ok) return;
+        btn.classList.add("is-copied");
+        var prev = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(function () {
+          btn.textContent = prev;
+          btn.classList.remove("is-copied");
+        }, 1400);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { done(true); }).catch(function () {
+          done(fallbackCopy(text));
+        });
+      } else {
+        done(fallbackCopy(text));
+      }
+    });
+  });
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "absolute";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  var backlogBar = document.getElementById("backlog-filter-bar");
+  if (backlogBar) {
+    var searchInput = document.getElementById("backlog-search");
+    var countEl = document.getElementById("backlog-filter-count");
+    var rows = Array.prototype.slice.call(
+      document.querySelectorAll("#backlog-issues-table .backlog-issue-row")
+    );
+    var activeFilter = "all";
+    function rowMatchesFilter(row) {
+      var prio = row.getAttribute("data-priority") || "none";
+      var risk = row.getAttribute("data-risk") || "unlabeled";
+      if (activeFilter === "high-priority") return prio === "high";
+      if (activeFilter === "high-risk") return risk === "high";
+      if (activeFilter === "unlabeled") {
+        return prio === "none" || risk === "unlabeled";
+      }
+      return true;
+    }
+    function applyBacklogFilter() {
+      var q = (searchInput && searchInput.value || "").trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (row) {
+        var blob = (row.getAttribute("data-search") || "").toLowerCase();
+        var match = rowMatchesFilter(row) && (!q || blob.indexOf(q) !== -1);
+        row.hidden = !match;
+        if (match) shown += 1;
+      });
+      if (countEl) {
+        countEl.textContent = "Showing " + shown + " of " + rows.length;
+      }
+    }
+    backlogBar.querySelectorAll(".filter-pill").forEach(function (pill) {
+      pill.addEventListener("click", function () {
+        activeFilter = pill.getAttribute("data-filter") || "all";
+        backlogBar.querySelectorAll(".filter-pill").forEach(function (p) {
+          var on = p === pill;
+          p.classList.toggle("is-active", on);
+          p.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        applyBacklogFilter();
+      });
+    });
+    if (searchInput) {
+      searchInput.addEventListener("input", applyBacklogFilter);
+    }
+    applyBacklogFilter();
+  }
+
+  var runsTable = document.getElementById("financials-runs-table");
+  var exportBtn = document.getElementById("financials-export-csv");
+  function csvEscape(value) {
+    var s = String(value == null ? "" : value);
+    if (/[",\\n\\r]/.test(s)) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+  function exportRunsCsv() {
+    if (!runsTable) return;
+    var header = ["date", "issue", "model", "cost_usd"];
+    var lines = [header.join(",")];
+    runsTable.querySelectorAll("tbody tr").forEach(function (row) {
+      lines.push([
+        csvEscape(row.getAttribute("data-date") || ""),
+        csvEscape(row.getAttribute("data-issue") || ""),
+        csvEscape(row.getAttribute("data-model") || ""),
+        csvEscape(row.getAttribute("data-cost") || ""),
+      ].join(","));
+    });
+    var blob = new Blob([lines.join("\\n") + "\\n"], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "factory-agent-runs.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  if (exportBtn) {
+    exportBtn.addEventListener("click", exportRunsCsv);
+  }
+  if (runsTable) {
+    runsTable.querySelectorAll("th.sortable").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var key = th.getAttribute("data-sort");
+        var type = th.getAttribute("data-sort-type") || "text";
+        var tbody = runsTable.querySelector("tbody");
+        if (!tbody || !key) return;
+        var dir = th.getAttribute("data-sort-dir") === "asc" ? "desc" : "asc";
+        runsTable.querySelectorAll("th.sortable").forEach(function (h) {
+          h.removeAttribute("data-sort-dir");
+        });
+        th.setAttribute("data-sort-dir", dir);
+        var mult = dir === "asc" ? 1 : -1;
+        var trs = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+        trs.sort(function (a, b) {
+          var av = a.getAttribute("data-" + key) || "";
+          var bv = b.getAttribute("data-" + key) || "";
+          if (type === "number") {
+            return (parseFloat(av) - parseFloat(bv)) * mult;
+          }
+          if (type === "date") {
+            return String(av).localeCompare(String(bv)) * mult;
+          }
+          return String(av).localeCompare(String(bv), undefined, { sensitivity: "base" }) * mult;
+        });
+        trs.forEach(function (tr) { tbody.appendChild(tr); });
+      });
+    });
+  }
+
+  var dbtFilter = document.getElementById("dbt-filter-bar");
+  var dbtSvg = document.querySelector("svg.dbt-lineage");
+  var dbtGraphEl = document.getElementById("dbt-lineage-graph");
+  var dbtClear = document.getElementById("dbt-lineage-clear");
+  var dbtSearch = document.getElementById("dbt-model-search");
+  var dbtCount = document.getElementById("dbt-filter-count");
+  var dbtGraph = null;
+  if (dbtGraphEl && dbtGraphEl.textContent) {
+    try { dbtGraph = JSON.parse(dbtGraphEl.textContent); } catch (e) {}
+  }
+  function dbtApplySearch() {
+    if (!dbtFilter) return;
+    var q = (dbtSearch && dbtSearch.value || "").trim().toLowerCase();
+    var rows = dbtFilter.querySelectorAll(".dbt-model-row");
+    var sections = document.querySelectorAll(".dbt-model");
+    var shown = 0;
+    rows.forEach(function (row) {
+      var blob = (row.getAttribute("data-search") || "").toLowerCase();
+      var match = !q || blob.indexOf(q) !== -1;
+      row.classList.toggle("is-filtered-out", !match);
+      if (match) shown += 1;
+    });
+    sections.forEach(function (sec) {
+      var blob = (sec.getAttribute("data-search") || "").toLowerCase();
+      var match = !q || blob.indexOf(q) !== -1;
+      sec.classList.toggle("is-filtered-out", !match);
+    });
+    if (dbtCount) {
+      dbtCount.textContent = "Showing " + shown + " of " + rows.length + " models";
+    }
+  }
+  function dbtClearLineage() {
+    if (!dbtSvg) return;
+    dbtSvg.classList.remove("is-muted");
+    dbtSvg.querySelectorAll(".is-lineage-focus, .is-lineage-related").forEach(function (el) {
+      el.classList.remove("is-lineage-focus", "is-lineage-related");
+    });
+    dbtSvg.querySelectorAll(".dbt-lineage-edge").forEach(function (el) {
+      el.classList.remove("is-lineage-focus");
+    });
+  }
+  function dbtHighlightLineage(modelName) {
+    if (!dbtSvg || !dbtGraph || !modelName) return;
+  dbtClearLineage();
+    var meta = (dbtGraph.nodes || {})[modelName];
+    if (!meta) return;
+    var related = {};
+    related[modelName] = true;
+    (dbtGraph.upstream[modelName] || []).forEach(function (n) { related[n] = true; });
+    (dbtGraph.downstream[modelName] || []).forEach(function (n) { related[n] = true; });
+    dbtSvg.classList.add("is-muted");
+    dbtSvg.querySelectorAll(".dbt-lineage-node").forEach(function (g) {
+      var name = g.getAttribute("data-model") || "";
+      if (name === modelName) g.classList.add("is-lineage-focus");
+      else if (related[name]) g.classList.add("is-lineage-related");
+    });
+    dbtSvg.querySelectorAll(".dbt-lineage-edge").forEach(function (line) {
+      var from = line.getAttribute("data-from") || "";
+      var to = line.getAttribute("data-to") || "";
+      if (from === modelName || to === modelName) line.classList.add("is-lineage-focus");
+      else if (related[from] && related[to]) line.classList.add("is-lineage-focus");
+    });
+  }
+  if (dbtSearch) dbtSearch.addEventListener("input", dbtApplySearch);
+  if (dbtFilter) dbtApplySearch();
+  if (dbtSvg && dbtGraph) {
+    dbtSvg.querySelectorAll(".dbt-lineage-node").forEach(function (g) {
+      g.addEventListener("click", function () {
+        dbtHighlightLineage(g.getAttribute("data-model") || "");
+      });
+    });
+  }
+  if (dbtClear) {
+    dbtClear.addEventListener("click", dbtClearLineage);
+  }
+})();
+</script>"""
+
+
+def enhance_page_html(html):
+    """Inject shared offline UX (theme, filters, export, copy) into rendered HTML."""
+    if "</head>" in html:
+        html = html.replace("</head>", site_enhancement_css() + "\n</head>", 1)
+    marker = '<header class="site-header">\n  <h1>'
+    if marker in html:
+        html = html.replace(
+            marker,
+            '<header class="site-header">\n  <div class="site-header-row">\n  <h1>',
+            1,
+        )
+        html = html.replace(
+            "</h1>\n  <nav class=\"tabs\"",
+            "</h1>\n  " + theme_toggle_markup() + '\n  </div>\n  <nav class="tabs"',
+            1,
+        )
+    html = html.replace("</body>", site_enhancement_script() + "\n</body>", 1)
+    return html
+
+
 def _format_when_value(value):
     if isinstance(value, list):
         bits = []
@@ -362,6 +1045,9 @@ def architecture_html(repo_root, models_data, factory_md):
 
     # Depth links.
     parts.append(depth_links())
+
+    # Offline quickstart commands with copy controls.
+    parts.append(architecture_quickstart())
 
     # Roles table.
     parts.append("<h2>Roles</h2>")
@@ -530,7 +1216,16 @@ def _issue_key(row):
 
 
 def _assert_non_negative_spend(collection, name):
-    spend_keys = ("spend_usd", "mtd_variable_usd", "actual_cost_usd", "predicted_cost_usd", "predicted_usd", "actual_usd")
+    spend_keys = (
+        "spend_usd",
+        "mtd_variable_usd",
+        "actual_cost_usd",
+        "predicted_cost_usd",
+        "predicted_usd",
+        "actual_usd",
+        "total_cost_usd",
+        "total_actual_cost_usd",
+    )
     for item in collection:
         if not isinstance(item, dict):
             raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
@@ -628,6 +1323,198 @@ def _card(class_warn, title, amount_html, detail_html):
     )
 
 
+def _default_duckdb_path(repo_root):
+    return Path(repo_root) / "factory" / "dbt" / "target" / "factory.duckdb"
+
+
+def _duckdb_query_mart(repo_root, table_name):
+    """Return mart rows as dicts from DuckDB when the table exists; else None."""
+    db_path = _default_duckdb_path(repo_root)
+    if not db_path.is_file():
+        return None
+    try:
+        import duckdb
+    except ImportError:
+        return None
+
+    con = None
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+        exists = con.sql(
+            "select 1 from information_schema.tables "
+            "where table_schema = 'main' and table_name = ? limit 1",
+            [table_name],
+        ).fetchone()
+        if not exists:
+            try:
+                con.sql(f"select * from {table_name} limit 0")
+            except Exception:
+                return None
+        rel = con.sql(f"select * from {table_name}")
+        columns = [d[0] for d in rel.description]
+        out = []
+        for row in rel.fetchall():
+            item = {}
+            for col, val in zip(columns, row):
+                if isinstance(val, (datetime.date, datetime.datetime)):
+                    item[col] = val.isoformat()
+                else:
+                    item[col] = val
+            out.append(item)
+        return out
+    except Exception:
+        return None
+    finally:
+        if con is not None:
+            con.close()
+
+
+def _mart_rows(marts, repo_root, name):
+    """Prefer exported JSON marts; fall back to a live DuckDB read."""
+    rows = marts.get(name)
+    if rows:
+        return rows
+    queried = _duckdb_query_mart(repo_root, name)
+    return queried if queried is not None else []
+
+
+def _compute_mart_spend_by_work_type(agent_rows):
+    """Derive mart_spend_by_work_type from fct_agent_runs when JSON/DuckDB are absent."""
+    path = Path(__file__).with_name("factory-site-data.py")
+    spec = importlib.util.spec_from_file_location("factory_site_data", path)
+    if spec is None or spec.loader is None:
+        return []
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.compute_mart_spend_by_work_type(agent_rows)
+
+
+def _fmt_fin_currency(value):
+    if value is None:
+        return "—"
+    try:
+        return f"${float(value):,.4f}"
+    except (TypeError, ValueError):
+        return esc(str(value))
+
+
+def _fmt_fin_pct(value):
+    if value is None:
+        return "—"
+    try:
+        return f"{float(value):.1f}%"
+    except (TypeError, ValueError):
+        return esc(str(value))
+
+
+def _render_monthly_cfo_table(rows):
+    if not rows:
+        return '<p class="note">No monthly CFO mart data available.</p>'
+    parts = [
+        '<table id="monthly-cfo-table">',
+        "<thead><tr>",
+        "<th>Month</th><th>Distinct issues</th><th>Avg cost / issue</th>",
+        "<th>Pass rate</th><th>Budget used</th>",
+        "</tr></thead><tbody>",
+    ]
+    for row in sorted(rows, key=lambda r: str(r.get("month_start", ""))):
+        month = str(row.get("month_start", ""))[:10] or "—"
+        parts.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(month),
+                esc(row.get("distinct_issues", "—")),
+                esc(_fmt_fin_currency(row.get("avg_cost_per_issue_usd"))),
+                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
+                esc(_fmt_fin_pct(row.get("budget_used_pct"))),
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
+def _render_model_efficiency_table(rows):
+    if not rows:
+        return '<p class="note">No model efficiency mart data available.</p>'
+    parts = [
+        '<table id="model-efficiency-table">',
+        "<thead><tr>",
+        "<th>Model</th><th>Harness</th><th>Provider</th><th>Runs</th>",
+        "<th>Pass rate</th><th>Total cost</th><th>Avg cost</th>",
+        "<th>Cost / passed run</th>",
+        "</tr></thead><tbody>",
+    ]
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (
+            -float(r.get("total_cost_usd") or 0),
+            str(r.get("model", "")),
+            str(r.get("harness", "")),
+        ),
+    )
+    for row in sorted_rows:
+        parts.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td>"
+            "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(row.get("model", "—")),
+                esc(row.get("harness", "—")),
+                esc(row.get("provider", "—")),
+                esc(row.get("run_count", "—")),
+                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
+                esc(_fmt_fin_currency(row.get("total_cost_usd"))),
+                esc(_fmt_fin_currency(row.get("avg_cost_usd"))),
+                esc(_fmt_fin_currency(row.get("cost_per_passed_run_usd"))),
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
+def _render_spend_by_work_type_table(rows):
+    if not rows:
+        return '<p class="note">No spend-by-work-type data available.</p>'
+    parts = [
+        '<table id="spend-by-work-type-table">',
+        "<thead><tr>",
+        "<th>Work type</th><th>Runs</th><th>Pass rate</th>",
+        "<th>Total cost</th><th>Share of spend</th><th>Avg cost</th>",
+        "<th>Tokens (in / cached / out)</th>",
+        "</tr></thead><tbody>",
+    ]
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (
+            -float(r.get("total_actual_cost_usd") or 0),
+            -int(r.get("run_count") or 0),
+            str(r.get("work_type", "")),
+        ),
+    )
+    for row in sorted_rows:
+        tin = row.get("total_tokens_in")
+        tcached = row.get("total_tokens_cached")
+        tout = row.get("total_tokens_out")
+        tokens_s = "—"
+        if tin is not None or tcached is not None or tout is not None:
+            tokens_s = "{:,} / {:,} / {:,}".format(
+                int(tin or 0),
+                int(tcached or 0),
+                int(tout or 0),
+            )
+        parts.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td>"
+            "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(row.get("work_type", "—")),
+                esc(row.get("run_count", "—")),
+                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
+                esc(_fmt_fin_currency(row.get("total_actual_cost_usd"))),
+                esc(_fmt_fin_pct(row.get("cost_share_pct"))),
+                esc(_fmt_fin_currency(row.get("avg_cost_usd"))),
+                esc(tokens_s),
+            )
+        )
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
+
+
 def financials_html(data_dir, repo_root=".", as_of_utc=None):
     """Generate the Financials tab content from marts data."""
     marts_dir, marts = _load_marts(data_dir)
@@ -651,6 +1538,11 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
     agg_spend_by_model = marts.get("agg_spend_by_model", [])
     fct_forecast_vs_actual = marts.get("fct_forecast_vs_actual", [])
     fct_agent_runs = marts.get("fct_agent_runs", [])
+    mart_model_efficiency = _mart_rows(marts, repo_root, "mart_model_efficiency")
+    mart_monthly_cfo = _mart_rows(marts, repo_root, "mart_monthly_cfo")
+    mart_spend_by_work_type = _mart_rows(marts, repo_root, "mart_spend_by_work_type")
+    if not mart_spend_by_work_type and fct_agent_runs:
+        mart_spend_by_work_type = _compute_mart_spend_by_work_type(fct_agent_runs)
 
     _assert_non_negative_spend(rpt_run_rate, "rpt_run_rate")
     _assert_non_negative_spend(agg_spend_weekly, "agg_spend_weekly")
@@ -666,6 +1558,15 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
             if not isinstance(item, dict):
                 raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
         _assert_non_negative_spend(collection, name)
+    _assert_non_negative_spend(mart_model_efficiency, "mart_model_efficiency")
+    _assert_non_negative_spend(
+        mart_spend_by_work_type, "mart_spend_by_work_type"
+    )
+    for row in mart_monthly_cfo:
+        if not isinstance(row, dict):
+            raise ValueError(
+                f"Expected dict in mart_monthly_cfo, got {type(row)}: {row}"
+            )
 
     as_of = _financials_as_of(as_of_utc, rpt_run_rate)
     parts = []
@@ -746,6 +1647,17 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
     parts.append('<details><summary>Table fallback</summary>')
     parts.append(table_monthly)
     parts.append("</details>")
+
+    parts.append(
+        '<h2>Monthly CFO summary <small>(source: mart_monthly_cfo)</small></h2>'
+    )
+    parts.append(_render_monthly_cfo_table(mart_monthly_cfo))
+
+    parts.append(
+        '<h2>Spend by Work Type (Coding vs. Review) '
+        "<small>(source: mart_spend_by_work_type)</small></h2>"
+    )
+    parts.append(_render_spend_by_work_type_table(mart_spend_by_work_type))
 
     parts.append(
         "<h2>Per-Issue Economics <small>(sources: agg_spend_by_issue, rpt_issue_target_compliance)</small></h2>"
@@ -870,6 +1782,11 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
         parts.append("<p>No model/work-type data available.</p>")
 
     parts.append(
+        '<h2>Model Efficiency <small>(source: mart_model_efficiency)</small></h2>'
+    )
+    parts.append(_render_model_efficiency_table(mart_model_efficiency))
+
+    parts.append(
         '<h2>Prediction Accuracy <small>(source: fct_forecast_vs_actual)</small></h2>'
     )
     skipped_count = 0
@@ -928,6 +1845,9 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
             )
     else:
         parts.append("<p>No prediction accuracy data available.</p>")
+
+    parts.append('<h2>Agent runs <small>(source: fct_agent_runs)</small></h2>')
+    parts.append(_agent_runs_table(fct_agent_runs))
 
     parts.append('<h2>Data Freshness <small>(source: fct_agent_runs)</small></h2>')
     if fct_agent_runs:
@@ -1064,7 +1984,7 @@ def _issue_table(issues):
         key=lambda i: -PRIORITY_ORDER.get(i.get("priority", "none"), 0),
     )
     header = ["Priority", "Status", "Title"]
-    out = ["<table><thead><tr>"]
+    out = [_backlog_filter_bar(len(ordered)), '<table id="backlog-issues-table"><thead><tr>']
     for cell in header:
         out.append("<th>{}</th>".format(esc(cell)))
     out.append("</tr></thead><tbody>")
@@ -1073,8 +1993,15 @@ def _issue_table(issues):
         url = i.get("url", "")
         link = '<a href="{}">{}</a>'.format(esc(url), esc(title)) if url else esc(title)
         status = STATUS_LABELS.get(i.get("status", "open"), i.get("status", "open"))
-        out.append("<tr>")
-        out.append("<th>{}</th>".format(esc(i.get("priority", "none"))))
+        prio = i.get("priority", "none")
+        risk = i.get("risk", "unlabeled")
+        search_bits = [title, str(i.get("number", "")), status, prio, risk]
+        search_blob = " ".join(str(x) for x in search_bits if x).lower()
+        out.append(
+            '<tr class="backlog-issue-row" data-priority="{}" data-risk="{}" '
+            'data-search="{}">'.format(esc(prio), esc(risk), esc(search_blob))
+        )
+        out.append("<th>{}</th>".format(esc(prio)))
         out.append("<td>{}</td>".format(esc(status)))
         out.append("<td>{}</td>".format(link))
         out.append("</tr>")
@@ -1111,6 +2038,51 @@ def backlog_html(data_dir):
 
 DBT_LAYERS = ("seed", "staging", "marts")
 DBT_LAYER_DEPTH = {"seed": 0, "staging": 1, "marts": 2, "other": 3}
+
+
+def _dbt_export_module():
+    path = Path(__file__).with_name("factory-site-dbt-export.py")
+    spec = importlib.util.spec_from_file_location("factory_site_dbt_export", path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _dbt_offline_manifest_roots(repo_root):
+    repo = Path(repo_root)
+    template_root = Path(__file__).resolve().parent.parent
+    if (repo / "factory" / "dbt" / "models").is_dir():
+        return [repo]
+    if _dbt_manifest_path(repo_root).is_file():
+        return [template_root]
+    if (repo / "factory" / "dbt" / "target").is_dir():
+        return [template_root]
+    return [repo]
+
+
+def _dbt_manifest_for_site(repo_root):
+    export = _dbt_export_module()
+    offline = None
+    if export is not None:
+        for root in _dbt_offline_manifest_roots(repo_root):
+            candidate = export.build_offline_manifest(root)
+            model_count = sum(
+                1
+                for n in (candidate.get("nodes") or {}).values()
+                if isinstance(n, dict) and n.get("resource_type") == "model"
+            )
+            if model_count:
+                offline = candidate
+                break
+    manifest_path = _dbt_manifest_path(repo_root)
+    on_disk = _load_json(manifest_path) if manifest_path.is_file() else None
+    if offline is None:
+        return on_disk
+    if on_disk is None:
+        return offline
+    return export.merge_manifests(on_disk, offline)
 
 
 def _dbt_manifest_path(repo_root):
@@ -1242,32 +2214,108 @@ def _dbt_docs_banner(out_dir):
     )
 
 
+def _dbt_badge(value, label):
+    return '<span class="dbt-meta-badge" title="{}">{}</span>'.format(
+        esc(label), esc(str(value))
+    )
+
+
+def _dbt_model_search_blob(node):
+    bits = [
+        node.get("name") or "",
+        _dbt_layer(node),
+        _dbt_materialization(node),
+        _dbt_description(node),
+    ]
+    return " ".join(bits)
+
+
+def _dbt_filter_toolbar(model_count):
+    return "\n".join(
+        [
+            '<div class="dbt-filter" id="dbt-filter-bar">',
+            '<label class="backlog-search-label" for="dbt-model-search">'
+            "Filter models</label>",
+            '<input type="search" id="dbt-model-search" class="dbt-search" '
+            'autocomplete="off" placeholder="Name, layer, or description" />',
+            '<div class="dbt-filter-toolbar">',
+            '<button type="button" class="btn-secondary" id="dbt-lineage-clear">'
+            "Clear lineage highlight</button>",
+            "</div>",
+            '<p class="dbt-filter-count" id="dbt-filter-count">Showing '
+            "{} of {} models</p>".format(model_count, model_count),
+            "</div>",
+        ]
+    )
+
+
+def _dbt_lineage_graph_json(nodes, upstream, downstream, by_id):
+    graph = {"nodes": {}, "upstream": {}, "downstream": {}}
+    for node in nodes:
+        name = node.get("name") or ""
+        if not name:
+            continue
+        uid = node.get("unique_id") or ""
+        graph["nodes"][name] = {"unique_id": uid, "layer": _dbt_layer(node)}
+        up = []
+        for parent_id in upstream.get(uid) or []:
+            parent = by_id.get(parent_id)
+            if parent and parent.get("name"):
+                up.append(parent["name"])
+        down = []
+        for child_id in downstream.get(uid) or []:
+            child = by_id.get(child_id)
+            if child and child.get("name"):
+                down.append(child["name"])
+        graph["upstream"][name] = sorted(up)
+        graph["downstream"][name] = sorted(down)
+    payload = json.dumps(graph, sort_keys=True, separators=(",", ":"))
+    payload = payload.replace("</", "<\\/")
+    return (
+        '<script type="application/json" id="dbt-lineage-graph">'
+        + payload
+        + "</script>"
+    )
+
+
 def _dbt_model_table(nodes, by_name, test_counts):
     if not nodes:
         return '<p class="note">No models found in manifest.</p>'
-    header = [
-        "Name",
-        "Layer",
-        "Materialization",
-        "Description",
-        "Columns",
-        "Tests",
+    parts = [
+        '<table id="dbt-models-table"><thead><tr>',
+        "<th>Name</th><th>Layer</th><th>Materialization</th>",
+        "<th>Description</th><th>Columns</th><th>Tests</th>",
+        "</tr></thead><tbody>",
     ]
-    rows = [header]
     for node in nodes:
         uid = node.get("unique_id") or ""
         name = node.get("name") or ""
-        rows.append(
-            [
-                name,
-                _dbt_layer(node),
-                _dbt_materialization(node),
-                _dbt_description(node),
-                str(_dbt_column_count(node)),
-                str(test_counts.get(uid, 0)),
-            ]
+        col_count = _dbt_column_count(node)
+        test_count = test_counts.get(uid, 0)
+        parts.append(
+            '<tr class="dbt-model-row" data-search="{}">'.format(
+                esc(_dbt_model_search_blob(node))
+            )
         )
-    return render_table(rows)
+        parts.append(
+            '<td><a href="#model-{}">{}</a></td>'.format(esc(name), esc(name))
+        )
+        parts.append("<td>{}</td>".format(esc(_dbt_layer(node))))
+        parts.append("<td>{}</td>".format(esc(_dbt_materialization(node))))
+        parts.append("<td>{}</td>".format(esc(_dbt_description(node))))
+        parts.append(
+            "<td>{}</td>".format(
+                _dbt_badge(col_count, "Column count") if col_count else "—"
+            )
+        )
+        parts.append(
+            "<td>{}</td>".format(
+                _dbt_badge(test_count, "Attached tests") if test_count else "—"
+            )
+        )
+        parts.append("</tr>")
+    parts.append("</tbody></table>")
+    return "\n".join(parts)
 
 
 def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
@@ -1276,7 +2324,11 @@ def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
     for node in nodes:
         uid = node.get("unique_id") or ""
         name = node.get("name") or ""
-        parts.append('<section class="dbt-model" id="model-{}">'.format(esc(name)))
+        parts.append(
+            '<section class="dbt-model" id="model-{}" data-search="{}">'.format(
+                esc(name), esc(_dbt_model_search_blob(node))
+            )
+        )
         parts.append("<h3>{}</h3>".format(esc(name)))
         parts.append("<p>{}</p>".format(esc(_dbt_description(node))))
         up_links = []
@@ -1347,6 +2399,7 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
     height = margin * 2 + max_rows * (node_h + gap_y)
     width = margin * 2 + len(DBT_LAYERS) * col_w + (len(DBT_LAYERS) - 1) * gap_x
     positions = {}
+    by_uid = {n.get("unique_id"): n for n in nodes if n.get("unique_id")}
     parts = [
         '<svg class="dbt-lineage" viewBox="0 0 {} {}" role="img" '
         'aria-label="dbt model lineage by layer">'.format(width, height)
@@ -1370,6 +2423,12 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
             name = node.get("name") or ""
             positions[uid] = (x + col_w / 2, y + node_h / 2, x, y)
             parts.append(
+                '<g class="dbt-lineage-node" data-model="{}" tabindex="0" '
+                'role="button" aria-label="Highlight lineage for {}">'.format(
+                    esc(name), esc(name)
+                )
+            )
+            parts.append(
                 '<rect x="{}" y="{}" width="{}" height="{}" rx="5" '
                 'fill="#eef0f4" stroke="#1f2430" stroke-width="1.2"/>'.format(
                     x, y, col_w, node_h
@@ -1382,26 +2441,30 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
                     x + col_w / 2, y + node_h / 2 + 3, esc(label)
                 )
             )
+            parts.append("</g>")
     for node in nodes:
         uid = node.get("unique_id")
         if uid not in positions:
             continue
+        to_name = node.get("name") or ""
         cx, cy, _, _ = positions[uid]
         for parent_id in upstream.get(uid) or []:
             if parent_id not in positions:
                 continue
-            px, py, plx, ply = positions[parent_id]
-            _, _, px0, py0 = positions[parent_id]
-            _, _, nx0, ny0 = positions[uid]
-            # parent right edge to child left edge
+            px, py, _, _ = positions[parent_id]
+            _, _, px0, _ = positions[parent_id]
+            _, _, nx0, _ = positions[uid]
             x1 = px0 + col_w
             y1 = py
             x2 = nx0
             y2 = cy
+            par_node = by_uid.get(parent_id)
+            from_name = (par_node.get("name") or "") if par_node else ""
             parts.append(
-                '<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
+                '<line class="dbt-lineage-edge" data-from="{}" data-to="{}" '
+                'x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
                 'stroke-width="1.5" marker-end="url(#dbt-arrow)"/>'.format(
-                    x1, y1, x2, y2
+                    esc(from_name), esc(to_name), x1, y1, x2, y2
                 )
             )
     parts.append("</svg>")
@@ -1409,8 +2472,7 @@ def _dbt_lineage_svg(nodes, upstream, by_name):
 
 
 def dbt_html(repo_root, out_dir):
-    manifest_path = _dbt_manifest_path(repo_root)
-    manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    manifest = _dbt_manifest_for_site(repo_root)
     if manifest is None:
         return placeholder_html("dbt")
 
@@ -1435,19 +2497,26 @@ def dbt_html(repo_root, out_dir):
 
     by_name = _dbt_unique_by_name(nodes)
     test_counts, test_names = _dbt_tests_by_model(manifest)
-    upstream, downstream, _by_id = _dbt_lineage_sets(nodes)
+    upstream, downstream, by_id = _dbt_lineage_sets(nodes)
 
     parts = [
         "<h2>dbt</h2>",
         _dbt_docs_banner(out_dir),
-        "<p>Models and lineage for the factory cost dataset (from manifest.json).</p>",
+        "<p>Models and lineage for the factory cost dataset "
+        "(manifest plus offline schema/SQL discovery).</p>",
     ]
     if catalog_note:
         parts.append(catalog_note)
     parts.append("<h2>Models</h2>")
+    parts.append(_dbt_filter_toolbar(len(nodes)))
     parts.append(_dbt_model_table(nodes, by_name, test_counts))
     parts.append("<h2>Lineage</h2>")
+    parts.append(
+        '<p class="note">Click a node to highlight upstream and downstream lineage. '
+        "Works without JavaScript as a static diagram.</p>"
+    )
     parts.append(_dbt_lineage_svg(nodes, upstream, by_name))
+    parts.append(_dbt_lineage_graph_json(nodes, upstream, downstream, by_id))
     parts.append(_dbt_model_details(nodes, by_name, upstream, downstream, test_names))
     return "\n".join(parts)
 
@@ -1528,6 +2597,7 @@ def main() -> None:
             version=esc(version),
             build_time=esc(now),
         )
+        body = enhance_page_html(body)
         with open(out_dir / filename, "w", encoding="utf-8") as fh:
             fh.write(body)
         written.append(filename)

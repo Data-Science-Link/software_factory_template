@@ -1,0 +1,10 @@
+name: opencode-spike
+on: issue_comment
+permissions: {}
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: echo DEEPINFRA_API_KEY

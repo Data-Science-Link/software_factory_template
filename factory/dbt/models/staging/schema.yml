@@ -41,3 +41,7 @@ models:
             values: ['pr_opened', 'pr_updated', 'no_changes', 'failed', 'cap_exceeded', 'gate_failed', 'cancelled']
       - not_null:
           column_name: actual_cost_usd
+      - not_null:
+          column_name: harness
+      - not_null:
+          column_name: provider

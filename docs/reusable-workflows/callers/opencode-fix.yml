@@ -1,0 +1,23 @@
+# Thin product-repo workflow: paste into .github/workflows/opencode-fix.yml (owner paste).
+name: opencode-fix
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  factory-fix:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.action == 'created' &&
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/oc fix') &&
+      github.event.comment.user.login == 'YOUR_OWNER_GITHUB_LOGIN' &&
+      github.event.comment.author_association == 'OWNER'
+    uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-opencode-fix.yml@v0.1.0
+    secrets: inherit
+    with:
+      factory_ref: v0.1.0
+      owner_login: YOUR_OWNER_GITHUB_LOGIN

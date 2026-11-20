@@ -196,7 +196,8 @@ cat >"$work/bin/opencode" <<'FAKE'
 if [ "$1" = stats ]; then cat "$FAKE_STATS"; exit 0; fi
 case "$1" in session | export) exit 0 ;; esac  # #31: the run meter calls session/export
 [ -f factory/specs/issue-7.md ] || { echo "spec file not pre-written"; exit 1; }
-sed -i 's/^title: .*/title: \\"tampered\\"/' factory/specs/issue-7.md
+sed 's/^title: .*/title: "tampered"/' factory/specs/issue-7.md >factory/specs/issue-7.md.tmp \
+  && mv factory/specs/issue-7.md.tmp factory/specs/issue-7.md
 echo '## Recent owner comments (0)' >>factory/specs/issue-7.md
 mkdir -p factory/x && echo hello >factory/x/hello.md
 printf 'working...\n## What I changed and why\n- Added factory/x/hello.md @someone\n- ```oops\n'
@@ -332,7 +333,8 @@ else bad "publish: evidence section"; echo "$ev_sec"; fi
 
 # Tampered artifact: the patch's spec file differs from the comment -> publish refuses.
 art3="$work/art3"; cp -R "$art" "$art3"
-sed -i 's/^+title: Simple fixture$/+title: Tampered/' "$art3/changes.patch"
+sed 's/^+title: Simple fixture$/+title: Tampered/' "$art3/changes.patch" >"$art3/changes.patch.tmp" \
+  && mv "$art3/changes.patch.tmp" "$art3/changes.patch"
 publish "$art3"
 if [ "$rc" -ne 0 ] && grep -q 'not the exact approved spec comment 102' "$art3.publish.log"; then
   ok "publish: patch with an edited spec file refused"
@@ -366,7 +368,8 @@ if grep -q 'GH_TOKEN is required' "$art4.publish.log" && grep -q "checked by pub
   ok "publish: HTTP 403 on the spec comment -> job A's validated copy, labeled in the PR"
 else bad "publish: 403 fallback (rc=$rc)"; tail -8 "$art4.publish.log"; fi
 art5="$work/art5"; cp -R "$art" "$art5"
-sed -i 's/^title: .*/title: Tampered copy/' "$art5/spec.md"
+sed 's/^title: .*/title: Tampered copy/' "$art5/spec.md" >"$art5/spec.md.tmp" \
+  && mv "$art5/spec.md.tmp" "$art5/spec.md"
 publish_live "$art5" 403
 if [ "$rc" -ne 0 ] && grep -q 'cannot confirm the approved spec comment 102' "$art5.publish.log"; then
   ok "publish: 403 fallback refuses a job A spec copy that doesn't match its sha256"

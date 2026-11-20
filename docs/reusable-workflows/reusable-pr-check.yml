@@ -1,0 +1,137 @@
+# Ready to paste into .github/workflows/reusable-pr-check.yml in the template repository (owner paste, #156).
+# Product repos call this file at a pinned tag; callers live under docs/reusable-workflows/callers/.
+# PR check: holds every PR body to a few factory rules (issue link, AI
+# disclosure, Cost line for Local open-weights runs). Script only: no model,
+# no spend. Rules live in scripts/pr-check.sh.
+name: reusable-pr-check
+
+on:
+  workflow_call:
+    inputs:
+      factory_ref:
+        description: Semver tag on software_factory_template (must match the @ref on the caller uses line).
+        type: string
+        required: true
+
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  run-records:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out factory template (pinned ref)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: "{{TEMPLATE_REPO}}"
+          ref: ${{ inputs.factory_ref }}
+          path: factory-template
+          persist-credentials: false
+
+      - name: Install factory tooling from template
+        run: |
+          set -euo pipefail
+          tpl="${GITHUB_WORKSPACE}/factory-template"
+          [ -d "$tpl/scripts" ] || { echo "factory install: missing template scripts" >&2; exit 1; }
+          rm -rf scripts
+          cp -a "$tpl/scripts" scripts
+          cp "$tpl/requirements-factory.txt" requirements-factory.txt
+          cp "$tpl/opencode.json" opencode.json
+          mkdir -p .factory
+          for f in FACTORY.md DOCS.md actions-security.md; do
+            [ -f "$tpl/.factory/$f" ] && cp "$tpl/.factory/$f" ".factory/$f"
+          done
+          rm -rf .factory/skills
+          cp -a "$tpl/.factory/skills" .factory/skills
+          if [ ! -f .factory/models.yaml ]; then
+            cp "$tpl/.factory/models.yaml" .factory/models.yaml
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install factory Python requirements
+        run: pip install -r requirements-factory.txt
+
+      - name: Run run-record fixture tests
+        run: bash scripts/test-run-records.sh
+
+      - name: Run factory site tests (#34, #170-#174)
+        run: |
+          bash scripts/test-factory-site.sh
+          bash scripts/test-factory-site-data.sh
+
+      - name: Run spec-files staging tests
+        run: bash scripts/test-opencode-stage-spec-files.sh
+
+  pr-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out factory template (pinned ref)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: "{{TEMPLATE_REPO}}"
+          ref: ${{ inputs.factory_ref }}
+          path: factory-template
+          persist-credentials: false
+
+      - name: Install factory tooling from template
+        run: |
+          set -euo pipefail
+          tpl="${GITHUB_WORKSPACE}/factory-template"
+          [ -d "$tpl/scripts" ] || { echo "factory install: missing template scripts" >&2; exit 1; }
+          rm -rf scripts
+          cp -a "$tpl/scripts" scripts
+          cp "$tpl/requirements-factory.txt" requirements-factory.txt
+          cp "$tpl/opencode.json" opencode.json
+          mkdir -p .factory
+          for f in FACTORY.md DOCS.md actions-security.md; do
+            [ -f "$tpl/.factory/$f" ] && cp "$tpl/.factory/$f" ".factory/$f"
+          done
+          rm -rf .factory/skills
+          cp -a "$tpl/.factory/skills" .factory/skills
+          if [ ! -f .factory/models.yaml ]; then
+            cp "$tpl/.factory/models.yaml" .factory/models.yaml
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python for factory spec-check tests
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install factory Python dependencies
+        run: python -m pip install -r requirements-factory.txt
+
+      - name: Run factory spec-check tests
+        run: bash scripts/test-spec-check.sh
+
+      - name: Check the PR body against the factory rules
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Passed through env, never pasted into the script, so the body can't run as code.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          PR_FILES="$(gh pr diff "$PR_NUMBER" --name-only --repo "$GITHUB_REPOSITORY")"
+          export PR_FILES
+          bash scripts/pr-check.sh
+          bash scripts/test-opencode-capture-usage.sh

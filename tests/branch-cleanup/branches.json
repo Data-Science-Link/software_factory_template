@@ -1,0 +1,15 @@
+{
+  "default_branch": "main",
+  "branches": [
+    {"name": "main", "committed_date": "2026-11-10T12:00:00Z"},
+    {"name": "release/1.2", "committed_date": "2026-10-01T00:00:00Z"},
+    {"name": "v2.0.0", "committed_date": "2026-09-01T00:00:00Z"},
+    {"name": "feat/user-work", "committed_date": "2026-01-01T00:00:00Z"},
+    {"name": "oc/issue-99-open", "committed_date": "2026-01-01T00:00:00Z"},
+    {"name": "oc/issue-50-merged", "committed_date": "2026-11-01T00:00:00Z"},
+    {"name": "oc/issue-40-closed-old", "committed_date": "2026-10-01T00:00:00Z"},
+    {"name": "oc/issue-41-closed-recent", "committed_date": "2026-11-18T00:00:00Z"},
+    {"name": "cursor/wip-recent", "committed_date": "2026-11-18T00:00:00Z"},
+    {"name": "cursor/orphan-stale", "committed_date": "2026-10-01T00:00:00Z"}
+  ]
+}
