@@ -88,6 +88,116 @@ else
   fail "collector: second run byte-identical"
 fi
 
+expect_collect_fail() {
+  local label=$1
+  shift
+  set +e
+  err="$("$PYTHON" scripts/factory-collect-runs.py "$@" 2>&1)"
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ] \
+    && printf '%s\n' "$err" | grep -q '^ERROR:' \
+    && ! printf '%s\n' "$err" | grep -q '^Traceback'; then
+    pass "collector: $label (exit $rc, ERROR on stderr, no traceback)"
+  else
+    fail "collector: $label (expected clean ERROR exit, rc=$rc)"
+    printf '%s\n' "$err" | sed 's/^/       /'
+  fi
+}
+
+expect_collect_fail "missing --from-json file" \
+  --from-json "$tmp/does-not-exist.json" --out "$tmp/missing-out"
+
+printf '[not valid json\n' >"$tmp/broken-comments.json"
+expect_collect_fail "malformed --from-json" \
+  --from-json "$tmp/broken-comments.json" --out "$tmp/broken-out"
+
+printf '\xff\xfe{\n' >"$tmp/binary-comments.json"
+expect_collect_fail "non-UTF-8 --from-json" \
+  --from-json "$tmp/binary-comments.json" --out "$tmp/binary-out"
+
+printf '{"run_id": "gha-1-1"}\n' >"$tmp/not-array.json"
+expect_collect_fail "--from-json not a JSON array" \
+  --from-json "$tmp/not-array.json" --out "$tmp/not-array-out"
+
+"$PYTHON" - "$tmp" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+tmpdir = Path(sys.argv[1])
+base = json.loads(Path("tests/run-records/pass-pr-opened.json").read_text(encoding="utf-8"))
+base["run_id"] = "gha-66666666666-1"
+base["work_type"] = "coding"
+body = (
+    "<!-- factory-run-record -->\n"
+    "Invalid work_type in bot comment.\n\n"
+    f"```json\n{json.dumps(base, indent=2)}\n```"
+)
+comments = [
+    {
+        "id": 9001,
+        "html_url": "https://github.com/example-org/sample-app/issues/1#issuecomment-9001",
+        "user": {"login": "github-actions[bot]"},
+        "body": body,
+        "updated_at": "2026-11-07T00:00:00Z",
+    }
+]
+path = tmpdir / "bad-work-type-comments.json"
+path.write_text(json.dumps(comments, indent=2) + "\n", encoding="utf-8")
+PY
+
+out_bad_wt="$tmp/runs-bad-wt"
+"$PYTHON" scripts/factory-collect-runs.py \
+  --from-json "$tmp/bad-work-type-comments.json" \
+  --out "$out_bad_wt" >"$tmp/bad-wt-summary.txt"
+
+if [ ! -f "$out_bad_wt/gha-66666666666-1.json" ] \
+  && grep -Fq "work_type" "$tmp/bad-wt-summary.txt"; then
+  pass "collector: bad work_type in comment skipped"
+else
+  fail "collector: bad work_type in comment skipped"
+fi
+
+"$PYTHON" - "$tmp" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+tmpdir = Path(sys.argv[1])
+base = json.loads(Path("tests/run-records/pass-pr-opened.json").read_text(encoding="utf-8"))
+base["run_id"] = "gha-55555555555-1"
+base["tokens_in"] = -1
+body = (
+    "<!-- factory-run-record -->\n"
+    "Negative tokens in bot comment.\n\n"
+    f"```json\n{json.dumps(base, indent=2)}\n```"
+)
+comments = [
+    {
+        "id": 9002,
+        "html_url": "https://github.com/example-org/sample-app/issues/1#issuecomment-9002",
+        "user": {"login": "github-actions[bot]"},
+        "body": body,
+        "updated_at": "2026-11-07T00:00:00Z",
+    }
+]
+path = tmpdir / "negative-tokens-comments.json"
+path.write_text(json.dumps(comments, indent=2) + "\n", encoding="utf-8")
+PY
+
+out_neg="$tmp/runs-neg"
+"$PYTHON" scripts/factory-collect-runs.py \
+  --from-json "$tmp/negative-tokens-comments.json" \
+  --out "$out_neg" >"$tmp/neg-summary.txt"
+
+if [ ! -f "$out_neg/gha-55555555555-1.json" ] \
+  && grep -Fq "tokens_in" "$tmp/neg-summary.txt"; then
+  pass "collector: negative tokens_in in comment skipped"
+else
+  fail "collector: negative tokens_in in comment skipped"
+fi
+
 if GITHUB_REPOSITORY='acme-corp/widget-factory' "$PYTHON" -c "
 from pathlib import Path
 import importlib.util

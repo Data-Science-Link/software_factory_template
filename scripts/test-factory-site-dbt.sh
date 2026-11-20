@@ -253,6 +253,29 @@ else
   fail "dbt tab renders search, badges, lineage graph data, and CFO nodes"
 fi
 
+# ---- 11a. Cross-tab Financials pacing and Backlog filter UX on same build ----
+data_all="$tmpdir/data_all"
+out_all="$tmpdir/out_all"
+mkdir -p "$data_all"
+cp tests/site-data/sample-marts/*.json "$data_all/marts/" 2>/dev/null || mkdir -p "$data_all/marts" && cp tests/site-data/sample-marts/*.json "$data_all/marts/"
+if [ -f tests/site/fixtures/issues.json ]; then
+  cp tests/site/fixtures/issues.json "$data_all/backlog.json"
+fi
+"$PYTHON" scripts/factory-site.py \
+  --repo-root "$repo1" \
+  --out "$out_all" \
+  --data "$data_all" \
+  --now "$PINNED_NOW" >/dev/null
+if grep -q 'id="financials-pacing-banner"' "$out_all/financials.html" \
+   && grep -q 'id="financials-export-work-type-csv"' "$out_all/financials.html" \
+   && grep -q 'id="backlog-filter-reset"' "$out_all/backlog.html" \
+   && grep -q 'Showing' "$out_all/backlog.html" \
+   && grep -q 'issues</p>' "$out_all/backlog.html"; then
+  pass "sample build wires Financials pacing and Backlog reset/count controls"
+else
+  fail "sample build wires Financials pacing and Backlog reset/count controls"
+fi
+
 # ---- 11. Wide graph: seven-plus children downstream of fct ----
 if "$PYTHON" - "$html1" <<'PY'
 import re, sys

@@ -6,18 +6,39 @@ Reusable workflows pin a template release tag (**#156**). Bootstrap with the CLI
 
 **Stuck?** [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
-## 0. Five-minute path (recommended)
+## 0. Three-step quickstart (recommended)
 
-From a checkout of this template ([docs/CLI.md](CLI.md)):
+From a checkout of this template on tag `v0.1.0` (or `main` until the tag is cut). Install once: `pip install -r requirements-factory.txt`. Full narrative: [README.md](../README.md), [ADOPTING.md](../ADOPTING.md).
+
+**Step 1 — Preview the Factory Site (offline, no product repo)**
 
 ```bash
-python3 scripts/factory-cli.py init --target /path/to/product-repo
-python3 scripts/factory-cli.py doctor --repo-dir /path/to/product-repo
+bash scripts/factory-site-build.sh --offline --runs-dir examples/sample-runs --now "2026-11-20 12:00:00"
 ```
 
-1. **Bootstrap** — `init` scaffolds `.factory/`, caller workflow stubs, and doc starters ([docs/INIT_REPO.md](INIT_REPO.md)). Compare output to [examples/minimal-product-repo/](../examples/minimal-product-repo/).
-2. **Legacy copy** — Repos with full copied `scripts/` and workflows: [docs/MIGRATING.md](MIGRATING.md) and `python3 scripts/factory-cli.py migrate-adopter --repo-dir /path/to/product-repo --tag v0.1.0`.
-3. **Launch gate** — `python3 scripts/factory-cli.py owner-pack --version v0.1.0` (doctor, docs, workflow audit, release checks).
+Open `site/index.html`. Golden fixtures live under [examples/](../examples/README.md). Optional monthly packet: `python3 scripts/factory-monthly-review.py --runs-dir examples/sample-runs --as-of 2026-11-20` ([MONTHLY_REVIEW.md](MONTHLY_REVIEW.md)).
+
+**Step 2 — Bootstrap the product repo**
+
+```bash
+python3 scripts/factory-init-repo.py \
+  --target /path/to/product-repo \
+  --owner YOUR_GITHUB_LOGIN \
+  --template-repo YOUR_ORG/software_factory_template \
+  --tag v0.1.0
+```
+
+Use `--dry-run` first. Compare stamped files to [examples/minimal-product-repo/](../examples/minimal-product-repo/) (`mode.yml`, `models.yaml`, `factory/budget.yml`, `DECISIONS.md`, `AGENTS.md`). CLI alias: `python3 scripts/factory-cli.py init --target /path/to/product-repo` ([docs/CLI.md](CLI.md), [INIT_REPO.md](INIT_REPO.md)).
+
+**Step 3 — Verify and run the pilot**
+
+```bash
+python3 scripts/factory-doctor.py --repo-dir /path/to/product-repo --public
+```
+
+Then secrets, labels, and owner workflow paste from the sections below, and [PILOT_RUNBOOK.md](PILOT_RUNBOOK.md). Template owners before going public: [PUBLIC_LAUNCH_RUNBOOK.md](PUBLIC_LAUNCH_RUNBOOK.md) and [OWNER_WORKFLOW_SYNC.md](OWNER_WORKFLOW_SYNC.md).
+
+**Legacy copy** — Repos with full copied `scripts/` and workflows: [MIGRATING.md](MIGRATING.md) and `python3 scripts/factory-cli.py migrate-adopter --repo-dir /path/to/product-repo --tag v0.1.0`.
 
 ## 1. Copy the factory (manual alternative)
 

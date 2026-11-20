@@ -54,7 +54,7 @@ expected = {
     "doctor", "init", "models-check", "model-scout", "triage", "spec-lint", "spec-check",
     "backlog", "decision-log", "run-review", "fix-policy", "audit-workflows", "check-docs",
     "critic-context", "critic-run", "test-all", "cost-digest", "cost-reconcile", "predict-cost",
-    "routing-report", "cache-report", "site", "site-smoke", "prepublic", "branch-cleanup",
+    "routing-report", "cache-report", "monthly-review", "site", "site-smoke", "prepublic", "branch-cleanup",
     "release", "sync-repos", "reusable-check", "migrate-adopter", "owner-pack",
 }
 missing = expected - names
@@ -181,6 +181,15 @@ fi
 # Pass-through: model-scout --help
 run_cli model-scout --help
 assert_rc "model-scout --help" 0
+
+# Pass-through: monthly-review --help
+run_cli monthly-review --help
+assert_rc "monthly-review --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "monthly-review --help shows usage"
+else
+  bad "monthly-review --help shows usage"
+fi
 if grep -qi "usage" "$work/out"; then
   ok "model-scout --help shows usage"
 else
