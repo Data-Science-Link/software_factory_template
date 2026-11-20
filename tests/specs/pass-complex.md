@@ -33,6 +33,8 @@ x
 x
 ## Acceptance criteria
 x
+## Bad inputs and edge cases
+- Missing file: exit 1 with a clear message; covered by `tests/specs/pass-complex.md` fixture run.
 ## Verification
 x
 ## Classification

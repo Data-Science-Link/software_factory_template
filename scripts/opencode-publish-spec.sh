@@ -21,7 +21,7 @@ trap 'rm -rf "$PRISTINE_DIR"' EXIT
 # Same layout as the repo (scripts/ + .factory/models.yaml), so the helper finds models.yaml.
 P="$PRISTINE_DIR/scripts"
 mkdir -p "$P" "$PRISTINE_DIR/.factory"
-for f in opencode-artifact-scan.sh opencode-spec-draft.py factory-spec-check.py factory-predict-cost.py opencode-text-block.sh; do
+for f in opencode-artifact-scan.sh opencode-spec-draft.py factory_spec_front_matter.py factory-spec-check.py factory-predict-cost.py opencode-text-block.sh; do
   git show "HEAD:scripts/$f" >"$P/$f"
 done
 git show HEAD:.factory/models.yaml >"$PRISTINE_DIR/.factory/models.yaml"

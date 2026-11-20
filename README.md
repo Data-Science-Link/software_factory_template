@@ -1,88 +1,97 @@
 # Software factory template
 
-A small, copyable way to run a repo where AI agents do most of the building and a human keeps the judgment calls. Everything lives in one folder, `.factory/`, as plain markdown, so it works with any model or chat tool and survives switching either.
+A copyable way to run a repo where AI agents do most of the building and a human keeps the judgment calls. The method lives in `.factory/` as plain markdown, so it survives model and tool changes.
 
 ## The idea in about 20 seconds
 
-Work arrives as a **GitHub issue**. A **Factory Manager** bot triages it and writes a **handoff block** on the issue: the goal, a full self-contained prompt, the files to read first, the done checks, a size (simple / standard / complex), and the model to use. Hard work gets short product and technical **specs that a human reviews** first. **Agents implement on a PR**, another agent **reviews** it, and the PR is **verified** with CI and evidence (screenshots for UI, real numbers for output changes). The **human owner gives the product gate**, the PR is **merged**, and the manager **monitors** the deploy and scheduled jobs. Whatever went wrong becomes a **lesson written back into the skills and `DECISIONS.md`**, so the next agent doesn't repeat it.
+Work enters as a **GitHub issue**. The **owner** marks what to work on (`factory:selected`). The **Factory Manager** (one bot per repo) drafts a **spec**, routes model and cost, and starts **GitHub Actions** workers on **DeepInfra** via owner comments: `/oc spec`, `/oc run`, and `/oc fix`. Each run opens or updates a **PR** with a standard shape, a **gate** before the runner stops, and a **run record** (`factory/runs/`). The owner gives the **product gate** for normal and high risk; trivial work may merge on green checks. A generated **factory site** (Architecture, Financials, Backlog, dbt tabs) tracks the loop and spend; weekly and monthly caps live in owner-only **`factory/budget.yml`**. Lessons go back into skills and [`DECISIONS.md`](.factory/DECISIONS.md).
 
-It draws on two talks:
+The loop is intentionally boring: same spec sections, same PR template, same JSON per run, so cost and quality are comparable issue to issue. Full playbook: [`.factory/FACTORY.md`](.factory/FACTORY.md). Vision and retirement notes: [`.factory/VISION.md`](.factory/VISION.md).
 
-- Zach Lloyd, [Software Engineering Is Becoming Factory Engineering](https://www.youtube.com/watch?v=tUPPVhBBcoM): the loop itself (triage, specs for hard work, build, review, verify, product review, ship, monitor, feed back).
-- Nate B Jones, [The AI Bottleneck](https://www.youtube.com/watch?v=2IAYFgAqX6g): keep work multiplayer, keep history out of the chat, humans still answer for what ships, leave work someone else can pick up, let agents see their own results, and drop process that stopped helping.
+## Default worker path (cloud)
+
+| Step | Who | What happens |
+|---|---|---|
+| Intake | Anyone | GitHub issue with a one-sentence outcome. |
+| Selection | Owner | Label `factory:selected` or tell the manager to select the issue. Only selected issues continue. |
+| Spec | Manager (+ optional `/oc spec`) | Approved spec as an issue comment; the run commits `factory/specs/issue-<N>.md`. |
+| Run | Owner | Comment `/oc run` on the issue → Actions worker (OpenCode + DeepInfra per [`.factory/models.yaml`](.factory/models.yaml)). |
+| Fix | Owner | On the bot PR (`oc/issue-<N>-<run_id>`), comment `/oc fix <what to fix>`. |
+| Review | Manager | One `Factory review` comment; CI + harness evidence on the PR. |
+| Merge | Manager or owner | By risk class (see [ADOPTING.md](ADOPTING.md)); workers never merge. |
+
+**Inference** is billed per token on DeepInfra (separate Actions-only key in the `DEEPINFRA_API_KEY` secret). **Compute** is a clean `ubuntu-latest` runner per job. **Cursor cloud agents** remain useful for building the factory itself and as a backup harness; they are not the default for selected product issues.
 
 ## Roles
 
 | Role | What they do |
 |---|---|
-| **Human owner** | Decides. Approves specs for hard work and gives the product gate before normal or high-risk work merges. |
-| **Factory Manager** (bot, one per repo) | Runs the loop: triages issues, writes handoff blocks, launches and reviews cloud agents, merges within its authority, watches deploys and scheduled jobs. |
-| **Giver** (optional bot) | Keeps the asks ledger, drafts decision entries, and challenges done claims and priorities against what the owner actually asked for. Never builds or merges. |
-| **Coordinator / chief of staff** (optional) | Intake: turns a chat ask into a GitHub issue and hands it to the manager. |
-| **Builder** | Maintains this template: turns lessons from live repos into method changes here. |
+| **Human owner** | Chooses work, approves high-risk specs and the product gate before normal/high PRs merge, sets budgets. |
+| **Factory Manager** (bot, one per repo) | Triage, specs, `/oc` kickoff, PR review, merges within authority, spend and gate watching. |
+| **Giver** (optional) | Asks ledger, decision drafts, healthy challenge — never builds or merges. |
+| **Coordinator** (optional) | Chat or intake → GitHub issue → hand off to the manager. |
+| **Worker** | Actions harness on a branch: build, test, open/update PR — no merge, no workflow edits. |
 
-Workers (the cloud agents the manager launches) build, test, and review on a branch; they don't merge.
+## Factory site and budgets
+
+The **factory site** is static HTML generated under `site/` (see [`factory/site/README.md`](factory/site/README.md)):
+
+- **Architecture** — loop, roles, routing, and guards from `FACTORY.md` and `models.yaml`.
+- **Financials** — spend, forecasts, and run rate from dbt marts (via `factory/dbt/` and run records).
+- **Backlog** — open issues and epics (titles always shown).
+- **dbt** — model lineage for the financial pipeline.
+
+On a **public** repo, deploy with the owner-pasted `factory-site` workflow to **GitHub Pages**. On a **private** repo, the same build is a downloadable Actions artifact (Pages would expose the site). Refresh: every push to `main` that touches site inputs, weekly, and on demand — see [docs/SETUP.md](docs/SETUP.md) §7.
+
+**`factory/budget.yml`** holds weekly/monthly site budgets and related caps. It is **owner-only**; workers must not edit it. Routing caps and per-issue targets also live in [`.factory/models.yaml`](.factory/models.yaml) (owner-only).
 
 ## Using or adopting the factory
 
-For a person or an agent already working in an installed factory, start with [ADOPTING.md](ADOPTING.md). To add the factory to a new repo, follow the [setup checklist](docs/SETUP.md). Version tags and the release process are in [docs/RELEASING.md](docs/RELEASING.md) and [CHANGELOG.md](CHANGELOG.md). Pinning a product repo to a release tag is planned (#156); until then, copy the files as in the checklist below.
-
-## Quickstart
-
-Get started with this template in under a minute:
-
-1. [Copy the `.factory/` folder](#how-to-adopt-it-in-a-repo) into your repo root as-is
-2. [Fill in `.factory/DOCS.md`](#how-to-adopt-it-in-a-repo) with your repo's specifics
-3. [Set `.factory/MODEL_ROUTING.md`](#how-to-adopt-it-in-a-repo) for your plan and models
-4. [Open your first issue](#how-to-adopt-it-in-a-repo) to start the factory process
-5. Running agents on your own machine? Do the one-time safety setup in [`.factory/skills/local-agent-safety.md`](.factory/skills/local-agent-safety.md) first
-6. Running an issue locally (desktop Cursor + DeepInfra)? Do the owner checklist in [`.factory/skills/local-owner-setup.md`](.factory/skills/local-owner-setup.md) once, then type `do issue N` in Agent mode. The always-on rule [`.cursor/rules/factory.mdc`](.cursor/rules/factory.mdc) does the rest
-
-For full details, see the complete [How to adopt](#how-to-adopt-it-in-a-repo) section below.
-
-## How to adopt it in a repo
-
-The full checklist, including the DeepInfra secret, labels, and checks, is in [docs/SETUP.md](docs/SETUP.md). The steps below are the file-copy path until pinning a release tag is available (#156).
-
-1. Copy the `.factory/` folder into the repo root as-is.
-2. Fill in `.factory/DOCS.md` with your repo's real paths (tests, deploy, architecture), the names of the secrets agents can use, your key view, and your headline health numbers.
-3. Add repo-specific skills under `.factory/skills/`.
-4. Keep `.factory/DECISIONS.md` append-only: add new entries at the bottom, and supersede old ones rather than editing them.
-5. Set `.factory/MODEL_ROUTING.md` for your plan and the models you can use.
-6. Copy `scripts/` and `.github/` (secret-scan workflow and the `protect-main` ruleset) into the repo. Then, as the owner: run `scripts/install-hooks.sh` in each clone and `scripts/protect-main.sh` once per repo (see `.factory/skills/local-agent-safety.md`).
-7. Copy the starters in `.factory/sketches/` into place (`CONTRIBUTING.md`, PR template, CODEOWNERS), and add your own `LICENSE` and `SECURITY.md`.
-8. Examples labeled with a source repo (for example "perspectiverse #88" in `DECISIONS.md`) are illustrative, taken from repos where the method was run. Keep them or replace them with your own.
-
-## File map
-
-| File | What it's for |
+| Audience | Start here |
 |---|---|
-| `.factory/FACTORY.md` | The playbook: triggers, roles, the eight-step loop, merge authority by risk class, deploy and scheduled-job watching, private-repo notes, and evidence rules learned from live misses. |
-| `.factory/DECISIONS.md` | Append-only decision log with an entry template. In this template it holds the method's history; in a project repo it holds that repo's own decisions. |
-| `.factory/DOCS.md` | A map to the repo's real docs (pointers, not copies), plus tables for secret names agents can use, the key view, and health numbers. |
-| `.factory/MODEL_ROUTING.md` | Which model to pin for each kind of work, cost rules, what to do when usage limits are hit, and the Local open-weights setup. |
-| `.factory/skills/factory-loop.md` | Step-by-step for moving one issue through the loop: sync, triage and handoff block, build, review and verify, recording the human gate, merge, and follow-up. |
-| `.factory/skills/intake-from-coordinator.md` | For the coordinator: turn a chat ask into an issue, then hand it to the manager. |
-| `.factory/skills/giver.md` | For the giver: asks ledger, decision drafts, healthy challenge, and how it behaves in the room. |
-| `.factory/skills/liability-gates.md` | Hard stops and always-do rules (secrets, licenses, CI, over-claims, merge authority). Not legal advice. |
-| `.factory/skills/local-open-weights-run.md` | For a human running an issue locally on an open-weights model with their own provider key. |
-| `.factory/skills/local-owner-setup.md` | One-time owner checklist for local runs: gh, hooks, DeepInfra key, spending limit, antivirus, command allowlist. |
-| `.factory/skills/local-agent-safety.md` | One-time safety setup before any local agent runs: secret-scan hook, scoped `gh` token, command approvals, protect `main`. |
-| `.factory/skills/review-local-pr.md` | For the reviewing bot: the `Factory review` comment on a local agent's PR. |
-| `.cursor/rules/factory.mdc` | Always-on Cursor rule: handles `do issue N` and `address the review on PR N`, honest reporting, never rules. |
-| `.factory/sketches/README.md` | Where each sketch should be copied. |
-| `.factory/sketches/CONTRIBUTING.md` | Starter contributing guide: how the repo ships work, AI disclosure, DCO sign-off, high-risk paths. |
-| `.factory/sketches/github/pull_request_template.md` | PR template with the Factory loop checklist, risk class, AI disclosure, safety checklist, and Evidence section. |
-| `.factory/sketches/github/CODEOWNERS.example` | Starter CODEOWNERS that puts sensitive paths behind the maintainer's review. |
+| People already in an install | [ADOPTING.md](ADOPTING.md) — labels, `/oc` commands, merge rules, factory site. |
+| New repo install | [docs/SETUP.md](docs/SETUP.md) — copy checklist, secrets, labels, protection, site hosting. |
+| Releases and pinning | [docs/RELEASING.md](docs/RELEASING.md) and [CHANGELOG.md](CHANGELOG.md). Reusable workflow pins are planned (#156); until then, copy files from a release tag. |
+| The full loop and gates | [`.factory/FACTORY.md`](.factory/FACTORY.md). |
 
-## A note on model routing
+## Rollout checklist (copy into another repo)
 
-Cloud agents use pinned Cursor models from the routing table in `MODEL_ROUTING.md`, never Auto. The **Local open-weights** line in each handoff block is only for local runs on the human's own machine (default model: Qwen3-Coder via DeepInfra, with the human's own key). Cloud agents ignore that line and use the model they were launched with. API keys never go in the repo.
+Use this as a map; detail and copy-paste steps are in the linked docs.
+
+1. **Copy the factory tree** — `.factory/`, `scripts/`, `.github/` (workflows, PR template, `protect-main` ruleset), and `opencode.json`. See [docs/SETUP.md](docs/SETUP.md) §1.
+2. **Per-repo config** — Fill [`.factory/DOCS.md`](.factory/DOCS.md), append-only [`.factory/DECISIONS.md`](.factory/DECISIONS.md), and repo `AGENTS.md`. Set [`.factory/MODEL_ROUTING.md`](.factory/MODEL_ROUTING.md); review owner-only [`.factory/models.yaml`](.factory/models.yaml) and create **`factory/budget.yml`** with your caps.
+3. **Secrets (names only in docs)** — `DEEPINFRA_API_KEY` (Actions-only key, spending limit on the provider) and variable `FACTORY_DEEPINFRA_KEY_NAME` → `DEEPINFRA_API_KEY`. Never commit values. [docs/SETUP.md](docs/SETUP.md) §2.
+4. **Owner-pasted workflows** — OpenCode run/spec/fix workflows and `factory-site` (and financials refresh when used) are **high risk**: the owner's account pastes YAML under `.github/workflows/`; agent tokens must not have `workflow` scope. [docs/SETUP.md](docs/SETUP.md) §5–7, [ADOPTING.md](ADOPTING.md).
+5. **Labels and protection** — `factory:selected`, `epic`, `owner-action`, `priority:*`, `risk:high`; run `scripts/protect-main.sh` once as admin; `scripts/install-hooks.sh` in every clone. [docs/SETUP.md](docs/SETUP.md) §3–4.
+6. **Factory site** — Public repo: enable Pages (Source: GitHub Actions) and run the site workflow once. Private repo: use the artifact only. [docs/SETUP.md](docs/SETUP.md) §7.
+7. **Adjust workflow trigger login** — `/oc` workflows run only for comments from the repo **owner** account; change the hardcoded login when you copy workflows. [docs/SETUP.md](docs/SETUP.md) §9.
+8. **First smoke run** — Owner adds `factory:selected`, posts `/oc spec` (if needed), approves the spec, posts `/oc run`, confirms a PR with run record and green `pr-check`, `run-records`, and `gitleaks`. Commands and gates: [ADOPTING.md](ADOPTING.md) and [`.factory/FACTORY.md`](.factory/FACTORY.md).
+9. **Stay current** — Cut or follow [semver tags](docs/RELEASING.md) on this template; product repos pick up changes via copy or a future sync PR (#156).
+
+## File map (high level)
+
+| Path | Purpose |
+|---|---|
+| [`.factory/FACTORY.md`](.factory/FACTORY.md) | Playbook: triggers, loop, merge authority, evidence rules. |
+| [`.factory/VISION.md`](.factory/VISION.md) | Cloud factory design; what replaced the old default path. |
+| [`.factory/DECISIONS.md`](.factory/DECISIONS.md) | Append-only decision log (method history here; your repo keeps its own). |
+| [`.factory/templates/spec.md`](.factory/templates/spec.md) | Standard spec sections for selected issues. |
+| [`.factory/models.yaml`](.factory/models.yaml) | DeepInfra prices and routing (owner-only). |
+| [`.factory/skills/`](.factory/skills/) | Step-by-step skills (`factory-loop.md`, liability gates, review, intake). |
+| [`factory/specs/`](factory/specs/) | Approved specs committed from runs. |
+| [`factory/runs/`](factory/runs/) | One JSON run record per Actions worker run. |
+| [`factory/dbt/`](factory/dbt/) | dbt-duckdb project for spend marts feeding the site. |
+| [`factory/budget.yml`](factory/budget.yml) | Owner-only weekly/monthly budgets for the site and reports. |
+| [`scripts/`](scripts/) | Routing, gate, publish, site build, `pr-check.sh`, and guards. |
+
+## Local open-weights (optional fallback)
+
+**Retired as the default** (2026-11): selected product work runs on **Actions + DeepInfra**, not on a desktop harness. If Actions cannot run, the owner may still work from an approved spec in local Cursor with their own provider key — see [`.factory/skills/local-open-weights-run.md`](.factory/skills/local-open-weights-run.md), [`.factory/skills/local-owner-setup.md`](.factory/skills/local-owner-setup.md), [`.factory/skills/local-agent-safety.md`](.factory/skills/local-agent-safety.md), and the always-on rule [`.cursor/rules/factory.mdc`](.cursor/rules/factory.mdc) (`do issue N`, `address the review on PR N`). Same gates and PR shape; API keys never go in the repo.
 
 ## How changes to the template flow
 
-1. A lesson from a live repo, or a new idea, becomes a PR here first.
-2. The owner reviews and approves it.
-3. Once merged, the change is copied into each project repo's `.factory/` folder. **Planned (#156):** product repos will pin a release tag instead, and pick up a fix by merging a sync PR.
+1. A lesson from a live repo or a design change becomes a PR here first.
+2. The owner reviews and merges.
+3. Product repos copy updated `.factory/` and `scripts/`, or pin a release tag when #156 lands.
 
-`.factory/DECISIONS.md` in this repo is the method's history: why each rule exists and what prompted it. Project repos keep their own separate decision log. See [docs/RELEASING.md](docs/RELEASING.md).
+Method history stays in this repo's [`.factory/DECISIONS.md`](.factory/DECISIONS.md); each product repo keeps a separate log. Release process: [docs/RELEASING.md](docs/RELEASING.md).

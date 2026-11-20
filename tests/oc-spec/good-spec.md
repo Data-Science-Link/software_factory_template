@@ -40,6 +40,9 @@ Anything else.
 ## Acceptance criteria
 - [ ] The file exists with one line.
 
+## Bad inputs and edge cases
+- Missing `factory/x/hello.md` after the worker runs → `cat` exits non-zero; caught manually in Verification.
+
 ## Verification
 ```bash
 cat factory/x/hello.md

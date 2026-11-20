@@ -99,15 +99,37 @@ else bad "verify: basic run"; cat "$work/v1.md"; fi
 # shellcheck disable=SC2016 # backticks are literal markdown
 mkspec() { printf '## Verification\n```bash\n%s\n```\n' "$1" >"$work/$2"; }
 mkspec $'false\necho after' mid.md; vrun v100a "$work/mid.md"
-if grep -q 'FAIL: 1 command(s) exited non-zero' "$work/v100a.md" && grep -q 'FAILED line 1: exit 1: false' "$work/v100a.md" && grep -qx after "$work/v100a.md"; then
-  ok "verify: middle command fails, last passes -> FAIL, the failing command listed, later commands still ran"
+if grep -q 'FAIL: 1 command(s) exited non-zero' "$work/v100a.md" && grep -q 'FAILED line 1: exit 1: false' "$work/v100a.md" \
+  && ! grep -qx after "$work/v100a.md" && grep -q 'block exit [1-9]' "$work/v100a.md"; then
+  ok "verify: first failing command fails the block; later commands are not run (#148)"
 else bad "verify: middle failure"; cat "$work/v100a.md"; fi
 mkspec $'ls no-such-file\ntrue\nsh -c "exit 3"\necho done' two.md; vrun v100b "$work/two.md"
-if grep -q 'FAIL: 2 command(s)' "$work/v100b.md" && grep -q 'FAILED line 1: exit 2: ls no-such-file' "$work/v100b.md" && grep -q 'FAILED line 3: exit 3' "$work/v100b.md"; then
-  ok "verify: every failing command reported with its line and exit code"
+if grep -q 'FAIL: 1 command(s)' "$work/v100b.md" && grep -q 'FAILED line 1: exit 2: ls no-such-file' "$work/v100b.md" \
+  && ! grep -qx done "$work/v100b.md" && ! grep -q 'FAILED line 3: exit 3' "$work/v100b.md"; then
+  ok "verify: block stops at the first failing command (errexit)"
 else bad "verify: two failures"; cat "$work/v100b.md"; fi
 mkspec $'false | cat\necho ok' pipe.md; vrun v100c "$work/pipe.md"
-if grep -q 'FAIL: 1 command' "$work/v100c.md"; then ok "verify: a failing pipeline stage counts (pipefail)"; else bad "verify: pipefail"; cat "$work/v100c.md"; fi
+if grep -q 'FAIL: 1 command' "$work/v100c.md" && ! grep -qx ok "$work/v100c.md"; then
+  ok "verify: a failing pipeline stage counts (pipefail); block stops before later commands"
+else bad "verify: pipefail"; cat "$work/v100c.md"; fi
+# #148: head/tail on the verification block cannot mask an upstream failure (pipefail + errexit).
+mkspec $'false | tail -3\necho after' v148tail.md; vrun v148tail "$work/v148tail.md"
+if grep -q 'FAIL:' "$work/v148tail.md" && grep -q 'FAILED line 1:' "$work/v148tail.md" \
+  && ! grep -qx after "$work/v148tail.md" && grep -q 'block exit [1-9]' "$work/v148tail.md"; then
+  ok "verify: false | tail -3 fails the block and does not run following commands (#148)"
+else bad "verify: false | tail -3"; cat "$work/v148tail.md"; fi
+mkspec $'sh -c "exit 5" | head -1\necho after' v148head.md; vrun v148head "$work/v148head.md"
+if grep -q 'FAIL:' "$work/v148head.md" && grep -q 'FAILED line 1:' "$work/v148head.md" \
+  && ! grep -qx after "$work/v148head.md" && grep -q 'block exit [1-9]' "$work/v148head.md"; then
+  ok "verify: failing upstream piped to head -1 fails the block (#148)"
+else bad "verify: upstream | head -1"; cat "$work/v148head.md"; fi
+mkspec $'printf "%s\\n" only-one | head -1\necho ok' v148ok.md; vrun v148ok "$work/v148ok.md"
+if grep -q 'PASS: every command exited 0' "$work/v148ok.md" && grep -qx ok "$work/v148ok.md"; then
+  ok "verify: healthy command | head -1 still PASS (#148)"
+else bad "verify: healthy | head -1"; cat "$work/v148ok.md"; fi
+if grep -q 'Python: python3.12' "$work/v1.md" || grep -q 'Python: system python3' "$work/v1.md"; then
+  ok "verify: evidence records which Python the harness put on PATH (#148)"
+else bad "verify: python line in evidence"; grep '^Python:' "$work/v1.md" || true; fi
 mkspec $'if false; then echo no; fi\ntest -f nope || echo fallback\ncd factory/x\nls base.md' cond.md; vrun v100d "$work/cond.md"
 if grep -q 'PASS: every command exited 0' "$work/v100d.md" && grep -qx base.md "$work/v100d.md"; then
   ok "verify: tested conditions are not failures; cd carries over between commands"
@@ -303,6 +325,7 @@ else bad "publish: note section"; echo "$note_sec"; fi
 ev_sec="$(sed -n '/^## Evidence/,/^## Notes for reviewers/p' "$body")"
 if grep -q 'not by the model' <<<"$ev_sec" && grep -qx 'key=unset gh=unset' <<<"$ev_sec" && grep -q '^Run ID: 555' <<<"$ev_sec" \
   && [ "$(grep -c '^```' <<<"$ev_sec")" = 2 ] && grep -q 'exact copy of spec comment 102, checked by publish' "$body" \
+  && grep -qF '<!-- factory-verification:start -->' <<<"$ev_sec" && grep -qF '<!-- factory-verification:end -->' <<<"$ev_sec" \
   && grep -q 'Approve workflows to run' "$body"; then
   ok "publish: Evidence has run facts + fenced harness output; spec file checked; #74 note"
 else bad "publish: evidence section"; echo "$ev_sec"; fi
