@@ -497,9 +497,12 @@ def _backlog_filter_bar(total):
         '<div class="filter-pills" role="group" aria-label="Backlog filters">'
         + "".join(pill_html)
         + "</div>"
+        '<div class="backlog-filter-toolbar">'
+        '<button type="button" id="backlog-filter-reset" class="btn-secondary">'
+        "Reset filters</button>"
         '<p id="backlog-filter-count" class="backlog-filter-count" aria-live="polite">'
-        "Showing {} of {}</p>".format(esc(total), esc(total))
-        + "</div>"
+        "Showing {} of {} issues</p>".format(esc(total), esc(total))
+        + "</div></div>"
     )
 
 
@@ -711,7 +714,68 @@ tr:nth-child(even) td { background: var(--fs-row-alt); }
   border-color: var(--fs-accent);
 }
 .copy-btn.is-copied { border-color: #2e7d32; color: #2e7d32; }
-.financials-runs-toolbar { margin: 0.5rem 0 0.75rem; }
+.financials-runs-toolbar,
+.financials-work-type-toolbar { margin: 0.5rem 0 0.75rem; }
+.financials-pacing {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+}
+.financials-pacing-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.financials-pacing-badge {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-accent-soft);
+}
+.financials-pacing--watch .financials-pacing-badge {
+  border-color: #c77d00;
+  background: #fff4d6;
+  color: #7a4d00;
+}
+.financials-pacing--over-budget .financials-pacing-badge {
+  border-color: #b3261e;
+  background: #fde8e7;
+  color: #7f1d1d;
+}
+.financials-pacing--no-cap .financials-pacing-badge {
+  border-color: var(--fs-muted);
+  background: var(--fs-row-alt);
+  color: var(--fs-muted);
+  text-transform: none;
+}
+.financials-pacing-summary {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--fs-text);
+  flex: 1 1 14rem;
+}
+.financials-pacing-hint-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--fs-muted);
+}
+.backlog-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-top: 0.35rem;
+}
 .btn-secondary {
   padding: 0.4rem 0.85rem;
   font-size: 0.9rem;
@@ -882,7 +946,9 @@ nav.tabs a[role="tab"]:focus-visible {
   .dbt-filter,
   .filter-pills,
   .loop-stage-bar,
-  .financials-runs-toolbar { display: none !important; }
+  .financials-runs-toolbar,
+  .financials-work-type-toolbar,
+  .financials-pacing-hint { display: none !important; }
   body { background: #fff; color: #000; }
   .site-header {
     background: #fff;
@@ -1020,8 +1086,22 @@ def site_enhancement_script():
         if (match) shown += 1;
       });
       if (countEl) {
-        countEl.textContent = "Showing " + shown + " of " + rows.length;
+        countEl.textContent = "Showing " + shown + " of " + rows.length + " issues";
       }
+    }
+    function resetBacklogFilters() {
+      activeFilter = "all";
+      backlogBar.querySelectorAll(".filter-pill").forEach(function (p) {
+        var isAll = (p.getAttribute("data-filter") || "") === "all";
+        p.classList.toggle("is-active", isAll);
+        p.setAttribute("aria-pressed", isAll ? "true" : "false");
+      });
+      if (searchInput) searchInput.value = "";
+      applyBacklogFilter();
+    }
+    var resetBtn = document.getElementById("backlog-filter-reset");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", resetBacklogFilters);
     }
     backlogBar.querySelectorAll(".filter-pill").forEach(function (pill) {
       pill.addEventListener("click", function () {
@@ -1073,6 +1153,45 @@ def site_enhancement_script():
   }
   if (exportBtn) {
     exportBtn.addEventListener("click", exportRunsCsv);
+  }
+
+  var workTypeTable = document.getElementById("spend-by-work-type-table");
+  var workTypeExportBtn = document.getElementById("financials-export-work-type-csv");
+  function exportWorkTypeCsv() {
+    if (!workTypeTable) return;
+    var header = [
+      "work_type",
+      "run_count",
+      "pass_rate_pct",
+      "total_actual_cost_usd",
+      "cost_share_pct",
+      "avg_cost_usd",
+      "tokens",
+    ];
+    var lines = [header.join(",")];
+    workTypeTable.querySelectorAll("tbody tr").forEach(function (row) {
+      lines.push([
+        csvEscape(row.getAttribute("data-work-type") || ""),
+        csvEscape(row.getAttribute("data-runs") || ""),
+        csvEscape(row.getAttribute("data-pass-rate") || ""),
+        csvEscape(row.getAttribute("data-total-cost") || ""),
+        csvEscape(row.getAttribute("data-share") || ""),
+        csvEscape(row.getAttribute("data-avg-cost") || ""),
+        csvEscape(row.getAttribute("data-tokens") || ""),
+      ].join(","));
+    });
+    var blob = new Blob([lines.join("\\n") + "\\n"], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "factory-spend-by-work-type.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  if (workTypeExportBtn) {
+    workTypeExportBtn.addEventListener("click", exportWorkTypeCsv);
   }
   if (runsTable) {
     runsTable.querySelectorAll("th.sortable").forEach(function (th) {
@@ -1773,6 +1892,76 @@ def _card(class_warn, title, amount_html, detail_html):
     )
 
 
+def _budget_pacing_status(week_used, month_used, weekly_budget_usd, monthly_budget_usd):
+    """Return (css_slug, label) for the Financials pacing badge."""
+    has_week = weekly_budget_usd > 0
+    has_month = monthly_budget_usd > 0
+    if not has_week and not has_month:
+        return "no-cap", "No cap set"
+    pcts = []
+    if has_week:
+        pcts.append(float(week_used))
+    if has_month:
+        pcts.append(float(month_used))
+    peak = max(pcts) if pcts else 0.0
+    if peak >= 100.0:
+        return "over-budget", "Over budget"
+    if peak >= 75.0:
+        return "watch", "Watch"
+    return "on-track", "On track"
+
+
+def _financials_pacing_banner(
+    week_used,
+    month_used,
+    week_spend,
+    month_spend,
+    weekly_budget_usd,
+    monthly_budget_usd,
+):
+    slug, label = _budget_pacing_status(
+        week_used, month_used, weekly_budget_usd, monthly_budget_usd
+    )
+    summary_bits = []
+    if weekly_budget_usd > 0:
+        summary_bits.append(
+            "Week {:.1f}% (${:.2f} of ${:.2f})".format(
+                week_used, week_spend, weekly_budget_usd
+            )
+        )
+    else:
+        summary_bits.append("Week ${:.2f} (no weekly cap)".format(week_spend))
+    if monthly_budget_usd > 0:
+        summary_bits.append(
+            "Month {:.1f}% (${:.2f} of ${:.2f})".format(
+                month_used, month_spend, monthly_budget_usd
+            )
+        )
+    else:
+        summary_bits.append("Month ${:.2f} (no monthly cap)".format(month_spend))
+    summary = " · ".join(summary_bits)
+    review_cmd = (
+        "python3 scripts/factory-monthly-review.py\n"
+        "python3 scripts/factory-cost-digest.py"
+    )
+    return (
+        '<section id="financials-pacing-banner" '
+        'class="financials-pacing financials-pacing--{}" '
+        'aria-label="Budget pacing status">'.format(esc(slug))
+        + '<div class="financials-pacing-head">'
+        + '<span id="financials-pacing-status" class="financials-pacing-badge">'
+        + esc(label)
+        + "</span>"
+        + '<p class="financials-pacing-summary">'
+        + esc(summary)
+        + "</p></div>"
+        + '<div class="financials-pacing-hint">'
+        + '<p class="financials-pacing-hint-label">Owner review commands</p>'
+        + render_copyable_codeblock(review_cmd, "financials-review-cmd")
+        + "</div></section>"
+    )
+
+
 def _default_duckdb_path(repo_root):
     return Path(repo_root) / "factory" / "dbt" / "target" / "factory.duckdb"
 
@@ -1923,6 +2112,10 @@ def _render_spend_by_work_type_table(rows):
     if not rows:
         return '<p class="note">No spend-by-work-type data available.</p>'
     parts = [
+        '<div class="financials-work-type-toolbar">',
+        '<button type="button" id="financials-export-work-type-csv" class="btn-secondary">'
+        "Export work-type CSV</button>",
+        "</div>",
         '<table id="spend-by-work-type-table">',
         "<thead><tr>",
         "<th>Work type</th><th>Runs</th><th>Pass rate</th>",
@@ -1949,16 +2142,35 @@ def _render_spend_by_work_type_table(rows):
                 int(tcached or 0),
                 int(tout or 0),
             )
+        wt = row.get("work_type", "—")
+        run_count = int(row.get("run_count") or 0)
+        pass_rate = row.get("pass_rate_pct")
+        pass_attr = "" if pass_rate is None else "{:.4f}".format(float(pass_rate))
+        total_cost = float(row.get("total_actual_cost_usd") or 0)
+        share = row.get("cost_share_pct")
+        share_attr = "" if share is None else "{:.4f}".format(float(share))
+        avg_cost = row.get("avg_cost_usd")
+        avg_attr = "" if avg_cost is None else "{:.6f}".format(float(avg_cost))
         parts.append(
-            "<tr><td>{}</td><td>{}</td><td>{}</td>"
-            "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
-                esc(row.get("work_type", "—")),
-                esc(row.get("run_count", "—")),
-                esc(_fmt_fin_pct(row.get("pass_rate_pct"))),
-                esc(_fmt_fin_currency(row.get("total_actual_cost_usd"))),
-                esc(_fmt_fin_pct(row.get("cost_share_pct"))),
-                esc(_fmt_fin_currency(row.get("avg_cost_usd"))),
-                esc(tokens_s),
+            '<tr data-work-type="{wt}" data-runs="{runs}" data-pass-rate="{pr}" '
+            'data-total-cost="{tc:.6f}" data-share="{sh}" data-avg-cost="{ac}" '
+            'data-tokens="{tok}">'
+            "<td>{wt_e}</td><td>{runs_e}</td><td>{pass_e}</td>"
+            "<td>{tot_e}</td><td>{share_e}</td><td>{avg_e}</td><td>{tok_e}</td></tr>".format(
+                wt=esc(wt),
+                runs=run_count,
+                pr=esc(pass_attr),
+                tc=total_cost,
+                sh=esc(share_attr),
+                ac=esc(avg_attr),
+                tok=esc(tokens_s),
+                wt_e=esc(wt),
+                runs_e=esc(run_count),
+                pass_e=esc(_fmt_fin_pct(pass_rate)),
+                tot_e=esc(_fmt_fin_currency(total_cost)),
+                share_e=esc(_fmt_fin_pct(share)),
+                avg_e=esc(_fmt_fin_currency(avg_cost)),
+                tok_e=esc(tokens_s),
             )
         )
     parts.append("</tbody></table>")
@@ -2021,7 +2233,6 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
     as_of = _financials_as_of(as_of_utc, rpt_run_rate)
     parts = []
 
-    parts.append('<h2>Headline Cards <small>(source: rpt_run_rate)</small></h2>')
     rate = rpt_run_rate[0] if rpt_run_rate else {}
     week_spend = float(rate.get("trailing_7d_usd_per_day", 0) or 0) * 7
     month_spend = float(rate.get("mtd_variable_usd", 0) or 0)
@@ -2038,6 +2249,18 @@ def financials_html(data_dir, repo_root=".", as_of_utc=None):
         else "no budget set"
     )
 
+    parts.append(
+        _financials_pacing_banner(
+            week_used,
+            month_used,
+            week_spend,
+            month_spend,
+            weekly_budget_usd,
+            monthly_budget_usd,
+        )
+    )
+
+    parts.append('<h2>Headline Cards <small>(source: rpt_run_rate)</small></h2>')
     parts.append('<div class="cards">')
     parts.append(_card(week_used >= warn_pct, "This Week", f"${week_spend:.2f}", week_budget_detail))
     parts.append(_card(month_used >= warn_pct, "Month-to-Date", f"${month_spend:.2f}", month_budget_detail))
