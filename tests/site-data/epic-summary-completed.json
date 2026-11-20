@@ -1,0 +1,11 @@
+[
+  {
+    "number": 700,
+    "title": "Epic with GitHub completed field",
+    "labels": [{"name": "epic"}],
+    "createdAt": "2026-11-01T10:00:00Z",
+    "updatedAt": "2026-11-10T09:00:00Z",
+    "url": "https://github.com/example/factory/issues/700",
+    "subIssuesSummary": {"completed": 3, "total": 7}
+  }
+]
