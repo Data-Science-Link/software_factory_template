@@ -3,6 +3,7 @@
 #
 # Usage:
 #   scripts/harden-repo.sh [--dry-run] [--repo OWNER/REPO] [--required-checks ctx1,ctx2]
+#                           [--skip-branch-protection]
 #
 # If --repo is omitted, uses the current git checkout's GitHub remote (gh repo view).
 #
@@ -18,6 +19,7 @@ set -euo pipefail
 
 DRY_RUN=0
 REQUIRED_CHECKS="pr-check,gitleaks"
+SKIP_BRANCH_PROTECTION=0
 REPO=""
 
 usage() {
@@ -39,6 +41,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || usage
       REQUIRED_CHECKS="$2"
       shift 2
+      ;;
+    --skip-branch-protection)
+      SKIP_BRANCH_PROTECTION=1
+      shift
       ;;
     -*)
       echo "harden-repo: unknown option $1" >&2
@@ -63,9 +69,6 @@ fi
 [[ "$REPO" == */* ]] || { echo "harden-repo: expected OWNER/REPO, got $REPO" >&2; exit 2; }
 
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-RULESET_JSON="$root/.github/rulesets/protect-main.json"
-[ -f "$RULESET_JSON" ] || { echo "harden-repo: missing $RULESET_JSON" >&2; exit 1; }
-
 declare -a ROWS=()
 
 record() { # name status detail
@@ -194,70 +197,67 @@ else
   record "Private vulnerability reporting" "skip" "public repos only"
 fi
 
-# --- protect-main ruleset (reuse JSON, customize checks) ---
-build_ruleset() {
-  local checks_csv="$1"
-  local checks_json
-  checks_json="$(
-    IFS=',' read -ra parts <<<"$checks_csv"
-    local p
-    for p in "${parts[@]}"; do
-      p="${p// /}"
-      [ -n "$p" ] || continue
-      printf '{"context":"%s","integration_id":15368}\n' "$p"
-    done | jq -s .
-  )"
-  jq --argjson checks "$checks_json" '
-    (.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks) = $checks
-  ' "$RULESET_JSON"
-}
+# --- protect-main ruleset (delegate to scripts/protect-main.sh) ---
+invoke_protect_main() {
+  local label="Branch protection (ruleset protect-main)"
+  local prot="$root/scripts/protect-main.sh"
+  [ -x "$prot" ] || prot="$root/scripts/protect-main.sh"
 
-apply_ruleset() {
-  local name="protect-main"
+  if [ "$SKIP_BRANCH_PROTECTION" -eq 1 ]; then
+    record "$label" "skip" "--skip-branch-protection"
+    return 0
+  fi
+
+  local trimmed="${REQUIRED_CHECKS// /}"
+  if [ -z "$trimmed" ] || [ "$trimmed" = "none" ]; then
+    record "$label" "skip" "no required checks configured (avoids blocking PRs forever)"
+    return 0
+  fi
+
+  local -a pargs=(bash "$prot" --repo "$REPO" --checks "$REQUIRED_CHECKS")
   if [ "$DRY_RUN" -eq 1 ]; then
-    record "Branch protection (ruleset protect-main)" "dry-run" "would POST/PUT rulesets (checks: $REQUIRED_CHECKS)"
-    return 0
-  fi
-  local existing out
-  if ! existing="$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$name\") | .id" 2>&1)"; then
-    if is_plan_limit "$existing"; then
-      record "Branch protection (ruleset protect-main)" "skip" "private GitHub Free — use pre-push hook"
+    pargs+=(--dry-run)
+    local out
+    out="$("${pargs[@]}" 2>&1)"
+  else
+    local out rc=0
+    set +e
+    out="$("${pargs[@]}" 2>&1)"
+    rc=$?
+    set -e
+    if grep -qiE "private on GitHub Free|won't enforce branch rules" <<<"$out"; then
+      record "$label" "skip" "private GitHub Free — use pre-push hook"
       return 0
     fi
-    if is_permission_error "$existing"; then
-      record "Branch protection (ruleset protect-main)" "fail" "needs Administration on $REPO"
+    if [ "$rc" -ne 0 ]; then
+      if is_plan_limit "$out"; then
+        record "$label" "skip" "private GitHub Free — use pre-push hook"
+        return 0
+      fi
+      if is_permission_error "$out"; then
+        record "$label" "fail" "needs Administration on $REPO"
+        return 0
+      fi
+      record "$label" "fail" "$(head -n1 <<<"$out")"
       return 0
     fi
-    record "Branch protection (ruleset protect-main)" "fail" "$(head -n1 <<<"$existing")"
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    record "$label" "dry-run" "protect-main.sh --dry-run (checks: $REQUIRED_CHECKS)"
     return 0
   fi
-  local tmp method path verb
-  tmp="$(mktemp)"
-  build_ruleset "$REQUIRED_CHECKS" >"$tmp"
-  if [ -n "$existing" ]; then
-    method=PUT
-    path="repos/$REPO/rulesets/$existing"
-    verb="updated"
+
+  if grep -q 'ruleset created on' <<<"$out"; then
+    record "$label" "pass" "created ($(sed -n 's/.*id \([0-9]*\).*/\1/p' <<<"$out" | head -1))"
+  elif grep -q 'ruleset updated on' <<<"$out"; then
+    record "$label" "pass" "updated ($(sed -n 's/.*id \([0-9]*\).*/\1/p' <<<"$out" | head -1))"
   else
-    method=POST
-    path="repos/$REPO/rulesets"
-    verb="created"
+    record "$label" "pass" "$(head -n1 <<<"$out")"
   fi
-  if out="$(gh api --method "$method" "$path" --input "$tmp" --jq .id 2>&1)"; then
-    record "Branch protection (ruleset protect-main)" "pass" "$verb id $out"
-  else
-    if is_plan_limit "$out"; then
-      record "Branch protection (ruleset protect-main)" "skip" "private GitHub Free — use pre-push hook"
-    elif is_permission_error "$out"; then
-      record "Branch protection (ruleset protect-main)" "fail" "needs Administration on $REPO"
-    else
-      record "Branch protection (ruleset protect-main)" "fail" "$(head -n1 <<<"$out")"
-    fi
-  fi
-  rm -f "$tmp"
 }
 
-apply_ruleset
+invoke_protect_main
 
 # --- Full-history gitleaks (local clone must match REPO) ---
 history_scan() {

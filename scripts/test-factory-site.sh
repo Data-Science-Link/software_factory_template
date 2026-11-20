@@ -275,6 +275,81 @@ else
   failed=$((failed + 1))
 fi
 
+# ---- test 11: architecture tab has no hardcoded Michael / Grok Bot names ----
+root10="$tmpdir/root10"
+make_root "$root10" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
+out10="$tmpdir/out10"
+if "$PYTHON" scripts/factory-site.py --repo-root "$root10" --out "$out10" --now "2026-11-11 12:00:00" >/dev/null; then
+  idx10="$out10/index.html"
+  if ! grep -qF "Michael" "$idx10" && ! grep -qF "Grok Bot" "$idx10"; then
+    echo "PASS  architecture tab has no hardcoded Michael or Grok Bot names"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  architecture tab still contains hardcoded owner or bot names"
+    grep -n "Michael\|Grok Bot" "$idx10" || true
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  renderer crashed for repo-agnostic name check"
+  failed=$((failed + 1))
+fi
+
+# ---- test 12: loop and roles cells render **bold** as <strong>, not literal ** ----
+if "$PYTHON" - "$idx10" <<'PY'
+import re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+if "**" in html:
+    raise SystemExit("literal ** still present")
+roles = re.search(r"<h2>Roles</h2>\s*<table>.*?</table>", html, re.S)
+if not roles or "<strong>CEO</strong>" not in roles.group(0):
+    raise SystemExit("Roles table missing <strong>CEO</strong>")
+if "<strong>Intake</strong>" not in html:
+    raise SystemExit("loop card missing <strong>Intake</strong>")
+PY
+then
+  echo "PASS  loop and Roles cells render bold emphasis as <strong>"
+  passed=$((passed + 1))
+else
+  echo "FAIL  loop or Roles cells still use literal ** or omit <strong>"
+  failed=$((failed + 1))
+fi
+
+# ---- test 13: Rule 1 When cell has no double-escaped apostrophe entities ----
+root11="$tmpdir/root11"
+make_root "$root11" .factory/FACTORY.md .factory/models.yaml
+out11="$tmpdir/out11"
+if "$PYTHON" scripts/factory-site.py --repo-root "$root11" --out "$out11" --now "2026-11-11 12:00:00" >/dev/null; then
+  if "$PYTHON" - "$out11/index.html" <<'PY'
+import re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+block = re.search(
+    r"<h2>Routing rules \(first match wins\)</h2>\s*<table>.*?</table>",
+    html,
+    re.S,
+)
+if not block:
+    raise SystemExit("routing rules table missing")
+row = re.search(r"<th>1</th>.*?<td>(.*?)</td>\s*<td>(.*?)</td>", block.group(0), re.S)
+if not row:
+    raise SystemExit("rule 1 row missing")
+when = row.group(2)
+if "&#x27;" in when or "&amp;#x27;" in when:
+    raise SystemExit("When cell still double-escaped: %r" % when)
+if "any=" not in when:
+    raise SystemExit("unexpected When text: %r" % when)
+PY
+  then
+    echo "PASS  Rule 1 When cell shows readable text without &#x27; double-escaping"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  Rule 1 When cell still has double-escaped apostrophes"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  renderer crashed for Rule 1 When check"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
