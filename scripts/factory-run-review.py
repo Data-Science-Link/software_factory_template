@@ -1593,8 +1593,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.input is not None:
-        with open(args.input, "r", encoding="utf-8") as fh:
-            run = json.load(fh)
+        try:
+            with open(args.input, "r", encoding="utf-8") as fh:
+                run = json.load(fh)
+        except OSError as exc:
+            print(f"ERROR: cannot read --input: {exc}", file=sys.stderr)
+            return 2
+        except json.JSONDecodeError as exc:
+            print(f"ERROR: --input is not valid JSON: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(run, dict):
+            print("ERROR: --input must be a JSON object", file=sys.stderr)
+            return 2
         review = review_run(run)
         text = json.dumps(review, indent=2, sort_keys=True)
         if args.output:

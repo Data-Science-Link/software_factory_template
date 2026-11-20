@@ -196,8 +196,13 @@ def main(argv: list[str] | None = None) -> int:
 
     fields: dict[str, Any] = {}
     if args.input:
-        with open(args.input, encoding="utf-8") as fh:
-            payload = json.load(fh)
+        try:
+            with open(args.input, encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except OSError as exc:
+            parser.error(f"cannot read --input: {exc}")
+        except json.JSONDecodeError as exc:
+            parser.error(f"--input is not valid JSON: {exc}")
         if not isinstance(payload, dict):
             parser.error("--input must be a JSON object")
         fields = payload
