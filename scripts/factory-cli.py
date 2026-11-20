@@ -50,6 +50,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Scaffold a product repo to adopt the Software Factory.",
     ),
     CommandSpec(
+        "models-check",
+        "Setup & Health",
+        "factory-models-check.py",
+        "Offline schema, routing, and price sanity check for .factory/models.yaml.",
+    ),
+    CommandSpec(
         "triage",
         "Planning & Specs",
         "factory-issue-triage.py",
@@ -72,6 +78,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Planning & Specs",
         "factory-backlog.py",
         "Normalized open-backlog JSON for the factory site.",
+    ),
+    CommandSpec(
+        "decision-log",
+        "Planning & Specs",
+        "factory-decision-log.py",
+        "Validate, list, and append entries in .factory/DECISIONS.md.",
     ),
     CommandSpec(
         "run-review",
@@ -144,6 +156,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "Release & Ops",
         "factory-release.py",
         "Release-readiness scorecard and changelog draft (read-only).",
+    ),
+    CommandSpec(
+        "branch-cleanup",
+        "Release & Ops",
+        "factory-branch-cleanup.py",
+        "Dry-run branch hygiene report for factory worker branches (oc/, cursor/).",
     ),
     CommandSpec(
         "sync-repos",

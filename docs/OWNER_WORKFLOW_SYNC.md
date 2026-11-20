@@ -1,6 +1,6 @@
 # Owner workflow sync checklist
 
-One consolidated paste list for pending `.github/workflows/` edits tracked across issues **#57**, **#148**, **#41**, **#214**, **#74**, and **#44**. Agents must not commit these YAML changes; the **owner** copies the blocks below into the repo default branch.
+One consolidated paste list for pending `.github/workflows/` edits tracked across issues **#57**, **#148**, **#41**, **#214**, **#74**, **#44**, **#56**, **#161**, and **#178**. Agents must not commit these YAML changes; the **owner** copies the blocks below into the repo default branch.
 
 After each paste (or one combined owner PR), run:
 
@@ -21,16 +21,32 @@ Verified action SHAs below are taken from the template’s current workflow file
 
 ---
 
-## 1. `pr-check.yml` — run all offline tests (#57, #161)
+## 1. `pr-check.yml` — consolidated quality gates (#57, #161, #178)
 
-In the **`pr-check`** job, after factory Python dependencies are installed and before (or replacing duplicate) single-script test steps, add:
+Template `main` quality gates for every PR (same checks as `scripts/factory-owner-pack.py`). In the **`pr-check`** job, after factory Python dependencies are installed, add or replace fragmented single-script steps with:
 
 ```yaml
       - name: Run all offline script tests (#57, #161)
         run: bash scripts/test-all.sh
+
+      - name: Doc links and script refs (#178)
+        run: python3 scripts/factory-check-docs.py --strict
+
+      - name: Pre-public hygiene (#178)
+        run: python3 scripts/factory-prepublic-check.py --strict
+
+      - name: models.yaml schema (#178)
+        run: python3 scripts/factory-models-check.py
+
+      - name: Factory site HTML smoke (#178, #56)
+        run: python3 scripts/factory-site-smoke.py --build
 ```
 
-Optional cleanup: `test-all.sh` already runs `test-pr-check.sh` and `test-predict-cost.sh`; you may drop redundant per-script steps later if CI time matters.
+- `bash scripts/test-all.sh` auto-discovers every `scripts/test-*.sh` on `main` (65+ scripts), including `test-examples.sh`, `test-factory-e2e-adopter.sh`, `test-factory-models-check.sh`, `test-factory-check-docs.sh`, `test-factory-prepublic-check.sh`, `test-factory-site-smoke.sh`, and the rest of the offline harness.
+- The four Python steps are fast CI guards that mirror owner-pack gates; they exit non-zero on failure (`--strict` on docs and pre-public scans).
+- Keep every workflow `uses:` on a **40-character commit SHA** (never floating `@v4` / `@v7` tags). Reuse the pin table at the top of this doc.
+
+Optional cleanup: once `test-all.sh` is green in CI, you may drop redundant one-off steps in **`run-records`** or **`pr-check`** that `test-all.sh` already covers (for example duplicate `test-spec-check.sh` or site fixture shells) if job time matters.
 
 ---
 
@@ -130,7 +146,7 @@ Then teach **`publish`** to `needs: [agent, review]` (or post the critic comment
 
 ## 6. Order of operations
 
-1. `pr-check.yml` + `test-all.sh` (unblocks broader script coverage in CI).
+1. `pr-check.yml` quality gates (`test-all.sh` plus docs, pre-public, models, site smoke; #57, #161, #178).
 2. `opencode-*.yml` Python pin (unblocks dbt Verification on hosted runners).
 3. `approve-oc-runs.yml` `workflow_run` (unblocks bot PR checks without manual approve).
 4. `secret-scan.yml` harden-runner (security baseline #44).

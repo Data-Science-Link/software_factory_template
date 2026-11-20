@@ -126,6 +126,67 @@ assert_json_schema "template repo json schema" "$work/out"
 grep -q '"category": "workflow_hygiene"' "$work/out" || bad "template json includes workflow_hygiene"
 grep -q '"category": "protected_scripts"' "$work/out" || bad "template json includes protected_scripts"
 grep -q '"category": "docs_links"' "$work/out" || bad "template json includes docs_links"
+grep -q '"category": "models_config"' "$work/out" || bad "template json includes models_config"
+grep -q '"category": "decision_log"' "$work/out" || bad "template json includes decision_log"
+
+# models_config: skip when factory-models-check.py absent in target repo
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --strict
+grep -q "models_config" "$work/out" && grep -q "skip" "$work/out" && ok "models_config skips without check script" \
+  || bad "models_config skip when script missing"
+
+# models_config: pass with bundled script and minimal models.yaml
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-models-check.py" "$work/repo/scripts/"
+cp "$root/tests/models-check/minimal-ok.yaml" "$work/repo/.factory/models.yaml"
+python3 - <<'PY' "$work/repo/.factory/models.yaml"
+import sys
+from pathlib import Path
+import yaml
+path = Path(sys.argv[1])
+data = yaml.safe_load(path.read_text(encoding="utf-8"))
+budget = data.setdefault("budget", {})
+budget.setdefault("deepinfra_monthly_limit_usd", 10)
+budget.setdefault("issue_target_usd", 0.15)
+path.write_text(yaml.dump(data, sort_keys=False), encoding="utf-8")
+PY
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "models_config healthy fixture" 0
+grep -q "models_config" "$work/out" || bad "models_config id present"
+grep -q "models-check: clean" "$work/out" && ok "models_config pass on minimal-ok" \
+  || bad "models_config pass on minimal-ok"
+
+# models_config: fail on duplicate model id
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-models-check.py" "$work/repo/scripts/"
+cp "$root/tests/models-check/duplicate-id.yaml" "$work/repo/.factory/models.yaml"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "models_config duplicate id strict" 1
+grep -q "models_config" "$work/out" || bad "models_config fail row"
+
+# decision_log: skip when factory-decision-log.py absent in target repo
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --strict
+grep -q "decision_log" "$work/out" && grep -q "skip" "$work/out" && ok "decision_log skips without check script" \
+  || bad "decision_log skip when script missing"
+
+# decision_log: pass with bundled script and small log
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-decision-log.py" "$work/repo/scripts/"
+cp "$root/tests/decision-log/small-log.md" "$work/repo/.factory/DECISIONS.md"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "decision_log healthy fixture" 0
+grep -q "decision_log" "$work/out" || bad "decision_log id present"
+grep -q "decision-log check: clean" "$work/out" && ok "decision_log pass on small-log" \
+  || bad "decision_log pass on small-log"
+
+# decision_log: fail on duplicate id
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-decision-log.py" "$work/repo/scripts/"
+cp "$root/tests/decision-log/duplicate-id.md" "$work/repo/.factory/DECISIONS.md"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "decision_log duplicate id strict" 1
+grep -q "decision_log" "$work/out" || bad "decision_log fail row"
 
 # docs_links: skip when factory-check-docs.py absent in target repo
 copy_healthy "$work/repo"
@@ -176,7 +237,7 @@ git -C "$work/repo" init -q 2>/dev/null || true
 git -C "$work/repo" add -A 2>/dev/null || true
 git -C "$work/repo" -c user.email=test@test -c user.name=test commit -q -m init 2>/dev/null || true
 run_doctor --repo-dir "$work/repo" --public --strict
-assert_rc "prepublic with script strict" 1
+assert_rc "prepublic with script strict" 0
 grep -q "prepublic_hygiene" "$work/out" || bad "prepublic id present"
 grep -q "pre-public scan:" "$work/out" && ok "prepublic reports scan results" \
   || bad "prepublic scan detail"

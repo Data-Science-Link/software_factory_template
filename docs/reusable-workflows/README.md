@@ -21,7 +21,7 @@ Callers pin a semver tag on both the `uses:` line and `with.factory_ref`, for ex
 
 1. Remove copied factory `scripts/` and shared `.factory/` trees (keep per-repo config only; see below).
 2. Paste the matching files from `docs/reusable-workflows/callers/` into `.github/workflows/`.
-3. Replace every `YOUR_OWNER_GITHUB_LOGIN` with the account that may run `/oc` commands.
+3. Replace every `YOUR_OWNER_GITHUB_LOGIN` with the account that may run `/oc` commands, and `YOUR_ORG` with the org or user that owns the template repository.
 4. Set `DEEPINFRA_API_KEY` and repo variable `FACTORY_DEEPINFRA_KEY_NAME` in the product repo (names only; never commit values).
 5. Align the pinned tag on each `uses:` line and matching `factory_ref:` with the template release you want.
 
@@ -40,3 +40,15 @@ Revert the sync PR that bumped the pinned tag (one line per caller workflow). No
 ## Tag bump sync
 
 After a new template tag, run `scripts/factory-sync-repos.py` with a repo list and target tag to open (or update) one sync PR per product repository. See [RELEASING.md](../RELEASING.md).
+
+## Offline contract check
+
+Before cutting a release tag or opening a sync PR, validate that each `reusable-*.yml` template and its paired `callers/<name>.yml` agree on pins, `workflow_call` inputs and secrets, and least-privilege `permissions:`:
+
+```bash
+python3 scripts/factory-reusable-check.py --strict
+```
+
+Use `--json` for machine-readable output, or `--dir <path>` to lint a fixture tree (see `scripts/test-factory-reusable-check.sh`).
+
+Callers keep `YOUR_ORG/software_factory_template` on the `uses:` line; reusable bodies use `"{{TEMPLATE_REPO}}"` for template checkout steps. `scripts/factory-init-repo.py` and `scripts/factory-migrate-adopter.py` substitute the real `org/repo` at scaffold time.

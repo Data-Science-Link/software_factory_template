@@ -1,4 +1,4 @@
-# Ready to paste into .github/workflows/reusable-opencode-spec.yml on Data-Science-Link/software_factory_template (owner paste, #156).
+# Ready to paste into .github/workflows/reusable-opencode-spec.yml in the template repository (owner paste, #156).
 # Product repos call this file at a pinned tag; callers live under docs/reusable-workflows/callers/.
 # /oc spec (#78): owner-only "/oc spec [guidance]" on an issue → a READ-ONLY OpenCode worker on
 # DeepSeek V4 Pro (models.yaml rule 2, set by scripts/opencode-spec-run.sh) drafts a spec →
@@ -74,7 +74,7 @@ jobs:
       - name: Check out factory template (pinned ref)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: Data-Science-Link/software_factory_template
+          repository: "{{TEMPLATE_REPO}}"
           ref: ${{ inputs.factory_ref }}
           path: factory-template
           persist-credentials: false
@@ -168,7 +168,7 @@ jobs:
       - name: Check out factory template (pinned ref)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: Data-Science-Link/software_factory_template
+          repository: "{{TEMPLATE_REPO}}"
           ref: ${{ inputs.factory_ref }}
           path: factory-template
           persist-credentials: false
@@ -236,7 +236,7 @@ jobs:
       - name: Check out factory template (pinned ref)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: Data-Science-Link/software_factory_template
+          repository: "{{TEMPLATE_REPO}}"
           ref: ${{ inputs.factory_ref }}
           path: factory-template
           persist-credentials: false

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Offline audit of .github/workflows/*.yml for factory owner-paste backlog.
 
-Covers: action SHA pins (#57), pr-check test-all (#57/#161), Python pin on /oc agent
-jobs (#148), approve-oc-runs workflow_run (#214/#74), harden-runner / permissions (#44),
-and optional Critic review job presence (#41).
+Covers: action SHA pins (#57), pr-check quality gates (#57/#161/#178), Python pin on
+/oc agent jobs (#148), approve-oc-runs workflow_run (#214/#74), harden-runner /
+permissions (#44), and optional Critic review job presence (#41).
 
 Default mode prints a report and exits 0 so CI can adopt the script before workflows
 catch up. Use --strict to exit non-zero when any check fails.
@@ -106,33 +106,59 @@ def job_text_block(text: str, job_id: str) -> str:
     return m.group(0) if m else ""
 
 
-def check_pr_check_test_all(path: Path, text: str, relpath: str) -> list[Finding]:
+PR_CHECK_JOB_MARKERS: tuple[tuple[str, str, list[str]], ...] = (
+    ("pr_check_test_all", "test-all.sh", ["#57", "#161"]),
+    (
+        "pr_check_check_docs",
+        "factory-check-docs.py",
+        ["#178"],
+    ),
+    (
+        "pr_check_prepublic",
+        "factory-prepublic-check.py",
+        ["#178"],
+    ),
+    (
+        "pr_check_models_check",
+        "factory-models-check.py",
+        ["#178"],
+    ),
+    (
+        "pr_check_site_smoke",
+        "factory-site-smoke.py",
+        ["#178", "#56"],
+    ),
+)
+
+
+def check_pr_check_quality_gates(path: Path, text: str, relpath: str) -> list[Finding]:
     findings: list[Finding] = []
     if path.name != "pr-check.yml":
         return findings
     block = job_text_block(text, "pr-check")
-    if "test-all.sh" in block:
-        findings.append(
-            Finding(
-                check="pr_check_test_all",
-                status="pass",
-                file=relpath,
-                job="pr-check",
-                detail="pr-check job invokes bash scripts/test-all.sh",
-                refs=["#57", "#161"],
+    for check_id, marker, refs in PR_CHECK_JOB_MARKERS:
+        if marker in block:
+            findings.append(
+                Finding(
+                    check=check_id,
+                    status="pass",
+                    file=relpath,
+                    job="pr-check",
+                    detail=f"pr-check job references {marker}",
+                    refs=refs,
+                )
             )
-        )
-    else:
-        findings.append(
-            Finding(
-                check="pr_check_test_all",
-                status="fail",
-                file=relpath,
-                job="pr-check",
-                detail="pr-check job does not run bash scripts/test-all.sh",
-                refs=["#57", "#161"],
+        else:
+            findings.append(
+                Finding(
+                    check=check_id,
+                    status="fail",
+                    file=relpath,
+                    job="pr-check",
+                    detail=f"pr-check job does not run scripts/{marker}",
+                    refs=refs,
+                )
             )
-        )
     return findings
 
 
@@ -402,7 +428,7 @@ def audit_workflows(workflows_dir: Path) -> list[Finding]:
         data, text = load_workflow(path)
         data_files[path.name] = data
         findings.extend(find_unpinned_uses(text, rel))
-        findings.extend(check_pr_check_test_all(path, text, rel))
+        findings.extend(check_pr_check_quality_gates(path, text, rel))
         findings.extend(check_opencode_python_pin(path, text, rel))
         findings.extend(check_approve_oc_workflow_run(data, rel))
         findings.extend(check_harden_runner(data, rel))
