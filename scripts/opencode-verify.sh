@@ -73,20 +73,54 @@ if [ -n "$patch" ] && [ -s "$patch" ]; then
   g apply --index "$patch" 2>/dev/null || not_run "the patch does not apply to ${base_sha:0:12}"
   g commit -q -m "this run's patch"
 fi
+# #148: prefer Python 3.12/3.13 in the sandbox (dbt 1.11 crashes on 3.14); report what ran.
+default_path="/usr/local/bin:/usr/bin:/bin"
+mkdir -p "$w/pybin"
+python_line=""
+verify_python=""
+for ver in 3.12 3.13; do
+  if p="$(PATH="$default_path" command -v "python${ver}" 2>/dev/null)"; then
+    ln -sf "$p" "$w/pybin/python3"
+    verify_python="$p"
+    python_line="Python: python${ver} (${p}) first on verification PATH."
+    break
+  fi
+done
+if [ -z "$verify_python" ]; then
+  if p="$(PATH="$default_path" command -v python3 2>/dev/null)"; then
+    ln -sf "$p" "$w/pybin/python3"
+    verify_python="$p"
+    py_mm="$(PATH="$default_path" "$p" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo unknown)"
+    python_line="Python: system python3 (${p}, ${py_mm}); no python3.12/3.13 on PATH."
+    if [ "$py_mm" = 3.14 ]; then
+      python_line="${python_line} WARN: Python 3.14 breaks dbt-core 1.11 (#148); pin setup-python 3.12 in opencode workflows."
+    fi
+  else
+    python_line="Python: python3 not found on PATH."
+  fi
+fi
+if grep -qE '(^|[[:space:]/\"'"'"'])(dbt)([[:space:]]|$)' <<<"$block" && [ -n "$verify_python" ]; then
+  py_mm="$(PATH="$default_path" "$verify_python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+  if [ "$py_mm" = 3.14 ]; then
+    python_line="${python_line} GUARD: Verification runs dbt on Python 3.14 — expect startup crash until workflows pin 3.12."
+  fi
+fi
+verify_path="$w/pybin:$default_path"
 # #100: judge EVERY command, not just the last one. The wrapper keeps the block in one shell (cd and
 # variables carry over) and runs all of it, but an ERR trap records each command that exits
 # non-zero (line, status, command) in status.txt; pipefail makes a failing stage of a pipeline
-# count. Commands tested by if/while/&&/|| are not failures (normal bash ERR rules).
+# count. set -e stops the block after the first failure (#148: no \"passed\" line after a crash).
+# Commands tested by if/while/&&/|| are not failures (normal bash ERR rules).
 # Line 1 of verify.sh is this quiet preamble (stderr, so its xtrace, goes nowhere); the block
 # starts on line 2, hence LINENO-1. xtrace is turned on at the end of the preamble.
 {
   # shellcheck disable=SC2016 # expanded by the sandboxed bash, on purpose
-  printf '%s\n' '{ __oc_status="$1"; __oc_err() { printf "line %s: exit %s: %s\n" "$(($2 - 1))" "$1" "$3" >>"$__oc_status"; }; set -E -o pipefail; trap '"'"'{ __oc_err "$?" "$LINENO" "$BASH_COMMAND"; } 2>/dev/null'"'"' ERR; set -x; } 2>/dev/null'
+  printf '%s\n' '{ __oc_status="$1"; __oc_err() { printf "line %s: exit %s: %s\n" "$(($2 - 1))" "$1" "$3" >>"$__oc_status"; }; set -Ee -o pipefail; trap '"'"'{ __oc_err "$?" "$LINENO" "$BASH_COMMAND"; } 2>/dev/null'"'"' ERR; set -x; } 2>/dev/null'
   printf '%s\n' "$block"
 } >"$w/verify.sh"
 : >"$w/status.txt"
 
-clean_env=(env -i "PATH=/usr/local/bin:/usr/bin:/bin" "HOME=$w/home" "LANG=C.UTF-8" "TERM=dumb" "CI=true")
+clean_env=(env -i "PATH=$verify_path" "HOME=$w/home" "LANG=C.UTF-8" "TERM=dumb" "CI=true")
 # shellcheck disable=SC2016 # $1..$3 are expanded by the inner bash, on purpose
 run_cmd=(bash -c 'cd "$1" && exec timeout -k 10 "$2" bash "$3" "$4"' verify "$w/repo" "$timeout_s" "$w/verify.sh" "$w/status.txt")
 if [ "$mode" = user ]; then
@@ -134,6 +168,7 @@ esac
   echo "Commands: the bash block under \"## Verification\" in the approved spec (sha256 ${block_sha})."
   echo "Tree: ${base_sha:0:12} plus this run's patch, committed in a scratch copy (HEAD~1 is the base; no origin remote)."
   echo "Sandbox: ${sandbox}; network not blocked; ${timeout_s}s limit."
+  if [ -n "$python_line" ]; then echo "$python_line"; fi
   echo "Result: ${status}; ${dur}s. Each \"+ \" line is a command as run; read the outputs below it."
   echo "Per-command status: every command ran; any that exited non-zero is listed here (line in the block, exit code, command)."
   if [ "$nfail" -gt 0 ]; then printf '%s\n' "$failed_cmds" | sed 's/^/  FAILED /'; else echo "  (none failed)"; fi
