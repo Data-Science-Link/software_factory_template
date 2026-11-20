@@ -35,12 +35,41 @@ JSON_FENCE = re.compile(r"```json\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
 def load_validator():
-    spec = importlib.util.spec_from_file_location(
-        "factory_validate_run", VALIDATOR_PATH
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "factory_validate_run", VALIDATOR_PATH
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        sys.stderr.write(f"ERROR: cannot load validator {VALIDATOR_PATH}: {exc}\n")
+        raise SystemExit(2) from exc
     return module.load_record, module.validate_record
+
+
+def load_comments_fixture(path: str) -> list[dict]:
+    """Load a local JSON array of GitHub issue comment objects (--from-json)."""
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        sys.stderr.write(f"ERROR: cannot read --from-json {path}: {exc}\n")
+        raise SystemExit(2) from exc
+    except UnicodeDecodeError as exc:
+        sys.stderr.write(f"ERROR: --from-json {path} is not valid UTF-8: {exc}\n")
+        raise SystemExit(2) from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(
+            f"ERROR: --from-json {path} contains invalid JSON: {exc}\n"
+        )
+        raise SystemExit(2) from exc
+    if not isinstance(data, list):
+        sys.stderr.write(
+            f"ERROR: --from-json {path} must be a JSON array of comment objects\n"
+        )
+        raise SystemExit(2)
+    return data
 
 
 def resolve_github_repo(cli_repo: str | None) -> str:
@@ -81,12 +110,17 @@ def fetch_comments(repo: str) -> list[dict]:
             text=True,
         )
     except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
         sys.stderr.write(
-            f"ERROR: gh api failed for {url}: {exc.stderr.strip()}\n"
+            f"ERROR: gh api failed for {url}: {detail}\n"
             f"(is gh installed and authenticated with GITHUB_TOKEN?)\n"
         )
-        raise
-    return json.loads(raw.stdout)
+        raise SystemExit(1) from exc
+    try:
+        return json.loads(raw.stdout)
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(f"ERROR: gh api returned invalid JSON for {url}: {exc}\n")
+        raise SystemExit(1) from exc
 
 
 def extract_json_block(body: str) -> str | None:
@@ -114,8 +148,7 @@ def main() -> int:
     load_record, validate_record = load_validator()
 
     if args.from_json:
-        with open(args.from_json, encoding="utf-8") as f:
-            comments = json.load(f)
+        comments = load_comments_fixture(args.from_json)
     else:
         repo = resolve_github_repo(args.repo)
         comments = fetch_comments(repo)
@@ -126,6 +159,9 @@ def main() -> int:
     by_run_id: dict[str, dict] = {}
 
     for comment in comments:
+        if not isinstance(comment, dict):
+            invalid.append(("(comment)", "comment entry must be a JSON object"))
+            continue
         author = comment.get("user", {}).get("login")
         body = comment.get("body") or ""
         if author != BOT_AUTHOR or MARKER not in body:
@@ -139,6 +175,9 @@ def main() -> int:
             record = json.loads(block)
         except json.JSONDecodeError as exc:
             invalid.append(("(bad json)", f"invalid JSON block: {exc}"))
+            continue
+        if not isinstance(record, dict):
+            invalid.append(("(bad json)", "record JSON block must be an object"))
             continue
 
         source = comment.get("html_url") or comment.get("id", "(comment)")
