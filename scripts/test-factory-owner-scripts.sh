@@ -193,6 +193,59 @@ rc="$(run_merge 13 --approval 'x' --when 't')" || true
 FAKE_MERGE_OK=yes
 if [ "$rc" -ne 0 ]; then ok "merge: gh merge failure surfaces"; else bad "merge: merge failure"; fi
 
+# --- merge/status: --help and argument hygiene (protected scripts; test only) ---
+mkdir -p "$work/emptybin"
+nogh_path="$work/emptybin"
+set +e
+bash "$root/scripts/factory-merge.sh" 1 --help >"$work/merge-help.out" 2>&1
+mhelp=$?
+bash "$root/scripts/factory-status.sh" --help >"$work/status-help.out" 2>&1
+shelp=$?
+bash "$root/scripts/factory-merge.sh" 9 --approval x --when t --nope >"$work/last.out" 2>&1
+mbad=$?
+bash "$root/scripts/factory-status.sh" --nope >"$work/last.out" 2>&1
+sbad=$?
+set -e
+if [ "$mhelp" -eq 2 ] && grep -q 'factory-merge.sh' "$work/merge-help.out"; then
+  ok "merge: --help prints usage (exit 2)"
+else bad "merge: --help (rc=$mhelp)"; fi
+if [ "$shelp" -eq 0 ] && grep -q 'factory-status.sh' "$work/status-help.out"; then
+  ok "status: --help prints usage (exit 0)"
+else bad "status: --help (rc=$shelp)"; fi
+if [ "$mbad" -eq 2 ] && grep -q 'unknown argument' "$work/last.out"; then
+  ok "merge: unknown flag refused"
+else bad "merge: unknown flag (rc=$mbad)"; fi
+if [ "$sbad" -eq 2 ] && grep -q 'unknown argument' "$work/last.out"; then
+  ok "status: unknown flag refused"
+else bad "status: unknown flag (rc=$sbad)"; fi
+
+shell_bash="$(command -v bash)"
+run_nogh() {
+  env PATH="$nogh_path" "$shell_bash" "$@"
+}
+set +e
+run_nogh "$root/scripts/factory-merge.sh" 1 --approval a --when t --repo o/r >"$work/last.out" 2>&1
+ngh_m=$?
+run_nogh "$root/scripts/factory-status.sh" --repo o/r >"$work/last.out" 2>&1
+ngh_s=$?
+run_nogh "$root/scripts/factory-kick-checks.sh" --help >"$work/kick-help.out" 2>&1
+khelp=$?
+run_nogh "$root/scripts/factory-kick-checks.sh" 1 >"$work/last.out" 2>&1
+ngh_k=$?
+set -e
+if [ "$ngh_m" -ne 0 ] && grep -qi 'gh' "$work/last.out"; then
+  ok "merge: missing gh surfaces clean error"
+else bad "merge: missing gh (rc=$ngh_m)"; fi
+if [ "$ngh_s" -ne 0 ] && grep -qi 'gh' "$work/last.out"; then
+  ok "status: missing gh surfaces clean error"
+else bad "status: missing gh (rc=$ngh_s)"; fi
+if [ "$khelp" -eq 0 ] && grep -q 'factory-kick-checks.sh' "$work/kick-help.out"; then
+  ok "kick-checks: --help (no gh required)"
+else bad "kick-checks: --help (rc=$khelp)"; fi
+if [ "$ngh_k" -eq 2 ] && grep -q 'gh not found' "$work/last.out"; then
+  ok "kick-checks: missing gh refused before PR logic"
+else bad "kick-checks: missing gh (rc=$ngh_k)"; fi
+
 # --- status smoke ---
 printf '[{"number":1,"title":"Test","headRefOid":"%s","baseRefOid":"%s","statusCheckRollup":%s,"body":"Cost: $0.01 on DeepInfra"}]\n' \
   "$SHA" "$MAIN" "$green_checks" >"$work/pr-list.json"
