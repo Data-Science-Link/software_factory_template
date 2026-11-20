@@ -46,6 +46,20 @@ else
   failed=$((failed + 1))
 fi
 
+# Regression: the real template must pass offline spec lint (#161).
+set +e
+lint_out="$(python3 scripts/factory-spec-lint.py .factory/templates/spec.md 2>&1)"
+lint_rc=$?
+set -e
+if [ "$lint_rc" -eq 0 ] && printf '%s\n' "$lint_out" | grep -q '^OK '; then
+  echo "PASS  spec-template-drift (template passes factory-spec-lint)"
+  passed=$((passed + 1))
+else
+  echo "FAIL  spec-template-drift (template must pass factory-spec-lint, got exit $lint_rc)"
+  echo "$lint_out" | head -5
+  failed=$((failed + 1))
+fi
+
 echo "---"
 echo "spec-template-drift tests: $passed passed, $failed failed"
 if [ "$failed" -ne 0 ]; then
