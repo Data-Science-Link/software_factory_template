@@ -1,0 +1,30 @@
+[
+  {
+    "number": 900,
+    "title": "Epic with #N body fallback",
+    "labels": [{"name": "epic"}],
+    "body": "Child work: #901, #902, duplicate #901, and missing #999.",
+    "createdAt": "2026-11-01T10:00:00Z",
+    "updatedAt": "2026-11-10T09:00:00Z",
+    "url": "https://github.com/example/factory/issues/900",
+    "subIssuesSummary": {"completed": 0, "total": 0}
+  },
+  {
+    "number": 901,
+    "title": "Closed child",
+    "state": "closed",
+    "labels": [],
+    "createdAt": "2026-11-02T11:00:00Z",
+    "updatedAt": "2026-11-11T08:30:00Z",
+    "url": "https://github.com/example/factory/issues/901"
+  },
+  {
+    "number": 902,
+    "title": "Open child",
+    "state": "open",
+    "labels": [],
+    "createdAt": "2026-11-03T12:00:00Z",
+    "updatedAt": "2026-11-09T12:00:00Z",
+    "url": "https://github.com/example/factory/issues/902"
+  }
+]

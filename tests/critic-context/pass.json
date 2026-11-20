@@ -1,0 +1,17 @@
+{
+  "pr_number": "88",
+  "pr_title": "OpenCode: issue #7",
+  "issue_number": "7",
+  "head_ref": "oc/issue-7-40000000001",
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "base_ref": "main",
+  "pr": {
+    "number": 88,
+    "title": "OpenCode: issue #7",
+    "head": {"ref": "oc/issue-7-40000000001", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "base": {"ref": "main"}
+  },
+  "diff": "diff --git a/factory/x/hello.md b/factory/x/hello.md\nnew file mode 100644\n--- /dev/null\n+++ b/factory/x/hello.md\n@@ -0,0 +1 @@\n+hello\n",
+  "spec": "<!-- factory-spec v1 -->\n---\nstatus: approved\n---\n## Outcome\nSay hello.\n## Verification\n```bash\necho hello\n```\n",
+  "evidence": "Verification run by the harness (scripts/opencode-verify.sh), not by the model.\nResult: PASS: every command exited 0\n--- output ---\nhello\n"
+}
