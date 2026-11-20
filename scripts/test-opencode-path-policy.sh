@@ -28,6 +28,7 @@ new_repo() {
   printf '__pycache__/\n*.log\n' >.gitignore
   printf 'target/\n' >factory/dbt/.gitignore
   printf '# Factory\n\nRules.\n' >.factory/FACTORY.md
+  printf 'mode: template\n' >.factory/mode.yml
   printf 'models: {}\n' >.factory/models.yaml
   printf '# Security\n' >.factory/actions-security.md
   printf '# Doc\n' >docs/readme.md
@@ -50,6 +51,27 @@ expect() { # $1 = pass|fail  $2 = name  [$3 = substring the failure message must
   if [ "$1" = pass ] && [ "$rc" -eq 0 ]; then ok "$2"
   elif [ "$1" = fail ] && [ "$rc" -ne 0 ] && { [ -z "${3:-}" ] || grep -qF -- "$3" <<<"$out"; }; then ok "$2"
   else bad "$2 (want $1, rc=$rc: $out)"; fi
+}
+
+expect_product() { # like expect, but FACTORY_MODE_OVERRIDE=product (tests #69 product installs)
+  local rc=0 out
+  out="$(FACTORY_MODE_OVERRIDE=product bash "$scan" "$work/changes.patch" 2>&1)" || rc=$?
+  if [ "$1" = pass ] && [ "$rc" -eq 0 ]; then ok "$2"
+  elif [ "$1" = fail ] && [ "$rc" -ne 0 ] && { [ -z "${3:-}" ] || grep -qF -- "$3" <<<"$out"; }; then ok "$2"
+  else bad "$2 (want $1, rc=$rc: $out)"; fi
+}
+
+expect_product_fix() { # like expect_fix in product mode
+  local rc=0 out
+  out="$(FACTORY_MODE_OVERRIDE=product bash "$scan" --base-scripts "$work/base-scripts.txt" "$work/changes.patch" 2>&1)" || rc=$?
+  if [ "$1" = pass ] && [ "$rc" -eq 0 ]; then ok "$2"
+  elif [ "$1" = fail ] && [ "$rc" -ne 0 ] && { [ -z "${3:-}" ] || grep -qF -- "$3" <<<"$out"; }; then ok "$2"
+  else bad "$2 (want $1, rc=$rc: $out)"; fi
+}
+
+restore_mode_yml() {
+  git -C "$root" checkout -- .factory/mode.yml 2>/dev/null \
+    || printf '%s\n' '# owner-only' 'mode: template' >"$root/.factory/mode.yml"
 }
 
 # --- scripts/: new files, plus content edits of non-protected existing scripts ---
@@ -103,6 +125,10 @@ new_repo; printf 'x: 1\n' >>.factory/models.yaml; capture
 expect fail ".factory/models.yaml is owner-only" ".factory/models.yaml"
 new_repo; printf 'x\n' >>.factory/actions-security.md; capture
 expect fail ".factory/actions-security.md is owner-only" ".factory/actions-security.md"
+new_repo; printf 'mode: product\n' >.factory/mode.yml; capture
+expect fail ".factory/mode.yml is owner-only (template mode)" ".factory/mode.yml"
+new_repo; printf '\n# edit\n' >>.factory/mode.yml; capture
+expect fail ".factory/mode.yml cannot be edited" ".factory/mode.yml"
 
 # --- AGENTS.md: owner-only, root and nested (#97) ---
 new_repo; printf 'x\n' >>AGENTS.md; capture
@@ -190,10 +216,18 @@ cd "$root"
 rules="$(bash "$scan" --list-rules)"
 if grep -qF 'you may add new hyphenated scripts under scripts/, and you may edit the' <<<"$rules" \
   && grep -qF 'protected spend/security list' <<<"$rules" \
+  && grep -qF '.factory/mode.yml' <<<"$rules" \
   && grep -qF '.factory/models.yaml' <<<"$rules" && grep -qF 'only ADD lines' <<<"$rules" \
-  && grep -qF 'requirements-factory.txt' <<<"$rules" && grep -qF 'factory/budget.yml' <<<"$rules"; then
+  && grep -qF 'requirements-factory.txt' <<<"$rules" && grep -qF 'factory/budget.yml' <<<"$rules" \
+  && grep -qF 'Repo mode comes from owner-only .factory/mode.yml' <<<"$rules" \
+  && grep -qF 'template mode' <<<"$rules"; then
   ok "--list-rules states the scripts/, .factory/ and .gitignore rules"
 else bad "--list-rules wording"; fi
+rules_product="$(FACTORY_MODE_OVERRIDE=product bash "$scan" --list-rules)"
+if grep -qF 'product mode' <<<"$rules_product" \
+  && ! grep -qF 'you may add new hyphenated scripts under scripts/, and you may edit the' <<<"$rules_product"; then
+  ok "--list-rules product mode locks scripts/ and .factory/"
+else bad "--list-rules product mode wording"; fi
 missing_prot=""
 while IFS= read -r prot; do
   grep -qxF -- "- $prot" <<<"$rules" || missing_prot="$missing_prot $prot"
@@ -290,6 +324,39 @@ expect_fix pass "fix: add a new script still allowed"
 if bash "$scan" --list-rules fix | grep -qF 'Fix runs only'; then ok "--list-rules fix explains the fix-run exception"; else bad "--list-rules fix text"; fi
 if ! bash "$scan" --list-rules | grep -qF 'Fix runs only'; then ok "--list-rules (build) unchanged"; else bad "--list-rules build text"; fi
 if ! bash "$scan" --base-scripts "$work/missing.txt" "$work/changes.patch" >/dev/null 2>&1; then ok "--base-scripts with a missing file fails closed"; else bad "--base-scripts missing file"; fi
+
+# --- product mode (#69): entire scripts/ and .factory/ trees are owner-only ---
+new_repo; printf '#!/usr/bin/env bash\necho new\n' >scripts/dbt-seed-check.sh; capture
+expect_product fail "product: add under scripts/" "forbidden path"
+new_repo; printf 'print(\"more\")\n' >>scripts/factory-report.py; capture
+expect_product fail "product: edit non-protected script" "forbidden path"
+new_repo; printf '\nMore rules.\n' >>.factory/FACTORY.md; capture
+expect_product fail "product: edit .factory/ doc" "forbidden path"
+new_repo; mkdir -p .factory/skills; printf '# Skill\n' >.factory/skills/new-skill.md; capture
+expect_product fail "product: add under .factory/" "forbidden path"
+new_repo; printf 'mode: product\n' >.factory/mode.yml; capture
+expect_product fail "product: replace .factory/mode.yml" "forbidden path"
+new_repo; printf 'new\n' >factory/dbt/model-a.sql; printf 'more\n' >>docs/readme.md; capture
+expect_product pass "product: normal product code under factory/ and docs/"
+new_pr_repo; printf 'echo fixed\n' >>scripts/pr-added-check.sh; capture
+expect_product_fix fail "product: fix cannot edit PR-added script" "forbidden path"
+
+# --- invalid / missing .factory/mode.yml fails closed to product ---
+mode_backup="$work/mode-on-disk.bak"
+cp "$root/.factory/mode.yml" "$mode_backup"
+printf 'mode: banana\n' >"$root/.factory/mode.yml"
+new_repo; printf 'print(\"more\")\n' >>scripts/factory-report.py; capture
+if rc=0; out="$(bash "$scan" "$work/changes.patch" 2>&1)" || rc=$?; [ "$rc" -ne 0 ] && grep -qF 'forbidden path' <<<"$out"; then
+  ok "invalid mode value fails closed to product (scripts blocked)"
+else bad "invalid mode value fails closed (rc=$rc: $out)"; fi
+cp "$mode_backup" "$root/.factory/mode.yml"
+mv "$root/.factory/mode.yml" "$work/mode-hidden.yml"
+new_repo; printf '\nMore rules.\n' >>.factory/FACTORY.md; capture
+if rc=0; out="$(bash "$scan" "$work/changes.patch" 2>&1)" || rc=$?; [ "$rc" -ne 0 ] && grep -qF 'forbidden path' <<<"$out"; then
+  ok "missing .factory/mode.yml fails closed to product (.factory blocked)"
+else bad "missing mode.yml fails closed (rc=$rc: $out)"; fi
+mv "$work/mode-hidden.yml" "$root/.factory/mode.yml"
+restore_mode_yml
 
 echo "path-policy tests: $passed passed, $failed failed"
 [ "$failed" -eq 0 ]

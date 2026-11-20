@@ -22,8 +22,8 @@ For every **selected** issue ready to work, the Factory Manager writes a **spec*
 
 - Post the spec as a comment on the issue (`<!-- factory-spec v1 -->`). The Actions run commits the approved copy into its PR as `factory/specs/issue-<N>.md`.
 - **Classify** in the spec front matter: complexity (`simple | standard | complex` + reason), risk class (`trivial | normal | high`), model, predicted cost, budget cap. When Michael says medium/high **complexity**, use **standard/complex**; medium/high **risk** means **normal/high**. Complexity picks the model; risk class alone decides the merge gate. Never use risk words for complexity.
-- **Spec approval:** by risk class (Michael, 2026-11-02): Grok Bot reviews and approves **trivial** and **normal** risk (`approved_by: grok-bot`); **high** risk goes to Michael (`approved_by: michael`).
-- Scope each spec to hit the budget target (most issues under $0.10; hard cap $1 per issue). Split anything predicted above $1 before a run.
+- **Spec approval:** by risk class (Michael, 2026-11-02): Grok Bot reviews and approves **trivial** and **normal** risk (`approved_by: grok-bot`); **high** risk goes to Michael (`approved_by: michael`). When the owner must decide, use **Recommendation + Why** (below).
+- Scope each spec to hit the budget target (most issues under $0.10; hard cap $1 per issue). Split anything predicted above $1 before a run; split proposals use **Recommendation + Why**.
 - **Local open-weights fallback:** the approved spec's **Worker prompt** section is what the local agent runs (`skills/local-open-weights-run.md`); there is no separate handoff block.
 
 ## Triage (manager, before spec)
@@ -32,6 +32,16 @@ For every **selected** issue ready to work, the Factory Manager writes a **spec*
 - Assign a **risk class** on the PR: `trivial` | `normal` | `high` (see merge authority).
 - **Rate complexity, then pick the model** (required before any launch). Post a one-line triage note on the issue: `Complexity: simple | standard | complex — <reason>; Risk: trivial | normal | high; Model: <pinned model + effort>`. Complexity picks the model; risk class alone decides the merge gate. Never use risk words (trivial/normal/high) for complexity. Judge by what the change touches, not its size (workflows, algorithms, data stores, spend paths, security, multi-file logic are **complex**). Then pick the model from the full `.factory/MODEL_ROUTING.md` table — its writing, review, escalation and stuck rows included — not a two-model shortcut. Pin the model on every cloud-agent launch, including restarts and reviews (never Auto, never Fast). An unpinned or mismatched launch is stopped and relaunched pinned. Copy the triage line into the PR body.
 - Triage scopes each issue to hit the budget target and splits any issue likely to cost more than $1 into smaller issues.
+
+### Human gates (recommendation + why)
+
+At **spec approval**, **product gate / merge**, **model or routing choice**, and **scope split**, lead with a pick — not a bare menu:
+
+- **Recommendation:** one clear option (list it first; phone-friendly **(a)** when useful).
+- **Why:** 1–3 concrete bullets (cost, risk, evidence: CI checks, run cost, spec match, gate summary).
+- **Alternatives:** one short line each (e.g. **(b)** hold, **(c)** split).
+
+Use the same shape in **approval packs** and when marking a PR **ready for review** (summary + link to Evidence). The manager's day-to-day batched format lives in `factory-manager.md`.
 
 ## Build
 
@@ -83,7 +93,7 @@ The PR body is the durable audit trail. Chat is ephemeral relative to GitHub.
 ## Ship & feed back
 
 - Merge only when the table above allows.
-- **Before handing a PR to the human for review:** update the branch onto latest default branch so it is current at review time.
+- **Before handing a PR to the human for review:** update the branch onto latest default branch so it is current at review time; include a **Recommendation + Why** summary (and optional `Recommendation:` line on the PR body for normal/high).
 - **Immediately before any merge** (trivial auto-merge, or after the human gate):
   1. Before you report a PR as behind or conflicting, check it is not already merged. Then check whether the PR branch is behind the default branch.
   2. If behind, update it (GitHub “Update branch” / `update_pull_request_branch`, or merge the default branch into the PR branch; no rebase, no force-push).
@@ -96,7 +106,7 @@ The PR body is the durable audit trail. Chat is ephemeral relative to GitHub.
 - Close or update the issue when ship + deploy are good (or note follow-ups).
 - **Scheduled jobs:** at the start of each session, check the latest scheduled (cron) workflow runs on the default branch. A failed run becomes a bug issue (failing step + log excerpt), is reported to the human, and goes to the top of the queue. A scheduled run that skips because the job already succeeded that day (UTC) is not a failure. The daily check reports the project's headline health numbers listed in `DOCS.md` (e.g. items published, items hidden or dropped, items shown correctly). Flag big jumps in run duration too. Also confirm the job's output actually went live (a data commit pushed with the default workflow token won't trigger a deploy workflow). Cron jobs run early, at an odd minute, with a guarded backup cron for important daily jobs; flag a finding when no run has finished by the project's freshness deadline (GitHub often starts scheduled runs hours late). A routine check that hasn't posted its result by its deadline is a failure: say so in the project room right away; don't go quiet.
 - Failures, monitor hits, process lessons → new GitHub issues and/or skill updates. After any slip, write the lesson into the rules or skills. Not chat-only.
-- **Asking the owner:** one decision per question, as (a)/(b) with your recommended pick and its consequence.
+- **Asking the owner:** one decision per question — **Recommendation**, **Why** (1–3 bullets), alternatives one line each (see Human gates above).
 - **End of day:** the manager posts a short summary in the room: decisions needed, what shipped, what went wrong, lessons.
 
 - Use "Closes #N" only for the issue this PR finishes. Ledgers, trackers, and parent issues get "Refs #N" (see FACTORY.md).
