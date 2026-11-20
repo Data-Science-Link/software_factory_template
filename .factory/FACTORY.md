@@ -68,6 +68,7 @@ Cloud factory path (selected issues). Detail: `.factory/VISION.md` §4.
 - `scripts/factory-check-model.py`
 - `scripts/factory-classify-failure.py`
 - `scripts/factory-cost.sh`
+- `scripts/factory-issue-spend.py`
 - `scripts/factory-merge.sh`
 - `scripts/factory-predict-cost.py`
 - `scripts/factory-run-body.sh`
@@ -81,6 +82,7 @@ Cloud factory path (selected issues). Detail: `.factory/VISION.md` §4.
 - `scripts/factory-status.sh`
 - `scripts/factory-usage.py`
 - `scripts/factory-validate-run.py`
+- `scripts/harden-repo.sh`
 - `scripts/install-gitleaks-ci.sh`
 - `scripts/install-hooks.sh`
 - `scripts/opencode-agent-fix.sh`
@@ -100,6 +102,7 @@ Cloud factory path (selected issues). Detail: `.factory/VISION.md` §4.
 - `scripts/opencode-stage-spec-files.sh`
 - `scripts/opencode-usage-report.sh`
 - `scripts/opencode-verify.sh`
+- `scripts/opencode-worker-test.sh`
 - `scripts/pr-check.sh`
 - `scripts/protect-main.sh`
 

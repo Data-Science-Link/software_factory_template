@@ -17,6 +17,9 @@ import yaml
 
 DEFAULT_TEMPLATE_REPO = "Data-Science-Link/software_factory_template"
 DEFAULT_TAG = "v0.1.0"
+TEMPLATE_REPO_PLACEHOLDER = "YOUR_ORG/software_factory_template"
+LEGACY_TEMPLATE_REPO = "Data-Science-Link/software_factory_template"
+OWNER_PLACEHOLDER = "YOUR_OWNER_GITHUB_LOGIN"
 
 # Minimal caller stubs when docs/reusable-workflows/callers/ is absent (#156).
 CALLER_SPECS: list[dict[str, str]] = [
@@ -91,17 +94,42 @@ def template_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def substitute_caller(text: str, template_repo: str, tag: str) -> str:
+def substitute_caller(
+    text: str, template_repo: str, tag: str, owner: str | None = None
+) -> str:
     text = text.replace("{{TEMPLATE_REPO}}", template_repo)
     text = text.replace("{{TAG}}", tag)
+    text = text.replace(TEMPLATE_REPO_PLACEHOLDER, template_repo)
+    text = text.replace(LEGACY_TEMPLATE_REPO, template_repo)
     text = text.replace("@v0.0.0", f"@{tag}")
+    if owner:
+        text = text.replace(OWNER_PLACEHOLDER, owner)
     # Replace any pinned tag on reusable workflow paths.
     text = re.sub(
         r"((?:[\w.-]+/){2}\.github/workflows/reusable-[\w.-]+\.yml)@[^\s\"']+",
         rf"\1@{tag}",
         text,
     )
+    text = re.sub(
+        r"(factory_ref:\s*)v\d+\.\d+\.\d+",
+        rf"\1{tag}",
+        text,
+    )
     return text
+
+
+def assert_caller_placeholders_resolved(text: str, *, owner: str) -> None:
+    """Raise ValueError when template or owner placeholders survive substitution."""
+    leftovers: list[str] = []
+    if "YOUR_ORG" in text:
+        leftovers.append("YOUR_ORG")
+    if OWNER_PLACEHOLDER in text:
+        leftovers.append(OWNER_PLACEHOLDER)
+    if leftovers:
+        raise ValueError(
+            "caller workflow still contains template placeholders: "
+            + ", ".join(leftovers)
+        )
 
 
 def render_generated_caller(spec: dict[str, str], template_repo: str, tag: str) -> str:
@@ -123,15 +151,21 @@ def render_generated_caller(spec: dict[str, str], template_repo: str, tag: str) 
 
 
 def load_caller_stubs(
-    template_dir: Path, template_repo: str, tag: str
+    template_dir: Path,
+    template_repo: str,
+    tag: str,
+    owner: str | None = None,
 ) -> dict[str, str]:
     callers_dir = template_dir / "docs" / "reusable-workflows" / "callers"
     out: dict[str, str] = {}
     if callers_dir.is_dir():
         for path in sorted(callers_dir.glob("*.yml")) + sorted(callers_dir.glob("*.yaml")):
-            out[path.name] = substitute_caller(
-                path.read_text(encoding="utf-8"), template_repo, tag
+            body = substitute_caller(
+                path.read_text(encoding="utf-8"), template_repo, tag, owner
             )
+            if owner:
+                assert_caller_placeholders_resolved(body, owner=owner)
+            out[path.name] = body
         if out:
             return out
     for spec in CALLER_SPECS:
@@ -310,6 +344,7 @@ def build_artifacts(
     template_repo: str,
     tag: str,
     with_callers: bool,
+    owner: str | None,
 ) -> list[tuple[str, Callable[[], str]]]:
     items: list[tuple[str, Callable[[], str]]] = [
         (".factory/mode.yml", mode_yml),
@@ -324,7 +359,7 @@ def build_artifacts(
         (".github/dependabot.yml", dependabot_yml),
     ]
     if with_callers:
-        stubs = load_caller_stubs(template_dir, template_repo, tag)
+        stubs = load_caller_stubs(template_dir, template_repo, tag, owner)
         for name, body in stubs.items():
             rel = f".github/workflows/{name}"
             items.append((rel, lambda b=body: b))
@@ -399,6 +434,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=True,
         help="Write .github/workflows caller stubs (default: true)",
     )
+    ap.add_argument(
+        "--owner",
+        default=None,
+        help=(
+            "GitHub login allowed to trigger /oc workflows; substitutes "
+            f"{OWNER_PLACEHOLDER} in caller stubs"
+        ),
+    )
     return ap.parse_args(argv)
 
 
@@ -424,6 +467,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.owner is not None and not re.fullmatch(r"[\w.-]+", args.owner):
+        print(
+            "factory-init-repo: --owner must be a GitHub username (letters, digits, - .)",
+            file=sys.stderr,
+        )
+        return 2
 
     repo_name = args.repo_name or target.name
     result = WriteResult()
@@ -436,6 +485,7 @@ def main(argv: list[str] | None = None) -> int:
             args.template_repo,
             args.tag,
             args.with_callers,
+            args.owner,
         )
     except FileNotFoundError as exc:
         print(f"factory-init-repo: {exc}", file=sys.stderr)

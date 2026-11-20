@@ -18,6 +18,7 @@ python3 scripts/factory-init-repo.py --target /path/to/product-repo
 | `--tag` | `v0.1.0` | Semver tag pinned in caller stubs |
 | `--repo-name` | basename of `--target` | Name used in `AGENTS.md` and `DECISIONS.md` |
 | `--template-repo` | `Data-Science-Link/software_factory_template` | Upstream factory template |
+| `--owner` | (none) | GitHub login for `/oc` triggers; substitutes `YOUR_OWNER_GITHUB_LOGIN` in callers |
 | `--template-dir` | parent of `scripts/` | Template checkout used to copy the PR template and caller sources |
 | `--dry-run` | off | Print planned files; write nothing |
 | `--force` | off | Overwrite files this tool would create (never touches unknown paths) |
@@ -36,7 +37,7 @@ python3 scripts/factory-init-repo.py --target /path/to/product-repo
 | `.github/dependabot.yml` | Weekly GitHub Actions updates (if missing) |
 | `.github/workflows/*.yml` | Caller stubs → `reusable-*.yml@<tag>` with `secrets: inherit` |
 
-If `docs/reusable-workflows/callers/` exists in the template checkout, those files are copied with `{{TEMPLATE_REPO}}` / `{{TAG}}` substitution. Otherwise the script emits minimal caller stubs for `pr-check`, `secret-scan`, OpenCode workflows, and `approve-oc-runs`.
+If `docs/reusable-workflows/callers/` exists in the template checkout, those files are copied with substitutions for `YOUR_ORG/software_factory_template`, legacy `Data-Science-Link/software_factory_template`, `{{TEMPLATE_REPO}}` / `{{TAG}}`, and the requested semver pin. Pass `--owner` to replace `YOUR_OWNER_GITHUB_LOGIN` as well; with both `--template-repo` and `--owner`, generated callers must contain no leftover template placeholders. Otherwise the script emits minimal caller stubs for `pr-check`, `secret-scan`, OpenCode workflows, and `approve-oc-runs`.
 
 ## Examples
 

@@ -89,8 +89,39 @@ grep -q "^mode: product" "$fixture_b/.factory/mode.yml" && ok "mode is product" 
 [ -d "$fixture_b/.factory/migration-callers" ] && ok "migration-callers dir" || bad "migration-callers dir"
 grep -q "reusable-pr-check.yml@v0.9.2" "$fixture_b/.factory/migration-callers/pr-check.yml" \
   && ok "caller pin tag" || bad "caller pin tag"
+if grep -q "Data-Science-Link/software_factory_template" "$fixture_b/.factory/migration-callers/pr-check.yml" \
+  && ! grep -q "YOUR_ORG" "$fixture_b/.factory/migration-callers/pr-check.yml"; then
+  ok "migration-callers substitute default template-repo"
+else
+  bad "migration-callers substitute default template-repo"
+fi
 [ -f "$fixture_b/scripts/build-product.sh" ] && ok "product script preserved" || bad "product script preserved"
 [ -f "$fixture_b/scripts/test-all.sh" ] && ok "customized script preserved" || bad "customized script preserved"
+
+# --- apply with --owner and custom --template-repo (zero placeholders) ---
+fixture_owner="$work/adopter-owner"
+setup_fixture_repo "$fixture_owner"
+TEMPLATE_REPO="example-org/software_factory_template"
+OWNER_LOGIN="example-migrate-owner"
+run_migrate --repo-dir "$fixture_owner" --tag v0.9.4 \
+  --template-dir "$root" --template-repo "$TEMPLATE_REPO" \
+  --owner "$OWNER_LOGIN" --apply
+assert_rc "apply with owner" 0
+placeholder_hits="$(grep -R -l -E 'YOUR_ORG|YOUR_OWNER_GITHUB_LOGIN' \
+  "$fixture_owner/.factory/migration-callers" 2>/dev/null || true)"
+[ -z "$placeholder_hits" ] && ok "owner apply: zero template placeholders" \
+  || bad "owner apply: zero template placeholders"
+grep -q "$TEMPLATE_REPO" "$fixture_owner/.factory/migration-callers/opencode-spec.yml" \
+  && ok "owner apply: custom template-repo in callers" \
+  || bad "owner apply: custom template-repo in callers"
+grep -q "$OWNER_LOGIN" "$fixture_owner/.factory/migration-callers/opencode-spec.yml" \
+  && ok "owner apply: owner login substituted" || bad "owner apply: owner login substituted"
+if ! bash "$root/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-init-repo.py' \
+  && ! bash "$root/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-migrate-adopter.py'; then
+  ok "init/migrate not in PROTECTED_SCRIPTS"
+else
+  bad "init/migrate not in PROTECTED_SCRIPTS"
+fi
 
 # --- prune-identical archives only identical ---
 fixture_c="$work/adopter-c"
