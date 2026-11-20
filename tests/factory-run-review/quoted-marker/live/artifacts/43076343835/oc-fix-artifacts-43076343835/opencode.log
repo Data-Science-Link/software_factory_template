@@ -1,0 +1,8 @@
+assistant → Read scripts/factory-run-review.py
+assistant The fixture must mention The user has specified a rule which prevents you from using this specific tool call in the success criteria without triggering a false blocked_call.
+assistant → Read tests/factory-run-review/README.md
+← 75|The user has specified a rule which prevents you from using this specific tool call|PERMISSION_DENIED_RE
+assistant ✗ Bash: ls -R tests/factory-run-review failed
+The user has specified a rule which prevents you from using this specific tool call. Denied: bash is restricted.
+assistant ✗ Bash: git check-ignore -v foo failed
+The user has specified a rule which prevents you from using this specific tool call.

@@ -147,14 +147,26 @@ if [ "$rc" = 0 ] && [ "$(field "$r" work_type)" = spec ] && [ "$(field "$r" risk
   ok "spec run: work_type spec, risk normal, no_changes, Flash model, posted, no PR calls"
 else bad "spec run (rc=$rc)"; cat "$work/c7/out.txt"; fi
 
-# 8. Fix run: issue and PR from fix-meta.txt, outcome pr_updated.
+# 8. Fix run: issue and PR from fix-meta.txt, outcome pr_updated; Verification block refreshed (#187).
 new_case c8
 printf 'pr_number=147\nissue_number=133\n' >"$work/c8/art/fix-meta.txt"
+cat >>"$work/c8/stub/pr-body.md" <<'EOF'
+
+Verification output (run by the harness in a sandbox, not by the model; capped):
+
+```text
+Result: FAIL: 1 command(s) exited non-zero
+Tree: 0b9c0ba41281
+```
+EOF
+echo 'Result: PASS: every command exited 0' >"$work/c8/art/evidence.md"
 run_finish c8 fix success success OC_ISSUE_NUMBER=
 if [ "$rc" = 0 ] && [ "$(field "$work/c8/record.json" outcome)" = pr_updated ] && [ "$(field "$work/c8/record.json" pr)" = 147 ] \
-  && grep -q 'gh pr edit 147' "$work/c8/stub/gh.log" && ! grep -q 'gh pr list' "$work/c8/stub/gh.log"; then
-  ok "fix run: PR and issue from fix-meta.txt, pr_updated, PR 147 body rewritten"
-else bad "fix run (rc=$rc)"; cat "$work/c8/out.txt"; fi
+  && grep -q 'gh pr edit 147' "$work/c8/stub/gh.log" && ! grep -q 'gh pr list' "$work/c8/stub/gh.log" \
+  && grep -qF 'Result: PASS: every command exited 0' "$work/c8/stub/pr-body-edited.md" \
+  && ! grep -qF '0b9c0ba41281' "$work/c8/stub/pr-body-edited.md"; then
+  ok "fix run: PR body Verification refreshed from packed evidence (#187)"
+else bad "fix run (rc=$rc)"; cat "$work/c8/out.txt"; head -40 "$work/c8/stub/pr-body-edited.md" 2>/dev/null; fi
 
 # 8b (#162). PR diff touches .github/workflows/ and the body lost its template sections: record
 # and PR body still written, gate fails both checks, the job exits 1 loudly.
@@ -249,14 +261,16 @@ else bad "run meter must never fail the run"; fi
 p="$work/pack"; mkdir -p "$p/src" "$p/src-record/usage"
 echo '{"started_at": "2026-11-09T01:00:00Z", "base_sha": "x"}' >"$p/src-record/run-clock.json"
 echo '{"run_id": "gha-1-1"}' >"$p/src/run-start.json"; echo spec >"$p/src/spec.md"; echo 'pr_number=1' >"$p/src/fix-meta.txt"
+echo 'Result: PASS harness evidence' >"$p/src/evidence.md"
 echo 2.5 >"$p/src-record/key-spend-start.txt"
 echo '{"ok": 1}' >"$p/src-record/usage/session-1.json"
 echo '{"leak": "ghp_abcdefghijklmnopqrstuvwxyz0123"}' >"$p/src-record/usage/session-2.json"
 OC_ARTIFACT_DIR="$p/src" GITHUB_OUTPUT="$p/out" bash scripts/factory-run-pack.sh >"$p/log" 2>&1
 if grep -qx ok=yes "$p/out" && [ -f "$p/src-record/usage/session-1.json" ] && [ ! -f "$p/src-record/usage/session-2.json" ] \
   && [ -f "$p/src-record/run-start.json" ] && [ -f "$p/src-record/spec.md" ] && [ -f "$p/src-record/fix-meta.txt" ] \
+  && [ -f "$p/src-record/evidence.md" ] && grep -q 'PASS harness evidence' "$p/src-record/evidence.md" \
   && [ ! -f "$p/src-record/key-spend-start.txt" ] && ! grep -q ghp_ "$p/log"; then
-  ok "run pack: copies run-start/spec/fix-meta, drops an export with a scan hit, ok=yes"
+  ok "run pack: copies run-start/spec/fix-meta/evidence.md, drops an export with a scan hit, ok=yes"
 else bad "run pack"; cat "$p/log"; fi
 echo '{"run_id": "ghp_abcdefghijklmnopqrstuvwxyz0123"}' >"$p/src/run-start.json"; : >"$p/out"
 OC_ARTIFACT_DIR="$p/src" GITHUB_OUTPUT="$p/out" bash scripts/factory-run-pack.sh >"$p/log" 2>&1; prc=$?

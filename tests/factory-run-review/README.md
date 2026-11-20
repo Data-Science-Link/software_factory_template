@@ -191,6 +191,16 @@ is a workflow-style log with no denial text.
 `--live-dir denied-log/live` must report the blocked `find` command in
 `blocked_calls` for run `43069209257` from the `opencode.log` fallback.
 
+## Quoted-marker regression (`quoted-marker/live/`)
+
+`quoted-marker/live/` guards the `opencode.log` fallback: the permission-denial
+marker appears in model prose and in echoed read-file contents (after `→ Read`
+lines), alongside real `✗ ... failed` tool denials. Only the failed tool lines
+must appear in `blocked_calls` — never the successful `→ Read` paths.
+
+`--live-dir quoted-marker/live` must report exactly two blocked commands for run
+`43076343835` (`ls -R` and `git check-ignore`), both starting with `✗`.
+
 ## Negative-session fixture (`denied-neg/live/`)
 
 `denied-neg/live/` is the broken-case guard for the session trigger: a naive

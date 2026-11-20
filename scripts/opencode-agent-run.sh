@@ -30,6 +30,7 @@ instruction="${instruction#\/oc}"
 instruction="${instruction#"${instruction%%[![:space:]]*}"}"
 
 if [ -z "$instruction" ]; then
+  printf '%s\n' empty_instruction >"$OC_ARTIFACT_DIR/agent-failure-reason.txt"
   echo "agent-run: empty instruction after /oc prefix" >&2
   exit 1
 fi
