@@ -16,7 +16,7 @@ if [ ! -f "$rec/run-clock.json" ]; then
   say "no run-clock.json (the worker never started); nothing to pack"
   exit 0
 fi
-for f in run-start.json spec.md fix-meta.txt; do
+for f in run-start.json spec.md fix-meta.txt evidence.md; do
   [ -f "$src/$f" ] && cp "$src/$f" "$rec/$f"
 done
 rm -f "$rec/key-spend-start.txt"
@@ -28,7 +28,7 @@ for f in "$rec"/usage/*.json; do
   fi
 done
 small=()
-for f in run-clock.json run-start.json spec.md fix-meta.txt key-spend.json; do
+for f in run-clock.json run-start.json spec.md fix-meta.txt evidence.md key-spend.json; do
   [ -f "$rec/$f" ] && small+=("$rec/$f")
 done
 if ! bash "$scan" "${small[@]}" >/dev/null 2>&1; then

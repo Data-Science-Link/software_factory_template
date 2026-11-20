@@ -19,15 +19,22 @@ switch). Output is deterministic.
 """
 import argparse
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 # Fields gh must return so live mode can compute epic progress.
-GH_JSON_FIELDS = "number,title,labels,createdAt,updatedAt,url,subIssuesSummary"
+GH_JSON_FIELDS = (
+    "number,title,body,labels,createdAt,updatedAt,url,subIssuesSummary"
+)
 
 PRIORITY_ORDER = {"high": 2, "low": 1, "none": 0}
+
+# Issue numbers referenced in text (#123). Task-list lines are included.
+_BODY_REF_RE = re.compile(r"(?:^|[\s(\[]|/issues/)#(\d+)\b", re.MULTILINE)
 
 
 def is_pull_request(item):
@@ -73,7 +80,139 @@ def normalize_status(names):
     return "open"
 
 
-def normalize_item(item):
+def epic_summary(item):
+    summary = item.get("subIssuesSummary")
+    if summary is None:
+        summary = item.get("sub_issues_summary")
+    return summary if isinstance(summary, dict) else None
+
+
+def progress_from_summary(summary):
+    """Return (done, total) from subIssuesSummary-shaped dict, or None if absent."""
+    if not summary:
+        return None
+    total = summary.get("total")
+    done = summary.get("done")
+    if done is None:
+        done = summary.get("completed")
+    if total is None and done is None:
+        return None
+    return int(done or 0), int(total or 0)
+
+
+def summary_needs_fallback(summary, progress):
+    """True when GitHub summary is missing or looks like an empty placeholder."""
+    if progress is None:
+        return True
+    _done, total = progress
+    if total == 0:
+        summary_total = (summary or {}).get("total")
+        summary_done = (summary or {}).get("done")
+        if summary_done is None and summary:
+            summary_done = summary.get("completed")
+        if summary_total == 0 or (
+            summary_total is None and (summary_done == 0 or summary_done is None)
+        ):
+            return True
+    return False
+
+
+def parse_body_issue_refs(body):
+    """Unique issue numbers from #N references in epic body text, in first-seen order."""
+    if not body:
+        return []
+    seen = set()
+    refs = []
+    for match in _BODY_REF_RE.finditer(body):
+        num = int(match.group(1))
+        if num not in seen:
+            seen.add(num)
+            refs.append(num)
+    return refs
+
+
+def progress_from_sub_issues(sub_issues):
+    if not sub_issues:
+        return None
+    total = 0
+    done = 0
+    for sub in sub_issues:
+        if not isinstance(sub, dict):
+            continue
+        if is_pull_request(sub):
+            continue
+        total += 1
+        state = (sub.get("state") or "").lower()
+        if state == "closed":
+            done += 1
+    if total == 0:
+        return None
+    return done, total
+
+
+def build_issues_index(items):
+    index = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        num = item.get("number")
+        if num is not None:
+            index[int(num)] = item
+    return index
+
+
+def progress_from_body_refs(refs, issues_index, epic_number):
+    if not refs:
+        return None
+    total = 0
+    done = 0
+    for num in refs:
+        if num == epic_number:
+            continue
+        sub = issues_index.get(num)
+        if sub is None or is_pull_request(sub):
+            continue
+        total += 1
+        state = (sub.get("state") or "open").lower()
+        if state == "closed":
+            done += 1
+    if total == 0:
+        return None
+    return done, total
+
+
+def epic_done_total(item, issues_index, sub_issues_by_epic):
+    """Resolve done/total for one epic-shaped raw issue item."""
+    summary = epic_summary(item)
+    progress = progress_from_summary(summary)
+    epic_number = int(item.get("number") or 0)
+
+    if progress is not None and not summary_needs_fallback(summary, progress):
+        return progress
+
+    embedded = item.get("sub_issues")
+    if isinstance(embedded, list):
+        from_embedded = progress_from_sub_issues(embedded)
+        if from_embedded is not None:
+            return from_embedded
+
+    fetched = sub_issues_by_epic.get(epic_number)
+    if fetched is not None:
+        from_api = progress_from_sub_issues(fetched)
+        if from_api is not None:
+            return from_api
+
+    refs = parse_body_issue_refs(item.get("body") or "")
+    from_body = progress_from_body_refs(refs, issues_index, epic_number)
+    if from_body is not None:
+        return from_body
+
+    if progress is not None:
+        return progress
+    return 0, 0
+
+
+def normalize_item(item, issues_index, sub_issues_by_epic):
     names = labels_of(item)
     out = {
         "number": item.get("number"),
@@ -86,25 +225,22 @@ def normalize_item(item):
         "status": normalize_status(names),
     }
     if "epic" in names:
-        summary = item.get("subIssuesSummary")
-        if summary is None:
-            summary = item.get("sub_issues_summary")
-        if isinstance(summary, dict):
-            if "done" in summary:
-                out["done"] = summary["done"]
-            if "total" in summary:
-                out["total"] = summary["total"]
+        done, total = epic_done_total(item, issues_index, sub_issues_by_epic)
+        out["done"] = done
+        out["total"] = total
     return out
 
 
-def normalize_items(items):
+def normalize_items(items, sub_issues_by_epic=None):
+    sub_issues_by_epic = sub_issues_by_epic or {}
+    issues_index = build_issues_index(items)
     out = []
     for item in items:
         if not isinstance(item, dict):
             continue
         if is_pull_request(item):
             continue
-        out.append(normalize_item(item))
+        out.append(normalize_item(item, issues_index, sub_issues_by_epic))
     out.sort(
         key=lambda i: (
             -PRIORITY_ORDER[i["priority"]],
@@ -118,6 +254,96 @@ def normalize_items(items):
 def load_fixture(path):
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def repo_slug():
+    env_repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if env_repo and "/" in env_repo:
+        return env_repo
+    if shutil.which("gh") is None:
+        return ""
+    try:
+        proc = subprocess.run(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return (proc.stdout or "").strip()
+
+
+def gh_api_json_paginated(endpoint):
+    if shutil.which("gh") is None:
+        return None
+    try:
+        proc = subprocess.run(
+            ["gh", "api", "--paginate", endpoint],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    # stdout may be concatenated JSON arrays
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+    except ValueError:
+        pass
+    chunks = []
+    decoder = json.JSONDecoder()
+    idx = 0
+    while idx < len(raw):
+        while idx < len(raw) and raw[idx] in " \t\n\r":
+            idx += 1
+        if idx >= len(raw):
+            break
+        try:
+            chunk, end = decoder.raw_decode(raw, idx)
+        except ValueError:
+            return None
+        if isinstance(chunk, list):
+            chunks.extend(chunk)
+        idx = end
+    return chunks
+
+
+def fetch_sub_issues_for_epic(repo, number):
+    endpoint = f"repos/{repo}/issues/{number}/sub_issues?per_page=100"
+    return gh_api_json_paginated(endpoint)
+
+
+def collect_live_sub_issues(items, repo):
+    """Fetch sub-issues from the API for epics whose summary is empty."""
+    if not repo:
+        return {}
+    by_epic = {}
+    for item in items:
+        if not isinstance(item, dict) or is_pull_request(item):
+            continue
+        if "epic" not in labels_of(item):
+            continue
+        num = item.get("number")
+        if num is None:
+            continue
+        summary = epic_summary(item)
+        progress = progress_from_summary(summary)
+        if not summary_needs_fallback(summary, progress):
+            continue
+        subs = fetch_sub_issues_for_epic(repo, num)
+        if subs is not None:
+            by_epic[int(num)] = subs
+    return by_epic
 
 
 def load_live():
@@ -148,10 +374,13 @@ def load_live():
         )
         sys.exit(1)
     try:
-        return json.loads(proc.stdout)
+        items = json.loads(proc.stdout)
     except ValueError as exc:
         sys.stderr.write(f"ERROR: `gh issue list` returned invalid JSON: {exc}\n")
         sys.exit(1)
+    repo = repo_slug()
+    sub_issues_by_epic = collect_live_sub_issues(items, repo)
+    return items, sub_issues_by_epic
 
 
 def main() -> None:
@@ -164,12 +393,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    sub_issues_by_epic = {}
     if args.from_json:
         items = load_fixture(args.from_json)
     else:
-        items = load_live()
+        items, sub_issues_by_epic = load_live()
 
-    normalized = normalize_items(items)
+    normalized = normalize_items(items, sub_issues_by_epic)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as fh:

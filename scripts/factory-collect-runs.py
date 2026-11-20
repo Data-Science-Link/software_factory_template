@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -40,6 +41,33 @@ def load_validator():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.load_record, module.validate_record
+
+
+def resolve_github_repo(cli_repo: str | None) -> str:
+    """Return owner/repo from --repo, GITHUB_REPOSITORY, or git remote origin."""
+    if cli_repo:
+        return cli_repo
+    env_repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if env_repo:
+        return env_repo
+    try:
+        proc = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        sys.stderr.write(
+            "ERROR: cannot detect GitHub repo; pass --repo or set GITHUB_REPOSITORY\n"
+        )
+        raise SystemExit(2) from exc
+    url = proc.stdout.strip()
+    match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", url)
+    if not match:
+        sys.stderr.write(f"ERROR: unrecognized origin remote URL: {url}\n")
+        raise SystemExit(2)
+    return f"{match.group(1)}/{match.group(2)}"
 
 
 def fetch_comments(repo: str) -> list[dict]:
@@ -76,7 +104,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="site-data/runs")
     parser.add_argument("--from-json", default=None, help="Local JSON fixture of comments")
-    parser.add_argument("--repo", default="Data-Science-Link/software_factory_template")
+    parser.add_argument(
+        "--repo",
+        default=None,
+        help="GitHub owner/repo (default: GITHUB_REPOSITORY or git remote origin)",
+    )
     args = parser.parse_args()
 
     load_record, validate_record = load_validator()
@@ -85,7 +117,8 @@ def main() -> int:
         with open(args.from_json, encoding="utf-8") as f:
             comments = json.load(f)
     else:
-        comments = fetch_comments(args.repo)
+        repo = resolve_github_repo(args.repo)
+        comments = fetch_comments(repo)
 
     found = 0
     invalid = []  # (run_id or source, reason)

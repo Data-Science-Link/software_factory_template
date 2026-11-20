@@ -1,0 +1,16 @@
+[
+  {
+    "number": 800,
+    "title": "Epic with embedded sub-issues",
+    "labels": [{"name": "epic"}],
+    "createdAt": "2026-11-01T10:00:00Z",
+    "updatedAt": "2026-11-10T09:00:00Z",
+    "url": "https://github.com/example/factory/issues/800",
+    "subIssuesSummary": {"completed": 0, "total": 0},
+    "sub_issues": [
+      {"number": 801, "state": "closed"},
+      {"number": 802, "state": "closed"},
+      {"number": 803, "state": "open"}
+    ]
+  }
+]
