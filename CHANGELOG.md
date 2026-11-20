@@ -23,9 +23,10 @@ The first planned tag is **v0.1.0** (unreleased). No tag is cut until the owner 
 
 **Standalone factory site**
 
-- [`scripts/factory-site.py`](scripts/factory-site.py): static site with **Architecture**, **Financials**, **Backlog**, and **dbt** tabs; light/dark theme toggle, live backlog text filter, Financials table sort and CSV export.
+- [`scripts/factory-site.py`](scripts/factory-site.py): static site with **Architecture**, **Financials**, **Backlog**, and **dbt** tabs; light/dark theme toggle, live backlog text filter, Financials table sort and CSV export; **Architecture** interactive loop with ARIA and print-friendly UX; offline preview from any `--runs-dir` without live CI.
 - [`scripts/factory-site-smoke.py`](scripts/factory-site-smoke.py) for offline HTML/SVG smoke checks.
-- dbt marts [`mart_model_efficiency`](factory/dbt/models/marts/mart_model_efficiency.sql), [`mart_monthly_cfo`](factory/dbt/models/marts/mart_monthly_cfo.sql), and [`mart_spend_by_work_type`](factory/dbt/models/marts/mart_spend_by_work_type.sql) with dbt tab lineage from `manifest.json`; empty-seed handling fixes null CFO headline metrics on fresh installs.
+- Golden run fixtures under [examples/sample-runs/](examples/sample-runs/) for digest, monthly review, and site smoke without private data.
+- dbt marts [`mart_model_efficiency`](factory/dbt/models/marts/mart_model_efficiency.sql), [`mart_monthly_cfo`](factory/dbt/models/marts/mart_monthly_cfo.sql), and [`mart_spend_by_work_type`](factory/dbt/models/marts/mart_spend_by_work_type.sql) with dbt tab lineage from `manifest.json`; empty-seed handling fixes null CFO headline metrics on fresh installs; expanded singular tests (`assert_forecast_grain_unique`, `assert_model_efficiency_bounds`, `assert_token_counts_non_negative`, renamed `assert_cfo_monthly_matches_runs`).
 - Factory site **Financials** separates **Coding** vs **Review** spend using `mart_spend_by_work_type` (run `work_type` on run records).
 
 **Adoption and operations CLI**
@@ -34,13 +35,13 @@ The first planned tag is **v0.1.0** (unreleased). No tag is cut until the owner 
 - Repo lifecycle: [`scripts/factory-init-repo.py`](scripts/factory-init-repo.py), [`scripts/factory-migrate-adopter.py`](scripts/factory-migrate-adopter.py), [`scripts/factory-doctor.py`](scripts/factory-doctor.py) ([docs/DOCTOR.md](docs/DOCTOR.md)), [`scripts/factory-release.py`](scripts/factory-release.py), [`scripts/factory-sync-repos.py`](scripts/factory-sync-repos.py), [`scripts/factory-owner-pack.py`](scripts/factory-owner-pack.py) (launch gate).
 - Offline validators: [`scripts/factory-models-check.py`](scripts/factory-models-check.py), [`scripts/factory-decision-log.py`](scripts/factory-decision-log.py), [`scripts/factory-branch-cleanup.py`](scripts/factory-branch-cleanup.py) (dry-run branch hygiene for `oc/` and `cursor/` heads).
 - Spec and workflow hygiene: [`scripts/factory-spec-lint.py`](scripts/factory-spec-lint.py), [`scripts/factory-audit-workflows.py`](scripts/factory-audit-workflows.py), [`scripts/factory-check-docs.py`](scripts/factory-check-docs.py).
-- Spend and launch: [`scripts/factory-cost-digest.py`](scripts/factory-cost-digest.py) ([docs/COST_DIGEST.md](docs/COST_DIGEST.md)), [`scripts/factory-prepublic-check.py`](scripts/factory-prepublic-check.py).
+- Spend and launch: [`scripts/factory-cost-digest.py`](scripts/factory-cost-digest.py) ([docs/COST_DIGEST.md](docs/COST_DIGEST.md)), [`scripts/factory-monthly-review.py`](scripts/factory-monthly-review.py) ([docs/MONTHLY_REVIEW.md](docs/MONTHLY_REVIEW.md), `factory-cli monthly-review`), [`scripts/factory-prepublic-check.py`](scripts/factory-prepublic-check.py).
 - Owner helpers: [`scripts/protect-main.sh`](scripts/protect-main.sh) (apply and `--verify` ruleset compliance), [`scripts/harden-repo.sh`](scripts/harden-repo.sh) ([`.factory/repo-security-baseline.md`](.factory/repo-security-baseline.md)).
 
 **Reusable workflows and docs**
 
 - Reference workflow bodies under [docs/reusable-workflows/](docs/reusable-workflows/README.md) with thin caller examples in `callers/`.
-- Adoption docs: [ADOPTING.md](ADOPTING.md), [docs/SETUP.md](docs/SETUP.md), [docs/INIT_REPO.md](docs/INIT_REPO.md), [docs/MIGRATING.md](docs/MIGRATING.md), [docs/OWNER_WORKFLOW_SYNC.md](docs/OWNER_WORKFLOW_SYNC.md), [docs/TRIAGE.md](docs/TRIAGE.md), [docs/PITCH_20S.md](docs/PITCH_20S.md), [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), [docs/CRITIC_REVIEW.md](docs/CRITIC_REVIEW.md), [docs/MODEL_SCOUTING.md](docs/MODEL_SCOUTING.md).
+- Adoption docs: [ADOPTING.md](ADOPTING.md), [docs/SETUP.md](docs/SETUP.md), [docs/INIT_REPO.md](docs/INIT_REPO.md), [docs/MIGRATING.md](docs/MIGRATING.md), unified owner sync guide [docs/OWNER_WORKFLOW_SYNC.md](docs/OWNER_WORKFLOW_SYNC.md), [docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md), [docs/TRIAGE.md](docs/TRIAGE.md), [docs/PITCH_20S.md](docs/PITCH_20S.md), [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), [docs/CRITIC_REVIEW.md](docs/CRITIC_REVIEW.md), [docs/MODEL_SCOUTING.md](docs/MODEL_SCOUTING.md).
 - [CONTRIBUTING.md](CONTRIBUTING.md) and structured GitHub issue forms under [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) (`factory_idea`, `bug_report`, cross-repo factory problem).
 - Golden [examples/](examples/README.md) (`minimal-product-repo/`, sample spec and PR body) validated by [`scripts/test-examples.sh`](scripts/test-examples.sh); shell script guardrails in [`scripts/test-shell-hygiene.sh`](scripts/test-shell-hygiene.sh).
 - [LICENSE](LICENSE) (MIT) and [SECURITY.md](SECURITY.md) for public template launch.

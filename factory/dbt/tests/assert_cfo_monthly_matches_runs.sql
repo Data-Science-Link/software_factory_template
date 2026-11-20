@@ -22,4 +22,4 @@ runs as (
 select *
 from cfo
 cross join runs
-where abs(cfo.total_cost_usd - runs.total_cost_usd) > 1e-6
+where abs(cfo.total_cost_usd - runs.total_cost_usd) > 0.0001

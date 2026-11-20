@@ -14,7 +14,7 @@ Lightweight adversarial review for the independent reviewer in **#41**. No multi
 
 1. After the builder job finishes, on a **fresh read-only runner**, run `factory-critic-context.py` with the builder artifact dir (`changes.patch`, `spec.md`, `evidence.md`) and the PR number.
 2. Send `critic-input.md` (prompt + context) to a **different** model than the builder, with no write token.
-3. Post the model's reply as a PR comment. If the verdict is `needs fixes`, the owner or manager triggers `/oc fix` with the numbered findings (same shape as `review-local-pr.md` fix items).
+3. Post the model's reply as a PR comment. If the verdict is `needs fixes`, the owner or manager triggers `/oc fix` with the numbered findings (same shape as `review-local-pr.md` fix items). Offline bundle: `python3 scripts/factory-cli.py critic-context` / `critic-run`.
 
 ## Local / offline check
 

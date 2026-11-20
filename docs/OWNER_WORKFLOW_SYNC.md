@@ -1,15 +1,20 @@
-# Owner workflow sync checklist
+# Owner workflow sync — paste runbook
 
-One consolidated paste list for pending `.github/workflows/` edits tracked across issues **#57**, **#148**, **#41**, **#214**, **#74**, **#44**, **#56**, **#161**, and **#178**. Agents must not commit these YAML changes; the **owner** copies the blocks below into the repo default branch.
+Single-page checklist for pending **owner-only** `.github/workflows/` edits (agents must not commit workflow bodies). Tracked issues: **#56**, **#57**, **#111**, **#148**, **#178**, **#214**, **#74**, **#44**, **#41**.
 
-After each paste (or one combined owner PR), run:
+## Verify after every paste
 
 ```bash
-python3 scripts/factory-audit-workflows.py          # report only, exit 0
-python3 scripts/factory-audit-workflows.py --strict # gate: exit 1 until clean
+python3 scripts/factory-audit-workflows.py          # report only (exit 0)
+python3 scripts/factory-audit-workflows.py --strict # gate before declaring done
+python3 scripts/factory-owner-pack.py --json        # launch-readiness scorecard
 ```
 
-Verified action SHAs below are taken from the template’s current workflow files on `main`.
+`factory-audit-workflows.py` groups findings by category (SHA pins, permissions, `pr-check` gates, Python pin, `approve-oc-runs` safety, factory site, optional `factory-selected`). `factory-owner-pack.py` JSON includes `owner_workflow_sync_path` pointing at this file.
+
+### Action SHA pins (never floating `@v7` tags)
+
+Reuse these 40-character pins everywhere (from template `main` workflows):
 
 | Action | Pin |
 | --- | --- |
@@ -17,56 +22,90 @@ Verified action SHAs below are taken from the template’s current workflow file
 | `actions/setup-python` | `6d4fd22b20465ccc0f7354476588e8df7c9ca0e0` # v7.1.0 |
 | `actions/download-artifact` | `9000827ccba6bdab643e8b6fd33ac0654aef8333` # v8.0.2 |
 | `actions/upload-artifact` | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` # v7.0.2 |
+| `actions/upload-pages-artifact` | `fc324d3547104276b827a68afc52ff2a11cc49c9` # v5.0.0 |
+| `actions/deploy-pages` | `368f82528645a54fb793d4d04e342629a3f51346` # v5.0.1 |
 | `step-security/harden-runner` | `46b06cea07f9e64621fdf066ba77ac6915163d43` # v2.22.3 |
+
+**Verify:** `python3 scripts/factory-audit-workflows.py --json | grep action_pin` — every workflow file should show `pass` for `action_pin`.
 
 ---
 
-## 1. `pr-check.yml` — consolidated quality gates (#57, #161, #178)
+## 1. `pr-check.yml` — SHA pins + quality gates (#57, #161, #178)
 
-Template `main` quality gates for every PR (same checks as `scripts/factory-owner-pack.py`). In the **`pr-check`** job, after factory Python dependencies are installed, add or replace fragmented single-script steps with:
+Keep existing SHA-pinned `uses:` steps. In the **`pr-check`** job, after `pip install -r requirements-factory.txt`, run the same offline gates as `scripts/factory-owner-pack.py`:
 
 ```yaml
-      - name: Run all offline script tests (#57, #161)
-        run: bash scripts/test-all.sh
+      - name: Shell script hygiene (#57)
+        run: bash scripts/test-shell-hygiene.sh
+
+      - name: PR body rule tests (#57)
+        run: bash scripts/test-pr-check.sh
+
+      - name: Cost prediction tests (#57)
+        run: bash scripts/test-predict-cost.sh
+
+      - name: Spec template vs models.yaml drift (#57, #161)
+        run: bash scripts/test-spec-template-drift.sh
 
       - name: Doc links and script refs (#178)
         run: python3 scripts/factory-check-docs.py --strict
 
       - name: Pre-public hygiene (#178)
         run: python3 scripts/factory-prepublic-check.py --strict
-
-      - name: models.yaml schema (#178)
-        run: python3 scripts/factory-models-check.py
-
-      - name: Factory site HTML smoke (#178, #56)
-        run: python3 scripts/factory-site-smoke.py --build
 ```
 
-- `bash scripts/test-all.sh` auto-discovers every `scripts/test-*.sh` on `main` (65+ scripts), including `test-examples.sh`, `test-factory-e2e-adopter.sh`, `test-factory-models-check.sh`, `test-factory-check-docs.sh`, `test-factory-prepublic-check.sh`, `test-factory-site-smoke.sh`, and the rest of the offline harness.
-- The four Python steps are fast CI guards that mirror owner-pack gates; they exit non-zero on failure (`--strict` on docs and pre-public scans).
-- Keep every workflow `uses:` on a **40-character commit SHA** (never floating `@v4` / `@v7` tags). Reuse the pin table at the top of this doc.
+**Verify:**
 
-Optional cleanup: once `test-all.sh` is green in CI, you may drop redundant one-off steps in **`run-records`** or **`pr-check`** that `test-all.sh` already covers (for example duplicate `test-spec-check.sh` or site fixture shells) if job time matters.
+```bash
+python3 scripts/factory-audit-workflows.py --strict
+# pr_check_* rows in category pr_check_quality_gates should all PASS
+bash scripts/test-shell-hygiene.sh
+bash scripts/test-pr-check.sh
+bash scripts/test-predict-cost.sh
+bash scripts/test-spec-template-drift.sh
+python3 scripts/factory-check-docs.py --strict
+python3 scripts/factory-prepublic-check.py --strict
+```
+
+Optional: add `bash scripts/test-all.sh` later for full offline discovery; the six steps above are the required owner-sync minimum.
 
 ---
 
-## 2. `opencode-spike.yml` and `opencode-fix.yml` — pin Python on agent (#148)
+## 2. `factory-site.yml` — Pages deploy + budget file (#56, #170)
 
-In each file’s **`agent`** job, insert **after** the `harden-runner` step and **before** `actions/checkout`:
+Template `main` already ships `factory-site.yml` for public repos (GitHub Pages) and artifact-only deploys when the repo is private. Owner responsibilities:
 
-```yaml
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.13"
+1. **Budget ownership:** keep `factory/budget.yml` as the committed source of truth; `push.paths` must include `factory/**` (covers budget + dbt inputs).
+2. **Pages:** enable **Settings → Pages → Source: GitHub Actions** on public repos; `deploy` uses SHA-pinned `actions/deploy-pages`.
+3. **Secrets:** no model spend — `GITHUB_TOKEN` only.
+
+**Verify:**
+
+```bash
+python3 scripts/factory-audit-workflows.py --json | grep factory_site
+bash scripts/test-factory-site.sh
+bash scripts/test-factory-site-build.sh
+python3 scripts/factory-site-smoke.py --build
 ```
-
-Use `"3.12"` instead if you want strict parity with `pr-check.yml`; either 3.12 or 3.13 satisfies the audit. Goal: harness Verification does not run dbt on the runner’s default Python 3.14.
 
 ---
 
-## 3. `approve-oc-runs.yml` — bot-opened `oc/` PRs (#214, #74)
+## 3. `factory-selected.yml` — optional auto-dispatch (#111)
 
-`pull_request_target` alone does not cover PRs opened by `github-actions[bot]`. Extend `on:` (keep the existing `pull_request_target` block):
+Optional workflow for phone kickoff: `factory:selected` label → `/oc spec` → approve → `/oc run`. Full YAML and prerequisites live in **`docs/WORKFLOW_FACTORY_SELECTED.md`** (logic: `scripts/factory-selected-dispatch.py`).
+
+**Verify after paste:**
+
+```bash
+python3 scripts/factory-audit-workflows.py --json | grep factory_selected
+# factory-selected.yml absent => factory_selected_optional PASS (optional)
+```
+
+---
+
+## 4. `approve-oc-runs.yml` — bot `/oc` PR safety (#214, #74)
+
+`pull_request_target` alone does not unblock PRs opened by `github-actions[bot]`. Extend `on:` (keep existing `pull_request_target`):
 
 ```yaml
 on:
@@ -77,13 +116,48 @@ on:
     types: [requested]
 ```
 
-Add a second job (or generalize `approve`) that runs on `workflow_run`, reads `github.event.workflow_run`, and approves when the run is `action_required` **and** the head branch starts with `oc/` **and** `head_repository.full_name` equals this repo (never approve fork workflows). Reuse the same `gh api … approve` loop as the existing job.
+Add a **`workflow_run`** job (or generalize `approve`) that inspects `github.event.workflow_run`, approves only when:
+
+- run status is `action_required`,
+- head branch starts with `oc/`,
+- `head_repository.full_name` equals **this** repo (never fork workflows).
+
+Keep the existing `approve` job guards:
+
+```yaml
+    if: >-
+      startsWith(github.event.pull_request.head.ref, 'oc/') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+```
+
+**Verify:**
+
+```bash
+python3 scripts/factory-audit-workflows.py --strict
+# approve_oc_workflow_run, approve_oc_branch_guard, approve_oc_fork_guard PASS
+```
 
 ---
 
-## 4. `secret-scan.yml` — harden-runner (#44)
+## 5. `opencode-spike.yml` / `opencode-fix.yml` — Python 3.12/3.13 (#148)
 
-In the **`gitleaks`** job, before checkout (this job downloads gitleaks via `curl`):
+In each **`agent`** job, after `harden-runner` and before `checkout`:
+
+```yaml
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+```
+
+Use `"3.12"` for parity with `pr-check.yml`. Either 3.12 or 3.13 satisfies the audit (`oc_agent_python_pin`).
+
+**Verify:** `python3 scripts/factory-audit-workflows.py --json | grep oc_agent_python_pin`
+
+---
+
+## 6. `secret-scan.yml` — harden-runner (#44)
+
+In **`gitleaks`**, before checkout (job downloads gitleaks via `curl`):
 
 ```yaml
       - name: Harden runner (audit egress)
@@ -96,11 +170,13 @@ In the **`gitleaks`** job, before checkout (this job downloads gitleaks via `cur
             release-assets.githubusercontent.com:443
 ```
 
+**Verify:** `python3 scripts/factory-audit-workflows.py --json | grep harden_runner`
+
 ---
 
-## 5. Independent Critic `review` job (#41) — optional first paste
+## 7. Independent Critic `review` job (#41) — optional
 
-Scripts landed on `main` (`factory-critic-context.py`, `factory-critic-run.py`). Wire a **`review`** job into `opencode-spike.yml` and `opencode-fix.yml` after **`agent`** succeeds and before **`publish`**, on a fresh runner, read-only tokens, prompt from **default branch**, `DEEPINFRA_API_KEY` only in that job. Sketch (adjust artifact names to match your `upload-artifact` steps):
+Scripts on `main`: `factory-critic-context.py`, `factory-critic-run.py`. Wire a **`review`** job in `opencode-spike.yml` / `opencode-fix.yml` after **`agent`**, fresh runner, read-only tokens, prompt from default branch. Sketch:
 
 ```yaml
   review:
@@ -116,10 +192,8 @@ Scripts landed on `main` (`factory-critic-context.py`, `factory-critic-run.py`).
       DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
       OC_ARTIFACT_DIR: /tmp/oc-artifacts
       OC_CRITIC_DIR: /tmp/oc-critic
-      OC_CODER_MODEL: ${{ needs.agent.outputs.model_id }}
     steps:
-      - name: Harden runner (audit egress)
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
           allowed-endpoints: |
@@ -137,23 +211,24 @@ Scripts landed on `main` (`factory-critic-context.py`, `factory-critic-run.py`).
           path: ${{ env.OC_ARTIFACT_DIR }}
       - run: python3 scripts/factory-critic-context.py --out-dir "$OC_CRITIC_DIR"
       - run: python3 scripts/factory-critic-run.py --input "$OC_CRITIC_DIR/critic-input.md" --meta "$OC_CRITIC_DIR/critic-meta.txt" --out-dir "$OC_CRITIC_DIR"
-      - run: test -s "$OC_CRITIC_DIR/critic-review.md" && test -s "$OC_CRITIC_DIR/critic-run-record.json"
 ```
 
-Then teach **`publish`** to `needs: [agent, review]` (or post the critic comment from a small publish sub-step). Full cost recording belongs in the same epic as #41; this paste is the workflow shell only.
+See `docs/CRITIC_REVIEW.md` for operator detail.
 
 ---
 
-## 6. Order of operations
+## 8. Recommended paste order
 
-1. `pr-check.yml` quality gates (`test-all.sh` plus docs, pre-public, models, site smoke; #57, #161, #178).
-2. `opencode-*.yml` Python pin (unblocks dbt Verification on hosted runners).
-3. `approve-oc-runs.yml` `workflow_run` (unblocks bot PR checks without manual approve).
-4. `secret-scan.yml` harden-runner (security baseline #44).
-5. Critic `review` job when ready to spend review tokens on every `/oc` build.
+1. **`pr-check.yml`** quality gates (#57, #161, #178) — unblocks PR CI parity with owner-pack.
+2. **`opencode-*.yml`** Python pin (#148) — dbt / Verification on hosted runners.
+3. **`approve-oc-runs.yml`** `workflow_run` (#214) — bot PRs without manual approve.
+4. **`secret-scan.yml`** harden-runner (#44).
+5. **`factory-site.yml`** review (usually already present; confirm budget paths + Pages).
+6. **`factory-selected.yml`** when ready for label kickoff (#111).
+7. Critic **`review`** job when ready to spend review tokens (#41).
 
 ---
 
-## 7. Product repos
+## 9. Product repos
 
-Replace hard-coded owner login checks in `opencode-*.yml` with this repo’s owner account when pasting (see `docs/SETUP.md`). SHAs and job shape stay the same.
+Replace hard-coded owner login checks in `opencode-*.yml` / `factory-selected.yml` with this repo’s owner account (see `docs/SETUP.md`). SHAs and job shape stay the same. Re-run `factory-audit-workflows.py --strict` after each adoption.

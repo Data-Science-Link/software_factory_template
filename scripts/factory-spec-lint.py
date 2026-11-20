@@ -22,6 +22,7 @@ ROOT = HERE.parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 from factory_spec_front_matter import (  # noqa: E402
+    duplicate_scalar_keys,
     normalize_front_matter_raw,
     parse_front_matter_raw,
 )
@@ -43,7 +44,7 @@ VERIFICATION_HEADING = "Verification"
 REQUIRED_FM_KEYS = ("issue", "title", "risk", "complexity")
 
 MASK_PIPE_RE = re.compile(
-    r"\|\s*(head|tail|sed|grep)\b",
+    r"\|\s*(head|tail|sed|grep|awk)\b",
     re.IGNORECASE,
 )
 PYTEST_DBT_MASK_RE = re.compile(
@@ -84,7 +85,7 @@ def split_front_matter(text: str) -> tuple[dict[str, Any] | None, str, str | Non
         return None, text, None
     parts = body_start.split("---", 2)
     if len(parts) < 3:
-        return None, text, None
+        return {"__fm_incomplete__": True}, text, parts[1] if len(parts) > 1 else ""
     raw = parts[1]
     body = parts[2]
     data, err = parse_front_matter_raw(raw)
@@ -191,9 +192,16 @@ def check_front_matter(fm: dict[str, Any] | None, raw_fm: str | None, result: Li
     if fm is None:
         result.errors.append("missing YAML front matter (must start with ---)")
         return
+    if "__fm_incomplete__" in fm:
+        result.errors.append("incomplete YAML front matter (missing closing --- delimiter)")
+        return
     if "__yaml_error__" in fm:
         result.errors.append(f"invalid YAML front matter: {fm['__yaml_error__']}")
         return
+
+    if raw_fm:
+        for key in duplicate_scalar_keys(raw_fm):
+            result.errors.append(f"duplicate front matter key: {key}")
 
     for key in REQUIRED_FM_KEYS:
         if key not in fm and key != "issue":
@@ -259,8 +267,8 @@ def check_verification_safety(body: str, result: LintResult) -> None:
                 )
             else:
                 result.errors.append(
-                    f"verification must not pipe test output through head/tail/sed/grep "
-                    f"(line {n}: {stripped!r})"
+                    f"verification must not pipe test output through "
+                    f"head/tail/sed/grep/awk (line {n}: {stripped!r})"
                 )
     if PYTEST_DBT_MASK_RE.search(block):
         result.errors.append(
@@ -352,7 +360,11 @@ def lint_text(
     result = LintResult(path=str(source or "<text>"))
     fm, body, raw_fm = split_front_matter(strip_marker(text))
     check_front_matter(fm, raw_fm, result)
-    fm_ok = fm if fm and "__yaml_error__" not in fm else None
+    fm_ok = (
+        fm
+        if fm and "__yaml_error__" not in fm and "__fm_incomplete__" not in fm
+        else None
+    )
     check_sections(body, result)
     if not any(e.startswith("missing required section heading: Verification") for e in result.errors):
         check_verification_safety(body, result)
@@ -362,8 +374,11 @@ def lint_text(
     return result
 
 
-def load_file(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def load_file(path: Path) -> tuple[str | None, str | None]:
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except UnicodeDecodeError:
+        return None, "spec file is not valid UTF-8 (binary or wrong encoding)"
 
 
 def emit_human(results: list[LintResult]) -> None:
@@ -395,7 +410,7 @@ def emit_json(results: list[LintResult]) -> None:
           "warnings": sum(len(r.warnings) for r in results),
       },
     }
-    print(json.dumps(payload, indent=2))
+    print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 def main() -> int:
@@ -439,9 +454,13 @@ def main() -> int:
                 LintResult(path=str(path), errors=[f"not a file: {path}"])
             )
             continue
+        text, read_err = load_file(path)
+        if read_err:
+            results.append(LintResult(path=str(path.resolve()), errors=[read_err]))
+            continue
         results.append(
             lint_text(
-                load_file(path),
+                text,  # type: ignore[arg-type]
                 source=path.resolve(),
                 mode=mode,
                 base_scripts=args.base_scripts,

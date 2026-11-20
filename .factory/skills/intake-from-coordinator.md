@@ -14,13 +14,13 @@ Do not implement the feature in the coordinator chat.
 ## Steps
 
 1. Confirm the target repo (and labels if used).
-2. Create or refine one issue: title (outcome), body (context, constraints, done-when), links. When it's ready to work, add the **handoff block** (see `factory-loop.md` → Triage), including its `Model: Cursor … · Local open-weights …` line and the cloud-vs-local lines under it (cloud agents ignore the Local open-weights model; local agents use it and follow `local-open-weights-run.md`).
+2. Create or refine one issue: title (outcome), body (context, constraints, done-when), links. When intake is clear, add `factory:selected` only when the owner has chosen the work; otherwise leave selection to the manager.
 3. Reply in chat with the issue URL.
 4. **Kick the line:** message the factory manager (same room, SendToAgent, or project convention) with the issue URL and “run factory-loop.” If you *are* also the manager for this repo, start `factory-loop` yourself after filing.
-5. Coordinator stops building; manager owns triage → PR → verify.
+5. Coordinator stops building; manager owns triage → spec → PR → verify.
 
 ## Rules
 
-- Chat clarifies; the **issue** is the work item; the **handoff** is what makes coordinator-chat a trigger.
+- Chat clarifies; the **issue** is the work item; the **approved spec** (not a legacy handoff block) is what workers run.
 - Don’t duplicate an existing issue — comment or refine it, then hand off that issue.
 - Fuzzy scope: still file the issue; mark what needs a human before build; hand off anyway so the manager can stop at the spec gate.
