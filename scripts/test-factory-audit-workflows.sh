@@ -39,6 +39,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: bash scripts/test-all.sh
+      - run: python3 scripts/factory-check-docs.py --strict
+      - run: python3 scripts/factory-prepublic-check.py --strict
+      - run: python3 scripts/factory-models-check.py
+      - run: python3 scripts/factory-site-smoke.py --build
 YML
 cat >"$pass_dir/opencode-spike.yml" <<'YML'
 name: opencode-spike
@@ -150,7 +154,16 @@ echo "$out" | "$PYTHON" -c "
 import json,sys
 d=json.load(sys.stdin)
 codes={f['check'] for f in d['findings'] if f['status']=='fail'}
-need={'pr_check_test_all','oc_agent_python_pin','approve_oc_workflow_run','critic_review_job'}
+need={
+    'pr_check_test_all',
+    'pr_check_check_docs',
+    'pr_check_prepublic',
+    'pr_check_models_check',
+    'pr_check_site_smoke',
+    'oc_agent_python_pin',
+    'approve_oc_workflow_run',
+    'critic_review_job',
+}
 miss=need-codes
 if miss:
     sys.exit(1)
