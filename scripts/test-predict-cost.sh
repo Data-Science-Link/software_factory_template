@@ -134,6 +134,7 @@ run_fail() {
 }
 
 run_pass tests/predict/pass-simple-flash.md
+run_pass tests/predict/pass-title-unquoted-colon.md
 run_pass tests/predict/pass-complex-qwen.md
 run_pass tests/predict/pass-high-risk-qwen.md
 run_pass tests/predict/pass-work-type-spec.md

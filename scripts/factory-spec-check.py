@@ -16,6 +16,9 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+from factory_spec_front_matter import normalize_front_matter_raw  # noqa: E402
 ARTIFACT_SCAN = HERE / "opencode-artifact-scan.sh"
 
 SPEC_MARKER = "<!-- factory-spec v1 -->"
@@ -35,6 +38,8 @@ BASE_HEADINGS = [
     "Dependencies",
     "Worker prompt",
 ]
+
+BAD_INPUTS_HEADING = "Bad inputs and edge cases"
 
 EXTENDED_HEADINGS = [
     ("Design / approach", "always_extended"),
@@ -107,7 +112,7 @@ def split_front_matter(text: str) -> tuple[dict[str, Any] | None, str]:
     raw = parts[1]
     body = parts[2]
     try:
-        data = yaml.safe_load(raw)
+        data = yaml.safe_load(normalize_front_matter_raw(raw))
     except yaml.YAMLError as exc:
         return {"__yaml_error__": str(exc)}, body
     if not isinstance(data, dict):
@@ -204,6 +209,31 @@ def extended_required(complexity: str | None, risk: str | None) -> set[str]:
         elif rule == "complex_high" and complex_high:
             need.add(label)
     return need
+
+
+def is_grandfathered_approved_spec(source: Path | None, fm: dict[str, Any] | None) -> bool:
+    """Approved specs under factory/specs/ are not retro-checked for new sections (#106)."""
+    if fm is None or fm.get("status") != "approved" or source is None:
+        return False
+    try:
+        source.resolve().relative_to(ROOT / "factory" / "specs")
+    except ValueError:
+        return False
+    return True
+
+
+def check_bad_inputs(markdown: str, fm: dict[str, Any] | None, errors: list[str], source: Path | None) -> None:
+    if fm is None or "__yaml_error__" in fm or is_grandfathered_approved_spec(source, fm):
+        return
+    risk = fm.get("risk")
+    if risk not in ("normal", "high"):
+        return
+    headings = extract_headings(markdown)
+    if heading_index_base(headings, BAD_INPUTS_HEADING) is None:
+        errors.append(f"missing required section heading: {BAD_INPUTS_HEADING}")
+        return
+    if not re.search(r"\S", section(markdown, BAD_INPUTS_HEADING)):
+        errors.append(f"{BAD_INPUTS_HEADING} section is empty")
 
 
 def check_headings(markdown: str, fm: dict[str, Any] | None, errors: list[str]) -> None:
@@ -317,12 +347,14 @@ def check_escaped_quotes(raw: str | None, errors: list[str]) -> None:
             )
 
 
-def validate_text(text: str, base_scripts: Path | None = None) -> list[str]:
+def validate_text(text: str, base_scripts: Path | None = None, source: Path | None = None) -> list[str]:
     errors: list[str] = []
     fm, body = split_front_matter(text)
     check_escaped_quotes(raw_front_matter(text), errors)
     check_front_matter(fm, errors)
-    check_headings(body, fm if fm and "__yaml_error__" not in fm else None, errors)
+    fm_ok = fm if fm and "__yaml_error__" not in fm else None
+    check_headings(body, fm_ok, errors)
+    check_bad_inputs(body, fm_ok, errors, source)
     if not errors:
         check_files_paths(body, errors, base_scripts)
     return errors
@@ -346,7 +378,7 @@ def main() -> int:
         print(f"not a file: {args.base_scripts}", file=sys.stderr)
         return 1
 
-    errors = validate_text(load_body(args.path), args.base_scripts)
+    errors = validate_text(load_body(args.path), args.base_scripts, source=args.path.resolve())
     if errors:
         for err in errors:
             print(err, file=sys.stderr)

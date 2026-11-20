@@ -45,6 +45,10 @@ drafted_by: grok-bot
 ## Acceptance criteria
 <!-- Tick only when diff or command output proves it. -->
 
+## Bad inputs and edge cases
+<!-- Required when risk is normal or high (#106). One bullet per case: the bad input, expected behavior
+     (exit code or message), and the test or fixture that covers it. Optional for trivial risk. -->
+
 ## Verification
 <!-- Commands + expected output. Put the commands in ONE ```bash block: the /oc harness runs that block
      itself after the worker (scripts/opencode-verify.sh: scratch copy of the base + the patch, HEAD~1 is the
