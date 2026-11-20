@@ -122,18 +122,51 @@ def strip_markdown(text):
     return text
 
 
-def render_table(rows):
+def repo_agnostic_copy(text):
+    """Replace template-repo owner/bot names with role labels for the public site."""
+    text = str(text)
+    text = re.sub(r"\bMichael's\b", "the owner's", text)
+    text = re.sub(r"\bMichael\b", "the owner", text)
+    text = re.sub(r"\bGrok Bot\b", "the Factory Manager", text)
+    return text
+
+
+def render_inline_markdown(text, agnostic=False):
+    """Render `**bold**` and `code` as HTML; escape everything else."""
+    if agnostic:
+        text = repo_agnostic_copy(text)
+    text = str(text)
+    parts = []
+    pos = 0
+    for m in re.finditer(r"\*\*(.+?)\*\*|`([^`]+)`", text):
+        if m.start() > pos:
+            parts.append(esc(text[pos:m.start()]))
+        if m.group(1) is not None:
+            parts.append("<strong>{}</strong>".format(esc(m.group(1))))
+        else:
+            parts.append("<code>{}</code>".format(esc(m.group(2))))
+        pos = m.end()
+    if pos < len(text):
+        parts.append(esc(text[pos:]))
+    return "".join(parts) if parts else esc(text)
+
+
+def render_table(rows, agnostic=False):
     if not rows:
         return ""
     out = ["<table><thead><tr>"]
     for cell in rows[0]:
-        out.append("<th>{}</th>".format(esc(strip_markdown(cell))))
+        out.append("<th>{}</th>".format(render_inline_markdown(cell, agnostic=agnostic)))
     out.append("</tr></thead><tbody>")
     for row in rows[1:]:
         out.append("<tr>")
         for i, cell in enumerate(row):
             tag = "th" if i == 0 else "td"
-            out.append("<{}>{}</{}>".format(tag, esc(strip_markdown(cell)), tag))
+            out.append(
+                "<{}>{}</{}>".format(
+                    tag, render_inline_markdown(cell, agnostic=agnostic), tag
+                )
+            )
         out.append("</tr>")
     out.append("</tbody></table>")
     return "\n".join(out)
@@ -142,21 +175,25 @@ def render_table(rows):
 def render_loop_cards(steps):
     out = ['<div class="loop-cards">']
     for num, text in steps:
-        body = strip_markdown(text).strip()
+        body = repo_agnostic_copy(text).strip()
         title = str(num)
         desc = ""
-        m = re.match(r"^\d+\.\s*(.*?)\s*(?:—|-)\s*(.*)$", body)
+        m = re.match(r"^\d+\.\s*(.*?)\s*(?:—|-)\s*(.*)$", body, re.DOTALL)
         if m:
             title = m.group(1).strip()
             desc = m.group(2).strip()
         else:
-            m2 = re.match(r"^\d+\.\s*(.*)$", body)
+            m2 = re.match(r"^\d+\.\s*(.*)$", body, re.DOTALL)
             if m2:
                 title = m2.group(1).strip()
         out.append('<div class="loop-card">')
-        out.append('<h3 class="loop-card-title">{}</h3>'.format(esc(title)))
+        out.append(
+            '<h3 class="loop-card-title">{}</h3>'.format(render_inline_markdown(title))
+        )
         if desc:
-            out.append('<p class="loop-card-desc">{}</p>'.format(esc(desc)))
+            out.append(
+                '<p class="loop-card-desc">{}</p>'.format(render_inline_markdown(desc))
+            )
         out.append("</div>")
     out.append("</div>")
     return "\n".join(out)
@@ -267,14 +304,35 @@ def depth_links():
     )
 
 
+def _format_when_value(value):
+    if isinstance(value, list):
+        bits = []
+        for item in value:
+            if isinstance(item, dict):
+                bits.append(
+                    ", ".join(
+                        "{}={}".format(k, item[k]) for k in sorted(item.keys())
+                    )
+                )
+            else:
+                bits.append(str(item))
+        return "[{}]".format(" | ".join(bits))
+    if isinstance(value, dict):
+        return "{{{}}}".format(
+            ", ".join("{}={}".format(k, v) for k, v in sorted(value.items()))
+        )
+    return str(value)
+
+
 def when_text(when):
     if not when:
         return "(always)"
     if isinstance(when, dict):
         return ", ".join(
-            "{}={}".format(esc(k), esc(v)) for k, v in sorted(when.items())
+            "{}={}".format(k, _format_when_value(v))
+            for k, v in sorted(when.items())
         )
-    return esc(when)
+    return str(when)
 
 
 def architecture_html(repo_root, models_data, factory_md):
@@ -311,7 +369,7 @@ def architecture_html(repo_root, models_data, factory_md):
     if roles is None:
         parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Roles)")))
     else:
-        rendered = render_table(parse_markdown_table(roles))
+        rendered = render_table(parse_markdown_table(roles), agnostic=True)
         if rendered:
             parts.append(rendered)
         else:
@@ -325,7 +383,7 @@ def architecture_html(repo_root, models_data, factory_md):
     if merge is None:
         parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Merge authority)")))
     else:
-        rendered = render_table(parse_markdown_table(merge))
+        rendered = render_table(parse_markdown_table(merge), agnostic=True)
         if rendered:
             parts.append(rendered)
         else:
@@ -351,7 +409,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     m.get("status", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     # Routing rules in first-match order with their model.
     parts.append("<h2>Routing rules (first match wins)</h2>")
@@ -370,7 +428,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     r.get("model", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     # Guard checks.
     parts.append("<h2>Guard checks</h2>")
@@ -389,7 +447,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     c.get("action", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     return "\n".join(parts)
 
@@ -912,17 +970,45 @@ STATUS_LABELS = {
 }
 
 
+def _issues_missing_priority_or_risk(issues):
+    return sum(
+        1
+        for i in issues
+        if i.get("priority") == "none" or i.get("risk") == "unlabeled"
+    )
+
+
+def _unlabeled_notice(issues):
+    unlabeled = _issues_missing_priority_or_risk(issues)
+    if unlabeled == 0:
+        return ""
+    return (
+        '<div class="backlog-unlabeled note">'
+        "<p><strong>Unlabeled issues:</strong> "
+        "{} open issue(s) lack <code>priority:*</code> and/or "
+        "<code>risk:*</code> GitHub labels. "
+        "In the issue sidebar, add labels such as "
+        "<code>priority:high</code>, <code>priority:low</code>, "
+        "<code>risk:high</code>, <code>risk:medium</code>, or "
+        "<code>risk:low</code> so the priority × risk grid reflects triage.</p>"
+        "</div>".format(esc(unlabeled))
+    )
+
+
 def _summary_cards(issues):
     open_count = len(issues)
     high = sum(1 for i in issues if i.get("priority") == "high")
     owner_action = sum(1 for i in issues if i.get("status") == "owner-action")
     selected = sum(1 for i in issues if i.get("status") == "factory:selected")
+    unlabeled = _issues_missing_priority_or_risk(issues)
     cards = [
         ("Open", open_count),
         ("High priority", high),
         ("Owner-action", owner_action),
         ("Selected", selected),
     ]
+    if unlabeled > 0:
+        cards.append(("Unlabeled", unlabeled))
     out = ['<div class="cards">']
     for label, count in cards:
         out.append(
@@ -1011,6 +1097,7 @@ def backlog_html(data_dir):
     out = [
         "<h2>Backlog</h2>",
         _summary_cards(issues),
+        _unlabeled_notice(issues),
         "<h2>Open issues by priority and risk</h2>",
         _priority_risk_table(issues),
     ]
@@ -1022,15 +1109,347 @@ def backlog_html(data_dir):
     return "\n".join(out)
 
 
-def dbt_html(repo_root):
-    manifest = Path(repo_root) / "factory" / "dbt" / "target" / "manifest.json"
-    if manifest.is_file():
+DBT_LAYERS = ("seed", "staging", "marts")
+DBT_LAYER_DEPTH = {"seed": 0, "staging": 1, "marts": 2, "other": 3}
+
+
+def _dbt_manifest_path(repo_root):
+    return Path(repo_root) / "factory" / "dbt" / "target" / "manifest.json"
+
+
+def _dbt_catalog_path(repo_root):
+    return Path(repo_root) / "factory" / "dbt" / "target" / "catalog.json"
+
+
+def _load_json(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _dbt_layer(node):
+    if node.get("resource_type") == "seed":
+        return "seed"
+    path = (node.get("original_file_path") or node.get("path") or "").lower()
+    fqn = node.get("fqn") or []
+    if "staging" in path or (len(fqn) > 1 and fqn[1] == "staging"):
+        return "staging"
+    if "marts" in path or (len(fqn) > 1 and fqn[1] == "marts"):
+        return "marts"
+    return "other"
+
+
+def _dbt_resource_nodes(manifest):
+    nodes = manifest.get("nodes") or {}
+    out = []
+    for node in nodes.values():
+        if not isinstance(node, dict):
+            continue
+        rt = node.get("resource_type")
+        if rt in ("model", "seed"):
+            out.append(node)
+    out.sort(key=lambda n: (DBT_LAYER_DEPTH.get(_dbt_layer(n), 9), n.get("name") or ""))
+    return out
+
+
+def _dbt_unique_by_name(nodes):
+    by_name = {}
+    for node in nodes:
+        name = node.get("name")
+        if name:
+            by_name[name] = node
+    return by_name
+
+
+def _dbt_description(node):
+    text = (node.get("description") or "").strip()
+    return text if text else "no description"
+
+
+def _dbt_materialization(node):
+    cfg = node.get("config") or {}
+    mat = cfg.get("materialized")
+    if mat:
+        return str(mat)
+    if node.get("resource_type") == "seed":
+        return "seed"
+    return "view"
+
+
+def _dbt_column_count(node):
+    cols = node.get("columns")
+    if isinstance(cols, dict):
+        return len(cols)
+    return 0
+
+
+def _dbt_tests_by_model(manifest):
+    by_model = {}
+    names_by_model = {}
+    for node in (manifest.get("nodes") or {}).values():
+        if not isinstance(node, dict) or node.get("resource_type") != "test":
+            continue
+        deps = (node.get("depends_on") or {}).get("nodes") or []
+        label = node.get("name") or "test"
+        meta = node.get("test_metadata") or {}
+        if meta.get("name"):
+            label = "{}.{}".format(meta.get("name"), meta.get("column_name") or "")
+        for dep in deps:
+            by_model[dep] = by_model.get(dep, 0) + 1
+            names_by_model.setdefault(dep, []).append(label)
+    for dep in names_by_model:
+        names_by_model[dep].sort()
+    return by_model, names_by_model
+
+
+def _dbt_lineage_sets(nodes):
+    by_id = {n.get("unique_id"): n for n in nodes if n.get("unique_id")}
+    ids = set(by_id)
+    upstream = {}
+    downstream = {}
+    for uid, node in by_id.items():
+        parents = [
+            p for p in (node.get("depends_on") or {}).get("nodes") or []
+            if p in ids
+        ]
+        upstream[uid] = parents
+        for p in parents:
+            downstream.setdefault(p, []).append(uid)
+    for uid in downstream:
+        downstream[uid].sort()
+    return upstream, downstream, by_id
+
+
+def _dbt_model_link(name, by_name):
+    if name in by_name:
+        return '<a href="#model-{}">{}</a>'.format(esc(name), esc(name))
+    return esc(name)
+
+
+def _dbt_docs_banner(out_dir):
+    docs = Path(out_dir) / "dbt-docs.html"
+    if docs.is_file():
+        return (
+            '<p><a href="dbt-docs.html">Full interactive lineage</a> '
+            "(dbt static docs)</p>"
+        )
+    return (
+        '<p class="note">Full interactive dbt docs are not available in this build '
+        "(run a live <code>dbt docs generate --static</code> build to produce "
+        "<code>dbt-docs.html</code>).</p>"
+    )
+
+
+def _dbt_model_table(nodes, by_name, test_counts):
+    if not nodes:
+        return '<p class="note">No models found in manifest.</p>'
+    header = [
+        "Name",
+        "Layer",
+        "Materialization",
+        "Description",
+        "Columns",
+        "Tests",
+    ]
+    rows = [header]
+    for node in nodes:
+        uid = node.get("unique_id") or ""
+        name = node.get("name") or ""
+        rows.append(
+            [
+                name,
+                _dbt_layer(node),
+                _dbt_materialization(node),
+                _dbt_description(node),
+                str(_dbt_column_count(node)),
+                str(test_counts.get(uid, 0)),
+            ]
+        )
+    return render_table(rows)
+
+
+def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
+    by_uid = {n.get("unique_id"): n for n in nodes if n.get("unique_id")}
+    parts = ["<h2>Model details</h2>"]
+    for node in nodes:
+        uid = node.get("unique_id") or ""
+        name = node.get("name") or ""
+        parts.append('<section class="dbt-model" id="model-{}">'.format(esc(name)))
+        parts.append("<h3>{}</h3>".format(esc(name)))
+        parts.append("<p>{}</p>".format(esc(_dbt_description(node))))
+        up_links = []
+        for parent_id in upstream.get(uid) or []:
+            parent = by_uid.get(parent_id)
+            if parent and parent.get("name"):
+                up_links.append(_dbt_model_link(parent["name"], by_name))
+        down_links = []
+        for child_id in downstream.get(uid) or []:
+            child = by_uid.get(child_id)
+            if child and child.get("name"):
+                down_links.append(_dbt_model_link(child["name"], by_name))
+        parts.append(
+            "<p><strong>Upstream:</strong> {}</p>".format(
+                ", ".join(up_links) if up_links else "(none)"
+            )
+        )
+        parts.append(
+            "<p><strong>Downstream:</strong> {}</p>".format(
+                ", ".join(down_links) if down_links else "(none)"
+            )
+        )
+        tests = test_names.get(uid) or []
+        if tests:
+            parts.append("<p><strong>Data tests:</strong></p><ul>")
+            for t in tests:
+                parts.append("<li>{}</li>".format(esc(t)))
+            parts.append("</ul>")
+        else:
+            parts.append("<p><strong>Data tests:</strong> (none listed)</p>")
+        cols = node.get("columns") or {}
+        if isinstance(cols, dict) and cols:
+            parts.append(
+                "<table><thead><tr><th>Column</th><th>Description</th></tr>"
+                "</thead><tbody>"
+            )
+            for col_name in sorted(cols):
+                col = cols[col_name] or {}
+                desc = (col.get("description") or "").strip() or "no description"
+                parts.append(
+                    "<tr><th>{}</th><td>{}</td></tr>".format(
+                        esc(col_name), esc(desc)
+                    )
+                )
+            parts.append("</tbody></table>")
+        else:
+            parts.append('<p class="note">No column metadata in manifest.</p>')
+        parts.append("</section>")
+    return "\n".join(parts)
+
+
+def _dbt_lineage_svg(nodes, upstream, by_name):
+    layers = {layer: [] for layer in DBT_LAYERS}
+    for node in nodes:
+        layer = _dbt_layer(node)
+        if layer in layers:
+            layers[layer].append(node)
+        elif layer == "other":
+            layers["marts"].append(node)
+    for layer in layers:
+        layers[layer].sort(key=lambda n: n.get("name") or "")
+    col_w = 130
+    node_h = 30
+    gap_y = 10
+    gap_x = 50
+    margin = 12
+    max_rows = max((len(layers[l]) for l in DBT_LAYERS), default=1)
+    height = margin * 2 + max_rows * (node_h + gap_y)
+    width = margin * 2 + len(DBT_LAYERS) * col_w + (len(DBT_LAYERS) - 1) * gap_x
+    positions = {}
+    parts = [
+        '<svg class="dbt-lineage" viewBox="0 0 {} {}" role="img" '
+        'aria-label="dbt model lineage by layer">'.format(width, height)
+    ]
+    parts.append(
+        '<defs><marker id="dbt-arrow" markerWidth="8" markerHeight="8" '
+        'refX="7" refY="3" orient="auto" markerUnits="strokeWidth">'
+        '<path d="M0,0 L0,6 L7,3 z" fill="#1f2430"/></marker></defs>'
+    )
+    for col, layer in enumerate(DBT_LAYERS):
+        x = margin + col * (col_w + gap_x)
+        parts.append(
+            '<text x="{}" y="{}" text-anchor="middle" font-size="11" '
+            'font-weight="600" fill="#555d6b">{}</text>'.format(
+                x + col_w / 2, margin, esc(layer)
+            )
+        )
+        for row, node in enumerate(layers[layer]):
+            y = margin + 16 + row * (node_h + gap_y)
+            uid = node.get("unique_id")
+            name = node.get("name") or ""
+            positions[uid] = (x + col_w / 2, y + node_h / 2, x, y)
+            parts.append(
+                '<rect x="{}" y="{}" width="{}" height="{}" rx="5" '
+                'fill="#eef0f4" stroke="#1f2430" stroke-width="1.2"/>'.format(
+                    x, y, col_w, node_h
+                )
+            )
+            label = name if len(name) <= 16 else name[:14] + "…"
+            parts.append(
+                '<text x="{}" y="{}" text-anchor="middle" font-size="10" '
+                'fill="#1f2430">{}</text>'.format(
+                    x + col_w / 2, y + node_h / 2 + 3, esc(label)
+                )
+            )
+    for node in nodes:
+        uid = node.get("unique_id")
+        if uid not in positions:
+            continue
+        cx, cy, _, _ = positions[uid]
+        for parent_id in upstream.get(uid) or []:
+            if parent_id not in positions:
+                continue
+            px, py, plx, ply = positions[parent_id]
+            _, _, px0, py0 = positions[parent_id]
+            _, _, nx0, ny0 = positions[uid]
+            # parent right edge to child left edge
+            x1 = px0 + col_w
+            y1 = py
+            x2 = nx0
+            y2 = cy
+            parts.append(
+                '<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
+                'stroke-width="1.5" marker-end="url(#dbt-arrow)"/>'.format(
+                    x1, y1, x2, y2
+                )
+            )
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def dbt_html(repo_root, out_dir):
+    manifest_path = _dbt_manifest_path(repo_root)
+    manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    if manifest is None:
+        return placeholder_html("dbt")
+
+    catalog_path = _dbt_catalog_path(repo_root)
+    catalog_note = ""
+    if catalog_path.is_file():
+        catalog = _load_json(catalog_path)
+        if catalog is None:
+            catalog_note = '<p class="note">catalog.json was present but could not be parsed.</p>'
+    else:
+        catalog_note = (
+            '<p class="note">No catalog.json (row counts omitted; manifest-only view).</p>'
+        )
+
+    nodes = _dbt_resource_nodes(manifest)
+    if not nodes:
         return (
             "<h2>dbt</h2>\n"
-            '<div class="placeholder"><p>The dbt manifest is present, but the full '
-            'tab lands in issue #173.</p></div>'
+            + _dbt_docs_banner(out_dir)
+            + '<p class="note">Manifest loaded but contains no models or seeds.</p>'
         )
-    return placeholder_html("dbt")
+
+    by_name = _dbt_unique_by_name(nodes)
+    test_counts, test_names = _dbt_tests_by_model(manifest)
+    upstream, downstream, _by_id = _dbt_lineage_sets(nodes)
+
+    parts = [
+        "<h2>dbt</h2>",
+        _dbt_docs_banner(out_dir),
+        "<p>Models and lineage for the factory cost dataset (from manifest.json).</p>",
+    ]
+    if catalog_note:
+        parts.append(catalog_note)
+    parts.append("<h2>Models</h2>")
+    parts.append(_dbt_model_table(nodes, by_name, test_counts))
+    parts.append("<h2>Lineage</h2>")
+    parts.append(_dbt_lineage_svg(nodes, upstream, by_name))
+    parts.append(_dbt_model_details(nodes, by_name, upstream, downstream, test_names))
+    return "\n".join(parts)
 
 
 def git_version(repo_root):
@@ -1095,7 +1514,7 @@ def main() -> None:
         "index.html": architecture_html(repo_root, models_data, factory_md),
         "financials.html": financials_html(args.data, repo_root, now),
         "backlog.html": backlog_html(args.data),
-        "dbt.html": dbt_html(repo_root),
+        "dbt.html": dbt_html(repo_root, out_dir),
     }
 
     written = []
