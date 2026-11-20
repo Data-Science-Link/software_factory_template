@@ -31,16 +31,35 @@ def parse_iso8601(value: str | None) -> datetime | None:
     return dt.astimezone(timezone.utc)
 
 
+def read_json_fixture(path: str) -> object:
+    try:
+        raw = open(path, encoding="utf-8").read()
+    except OSError as exc:
+        raise SystemExit(f"branch-cleanup: cannot read {path}: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise SystemExit(f"branch-cleanup: {path} is not valid UTF-8") from exc
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"branch-cleanup: invalid JSON in {path}: {exc}") from exc
+
+
 def load_branches_fixture(path: str) -> tuple[str, list[dict]]:
-    data = json.loads(open(path, encoding="utf-8").read())
+    data = read_json_fixture(path)
+    if not isinstance(data, dict):
+        raise SystemExit(f"branch-cleanup: {path}: root must be a JSON object")
     default = data.get("default_branch") or data.get("defaultBranch") or "main"
     branches = data.get("branches") or data
     if isinstance(branches, dict):
         branches = branches.get("branches", [])
-    normalized = []
+    if not isinstance(branches, list):
+        raise SystemExit(f"branch-cleanup: {path}: branches must be a list")
+    by_name: dict[str, dict] = {}
     for b in branches:
+        if not isinstance(b, dict):
+            continue
         name = b.get("name")
-        if not name:
+        if not name or not isinstance(name, str):
             continue
         committed = (
             b.get("committed_date")
@@ -48,16 +67,27 @@ def load_branches_fixture(path: str) -> tuple[str, list[dict]]:
             or (b.get("commit") or {}).get("committedDate")
             or (b.get("commit") or {}).get("committed_date")
         )
-        normalized.append({"name": name, "committed_date": committed})
-    return default, normalized
+        if name in by_name:
+            print(
+                f"branch-cleanup: duplicate branch name {name!r} in fixture; "
+                "using last occurrence",
+                file=sys.stderr,
+            )
+        by_name[name] = {"name": name, "committed_date": committed}
+    normalized = sorted(by_name.values(), key=lambda row: row["name"])
+    return str(default), normalized
 
 
 def load_prs_fixture(path: str) -> list[dict]:
-    data = json.loads(open(path, encoding="utf-8").read())
+    data = read_json_fixture(path)
+    if not isinstance(data, dict):
+        raise SystemExit(f"branch-cleanup: {path}: root must be a JSON object")
     prs = data.get("pull_requests") or data.get("pullRequests") or data
     if isinstance(prs, dict):
         prs = prs.get("pull_requests", [])
-    return list(prs)
+    if not isinstance(prs, list):
+        raise SystemExit(f"branch-cleanup: {path}: pull_requests must be a list")
+    return [p for p in prs if isinstance(p, dict)]
 
 
 def gh_json(cmd: list[str]) -> object:
@@ -364,6 +394,9 @@ def main() -> int:
         help="ISO timestamp for age tests (default: current UTC)",
     )
     args = parser.parse_args()
+
+    if args.older_than_days < 0:
+        parser.error("--older-than-days must be non-negative")
 
     prefixes = [p.strip() for p in args.prefixes.split(",") if p.strip()]
     now = parse_iso8601(args.now) or datetime.now(timezone.utc)

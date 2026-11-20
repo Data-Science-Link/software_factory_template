@@ -157,6 +157,126 @@ else
   failed=$((failed + 1))
 fi
 
+# ---- test 7: malformed JSON exits cleanly (no traceback) ----
+printf 'not-json' >"$tmpdir/bad-branches.json"
+set +e
+"$PYTHON" scripts/factory-branch-cleanup.py \
+  --branches-json "$tmpdir/bad-branches.json" \
+  --prs-json "$FIXTURE_DIR/prs.json" \
+  --now "$NOW_ISO" 2>"$tmpdir/malformed.err" >/dev/null
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && ! grep -q Traceback "$tmpdir/malformed.err" \
+  && grep -qi 'invalid JSON' "$tmpdir/malformed.err"; then
+  echo "PASS  malformed branches JSON exits cleanly"
+  passed=$((passed + 1))
+else
+  echo "FAIL  malformed branches JSON (rc=$rc)"
+  cat "$tmpdir/malformed.err"
+  failed=$((failed + 1))
+fi
+
+# ---- test 8: empty branch list ----
+printf '{"default_branch":"main","branches":[]}\n' >"$tmpdir/empty-b.json"
+printf '{"pull_requests":[]}\n' >"$tmpdir/empty-p.json"
+if "$PYTHON" scripts/factory-branch-cleanup.py \
+  --branches-json "$tmpdir/empty-b.json" \
+  --prs-json "$tmpdir/empty-p.json" \
+  --now "$NOW_ISO" --json >"$tmpdir/empty-out.json"; then
+  if "$PYTHON" - "$tmpdir/empty-out.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1], encoding="utf-8"))["summary"]
+r = json.load(open(sys.argv[1], encoding="utf-8"))
+assert r["summary"]["total_branches"] == 0 and r["summary"]["keep"] == 0
+assert r["candidates"] == [] and r["kept"] == []
+PY
+  then
+    echo "PASS  empty branch list yields zero totals"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  empty branch list JSON shape"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  empty branch list run"
+  failed=$((failed + 1))
+fi
+
+# ---- test 9: duplicate branch names (last wins) ----
+cat >"$tmpdir/dup-b.json" <<'JSON'
+{
+  "default_branch": "main",
+  "branches": [
+    {"name": "oc/issue-dup", "committed_date": "2020-01-01T00:00:00Z"},
+    {"name": "oc/issue-dup", "committed_date": "2026-11-19T00:00:00Z"}
+  ]
+}
+JSON
+printf '{"pull_requests":[]}\n' >"$tmpdir/dup-p.json"
+set +e
+"$PYTHON" scripts/factory-branch-cleanup.py \
+  --branches-json "$tmpdir/dup-b.json" \
+  --prs-json "$tmpdir/dup-p.json" \
+  --older-than-days 7 \
+  --now "$NOW_ISO" 2>"$tmpdir/dup.err" --json >"$tmpdir/dup-out.json"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && grep -q 'duplicate branch name' "$tmpdir/dup.err"; then
+  if "$PYTHON" - "$tmpdir/dup-out.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1], encoding="utf-8"))
+assert r["summary"]["total_branches"] == 1
+kept = {k["branch"]: k for k in r["kept"]}
+assert kept["oc/issue-dup"]["category"] == "keep"
+PY
+  then
+    echo "PASS  duplicate branch names dedupe (recent date kept)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  duplicate branch dedupe output"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  duplicate branch names (rc=$rc)"
+  cat "$tmpdir/dup.err"
+  failed=$((failed + 1))
+fi
+
+# ---- test 10: --json output is deterministic (sort_keys) ----
+"$PYTHON" scripts/factory-branch-cleanup.py \
+  --branches-json "$FIXTURE_DIR/branches.json" \
+  --prs-json "$FIXTURE_DIR/prs.json" \
+  --older-than-days 7 \
+  --now "$NOW_ISO" --json >"$tmpdir/run-a.json"
+"$PYTHON" scripts/factory-branch-cleanup.py \
+  --branches-json "$FIXTURE_DIR/branches.json" \
+  --prs-json "$FIXTURE_DIR/prs.json" \
+  --older-than-days 7 \
+  --now "$NOW_ISO" --json >"$tmpdir/run-b.json"
+if cmp -s "$tmpdir/run-a.json" "$tmpdir/run-b.json"; then
+  echo "PASS  --json output is byte-identical across runs"
+  passed=$((passed + 1))
+else
+  echo "FAIL  --json determinism"
+  failed=$((failed + 1))
+fi
+
+# ---- test 11: negative --older-than-days rejected ----
+set +e
+"$PYTHON" scripts/factory-branch-cleanup.py \
+  --branches-json "$FIXTURE_DIR/branches.json" \
+  --prs-json "$FIXTURE_DIR/prs.json" \
+  --older-than-days -1 2>"$tmpdir/neg.err" >/dev/null
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -qi 'non-negative' "$tmpdir/neg.err"; then
+  echo "PASS  negative --older-than-days rejected"
+  passed=$((passed + 1))
+else
+  echo "FAIL  negative --older-than-days (rc=$rc)"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [[ "$failed" -gt 0 ]]; then

@@ -116,5 +116,17 @@ printf -- '---\nrisk: trivial\npredicted_cost_usd: 0.01\n---\n' >"$r3/factory/sp
 check "$r3.out" "Gate: risk trivial: manager may merge" "trivial gate"
 check "$r3.out" "Predicted cost: \$0.01 (spec front matter)" "predicted cost parsed"
 
+echo "== case 4: unicode in worker note still passes pr-check =="
+r4="$work/r4"; mkdir -p "$r4.artifacts"
+make_repo "$r4"; make_patch "$r4" with-spec normal
+echo "# OpenCode agent summary" >"$r4.artifacts/summary.md"
+printf '## Token usage (opencode stats)\n\n- Model: deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731\n- Input tokens: 108.8K\n- Output tokens: 17.9K\n- Cache read: 1.1M\n- OpenCode-reported cost: \$0.0257\n- Source: `opencode stats --models`\n' \
+  >"$r4.artifacts/usage-metrics.md"
+printf 'Worker note avec café 🔥\n' >"$r4.artifacts/worker-note.md"
+run_publish "$r4"
+body="$r4.artifacts/pr-body.md"
+check "$body" "Worker note avec café 🔥" "unicode preserved in worker note block"
+check "$r4.out" "PR check: passed." "unicode worker note passes pr-check"
+
 if [ "$fails" -gt 0 ]; then echo "test-opencode-publish-body: $fails failure(s)"; exit 1; fi
 echo "test-opencode-publish-body: all passed"

@@ -35,6 +35,7 @@ SPECIAL_MODELS = frozenset({"use_different_model_than_builder"})
 
 MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
+PRICE_TABLE_VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class CheckResult:
@@ -60,14 +61,35 @@ class CheckResult:
 
 def load_yaml(path: Path) -> dict[str, Any]:
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise SystemExit(f"models-check: cannot read {path}: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise SystemExit(f"models-check: {path} is not valid UTF-8") from exc
+    try:
+        data = yaml.safe_load(raw)
     except yaml.YAMLError as exc:
         raise SystemExit(f"models-check: invalid YAML in {path}: {exc}") from exc
+    if data is None:
+        raise SystemExit(f"models-check: {path}: empty YAML document")
     if not isinstance(data, dict):
         raise SystemExit(f"models-check: {path}: root must be a mapping")
     return data
+
+
+def validate_price_table_version(data: dict[str, Any], result: CheckResult) -> None:
+    if "price_table_version" not in data:
+        result.error("missing price_table_version")
+        return
+    ptv = data.get("price_table_version")
+    if ptv is None:
+        result.error("price_table_version is empty")
+        return
+    s = str(ptv).strip()
+    if not s:
+        result.error("price_table_version is empty")
+    elif not PRICE_TABLE_VERSION_RE.match(s):
+        result.error(f"price_table_version {s!r} must be YYYY-MM-DD")
 
 
 def is_model_id(value: Any) -> bool:
@@ -128,6 +150,7 @@ def models_cataloged_in_md(registry_ids: set[str], md_text: str, result: CheckRe
 
 
 def validate_models_yaml(data: dict[str, Any], result: CheckResult) -> set[str]:
+    validate_price_table_version(data, result)
     for key in REQUIRED_SECTIONS:
         if key not in data:
             result.error(f"missing required top-level section {key!r}")
@@ -207,6 +230,9 @@ def validate_routing_md(registry: set[str], path: Path | None, result: CheckResu
         return
     try:
         text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        result.error(f"{path} is not valid UTF-8")
+        return
     except OSError as exc:
         result.warn(f"cannot read {path}: {exc}")
         return
@@ -252,7 +278,7 @@ def main() -> int:
     }
 
     if args.json:
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         if result.status == "ok":
             print(
