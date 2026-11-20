@@ -219,6 +219,38 @@ if [ -f "$colon_fixture" ]; then
   fi
 fi
 
+# Shared front-matter helpers (#189, #161): colon quoting and duplicate-key detection.
+total=$((total + 1))
+set +e
+fm_out="$(python3 - <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path("scripts").resolve()))
+from factory_spec_front_matter import (
+    duplicate_scalar_keys,
+    normalize_front_matter_raw,
+    parse_front_matter_raw,
+)
+raw = "title: Site: half\nrisk: normal\nrisk: high\n"
+assert duplicate_scalar_keys(raw) == ["risk"], duplicate_scalar_keys(raw)
+norm = normalize_front_matter_raw(raw)
+assert "title: 'Site: half'" in norm, norm
+data, err = parse_front_matter_raw("issue: 1\ntitle: ok\nrisk: normal\ncomplexity: simple\n")
+assert err is None and data and data.get("issue") == 1
+print("ok")
+PY
+)"
+fm_rc=$?
+set -e
+if [ "$fm_rc" -eq 0 ] && [ "$fm_out" = ok ]; then
+  echo "PASS  factory_spec_front_matter helpers (duplicate keys, colon normalize)"
+  passed=$((passed + 1))
+else
+  echo "FAIL  factory_spec_front_matter helpers (exit $fm_rc)"
+  echo "$fm_out" | head -5
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed, $total total"
 if [ "$failed" -gt 0 ]; then
