@@ -78,7 +78,53 @@ export FAKE_CLONE_SRC="$work/repo"
 printf '%s\n' "$RUN_YML" >"$work/repo/.github/workflows/opencode-run.yml"
 
 repos_file="$work/adopters.txt"
-printf '%s\n' 'org/demo' >"$repos_file"
+cat >"$repos_file" <<'EOF'
+# fleet adopters
+org/demo
+
+org/demo
+  # duplicate above
+
+org/second
+EOF
+
+# --- invalid slug rejected (exit 2, no traceback) ---
+bad_repos="$work/bad-adopters.txt"
+printf 'not-a-valid-slug\n' >"$bad_repos"
+set +e
+err="$(python3 "$root/scripts/factory-sync-repos.py" --repos-file "$bad_repos" --tag v0.2.0 2>&1)"
+rc=$?
+set -e
+if [ "$rc" -eq 2 ] && grep -q 'invalid repo slug' <<<"$err" && ! grep -qi 'traceback' <<<"$err"; then
+  ok "invalid adopter slug exits 2 without traceback"
+else
+  bad "invalid adopter slug (rc=$rc)"
+  echo "$err"
+fi
+
+# --- parse: dedupe preserves one org/demo ---
+set +e
+out="$(REPOS_FILE="$repos_file" python3 <<PY
+import importlib.util
+import os
+from pathlib import Path
+root = ${root@Q}
+spec = importlib.util.spec_from_file_location("sync", f"{root}/scripts/factory-sync-repos.py")
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+repos = mod.parse_repos_file(Path(os.environ["REPOS_FILE"]))
+assert repos == ["org/demo", "org/second"], repos
+print("parse ok")
+PY
+)"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && grep -q 'parse ok' <<<"$out"; then
+  ok "repos-file comments and duplicates deduped"
+else
+  bad "repos-file parse"
+  echo "$out"
+fi
 
 # --- bump via dry-run ---
 set +e
@@ -93,11 +139,39 @@ else
   echo "$out" >>"$work/out"
 fi
 
+# --- --check --json drift report (no mutations) ---
+set +e
+out="$(python3 "$root/scripts/factory-sync-repos.py" --repos-file "$repos_file" --tag v0.2.0 --check --json 2>&1)"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && echo "$out" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['summary']['outdated'] >= 1
+assert d['summary']['total'] == 2
+assert d['repos'] == ['org/demo', 'org/second']
+demo = next(a for a in d['adopters'] if a['repo']=='org/demo')
+assert demo['status'] == 'outdated'
+"; then
+  ok "--check --json reports outdated adopters"
+else
+  bad "--check --json"
+  echo "$out"
+fi
+
+out2="$(python3 "$root/scripts/factory-sync-repos.py" --repos-file "$repos_file" --tag v0.2.0 --check --json 2>&1)"
+if [ "$out" = "$out2" ]; then
+  ok "--check --json is deterministic"
+else
+  bad "--check --json deterministic"
+fi
+
 # --- unit bump in python ---
 out="$(
-python3 <<'PY'
+python3 <<PY
 import importlib.util
-spec = importlib.util.spec_from_file_location("sync", "scripts/factory-sync-repos.py")
+root = ${root@Q}
+spec = importlib.util.spec_from_file_location("sync", f"{root}/scripts/factory-sync-repos.py")
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 text = """uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-pr-check.yml@v0.1.0

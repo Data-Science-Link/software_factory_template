@@ -6,6 +6,7 @@ that call Data-Science-Link/software_factory_template reusable workflows, and pu
 
 Example:
   python3 scripts/factory-sync-repos.py --repos-file factory/adopters.txt --tag v0.2.0 --dry-run
+  python3 scripts/factory-sync-repos.py --repos-file factory/adopters.txt --tag v0.2.0 --check --json
 """
 from __future__ import annotations
 
@@ -17,8 +18,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 TEMPLATE = "Data-Science-Link/software_factory_template"
+REPO_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 USES_RE = re.compile(
     rf"(uses:\s+{re.escape(TEMPLATE)}/\.github/workflows/reusable-[-\w]+\.yml)@v\d+\.\d+\.\d+",
     re.MULTILINE,
@@ -28,6 +31,7 @@ REF_RE = re.compile(
 )
 SEMVER_RE = re.compile(r"^v?\d+\.\d+\.\d+$")
 BRANCH_PREFIX = "factory-sync-"
+ADOPTER_STATUSES = ("up_to_date", "outdated", "missing_pins", "error")
 
 
 def normalize_tag(tag: str) -> str:
@@ -38,6 +42,24 @@ def normalize_tag(tag: str) -> str:
             f"invalid semver tag {tag!r} (expected vMAJOR.MINOR.PATCH, e.g. v0.2.0)"
         )
     return t if t.startswith("v") else f"v{t}"
+
+
+def parse_repos_file(path: Path) -> list[str]:
+    """Parse adopters list: skip ``#`` comments and blanks, dedupe, validate slugs."""
+    repos: list[str] = []
+    seen: set[str] = set()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if not REPO_SLUG_RE.fullmatch(line) or "/" not in line:
+            raise ValueError(
+                f"invalid repo slug {line!r} (expected owner/name, e.g. your-org/product)"
+            )
+        if line not in seen:
+            seen.add(line)
+            repos.append(line)
+    return repos
 
 
 def run(cmd: list[str], *, check: bool = True, **env) -> subprocess.CompletedProcess[str]:
@@ -103,8 +125,70 @@ def existing_pr(repo: str, branch: str) -> int | None:
     return int(num)
 
 
+def inspect_repo(repo: str, tag: str) -> dict[str, Any]:
+    """Read-only adopter pin audit (no git mutations)."""
+    semver = normalize_tag(tag)
+    record: dict[str, Any] = {
+        "repo": repo,
+        "status": "error",
+        "target_tag": semver,
+        "outdated_files": [],
+        "detail": "",
+    }
+    try:
+        paths = load_workflow_paths(repo)
+    except subprocess.CalledProcessError as exc:
+        record["detail"] = f"cannot list workflows: {exc.stderr.strip() or exc}"
+        return record
+
+    found_pins = False
+    outdated: list[str] = []
+    for path in paths:
+        try:
+            body = fetch_file(repo, path)
+        except subprocess.CalledProcessError:
+            continue
+        if TEMPLATE not in body or "reusable-" not in body:
+            continue
+        found_pins = True
+        _new, changed = bump_content(body, semver)
+        if changed:
+            outdated.append(path)
+
+    if not found_pins:
+        record["status"] = "missing_pins"
+        record["detail"] = "no reusable-workflow caller pins found under .github/workflows/"
+    elif outdated:
+        record["status"] = "outdated"
+        record["outdated_files"] = sorted(outdated)
+        record["detail"] = f"{len(outdated)} workflow file(s) lag tag {semver}"
+    else:
+        record["status"] = "up_to_date"
+        record["detail"] = f"all pins match {semver}"
+    return record
+
+
+def summarize_adopters(rows: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {s: 0 for s in ADOPTER_STATUSES}
+    for row in rows:
+        st = row.get("status", "error")
+        if st not in summary:
+            st = "error"
+        summary[st] += 1
+    summary["total"] = len(rows)
+    return summary
+
+
 def sync_repo(repo: str, tag: str, *, dry_run: bool) -> str:
     branch = f"{BRANCH_PREFIX}{tag.lstrip('v')}"
+    audit = inspect_repo(repo, tag)
+    if audit["status"] == "missing_pins":
+        return f"{repo}: no reusable-workflow pins found; skipped"
+    if audit["status"] == "up_to_date":
+        return f"{repo}: already up to date at {normalize_tag(tag)}"
+    if audit["status"] == "error":
+        return f"{repo}: ERROR {audit.get('detail', 'unknown')}"
+
     paths = load_workflow_paths(repo)
     updates: dict[str, str] = {}
     for path in paths:
@@ -176,33 +260,93 @@ def sync_repo(repo: str, tag: str, *, dry_run: bool) -> str:
     return f"{repo}: {r.stdout.strip()}"
 
 
+def emit_json(payload: dict[str, Any]) -> None:
+    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--repos-file", required=True, help="Newline-separated owner/repo list")
     p.add_argument("--tag", required=True, help="Target semver tag (e.g. v0.2.0)")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="Report adopter pin drift only (no branches, PRs, or file writes)",
+    )
+    p.add_argument("--json", action="store_true", help="Machine-readable summary on stdout")
     args = p.parse_args()
     try:
         normalize_tag(args.tag)
     except ValueError as exc:
         print(f"factory-sync-repos: {exc}", file=sys.stderr)
         return 2
-    repos = [
-        line.strip()
-        for line in Path(args.repos_file).read_text().splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
+
+    repos_path = Path(args.repos_file)
+    try:
+        repos = parse_repos_file(repos_path)
+    except ValueError as exc:
+        print(f"factory-sync-repos: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"factory-sync-repos: cannot read {repos_path}: {exc}", file=sys.stderr)
+        return 2
+
     if not repos:
         print("factory-sync-repos: empty repo list", file=sys.stderr)
         return 2
+
+    if args.check:
+        adopters = [inspect_repo(repo, args.tag) for repo in repos]
+        summary = summarize_adopters(adopters)
+        ok = summary.get("error", 0) == 0
+        payload = {
+            "adopters": adopters,
+            "ok": ok,
+            "repos": repos,
+            "repos_file": str(repos_path.resolve()),
+            "summary": summary,
+            "tag": normalize_tag(args.tag),
+        }
+        if args.json:
+            emit_json(payload)
+        else:
+            for row in adopters:
+                print(f"{row['repo']}: {row['status']} — {row['detail']}")
+            print(
+                f"Summary: {summary['up_to_date']} up_to_date, "
+                f"{summary['outdated']} outdated, "
+                f"{summary['missing_pins']} missing_pins, "
+                f"{summary['error']} error"
+            )
+        return 1 if summary.get("error", 0) else 0
+
     status = 0
+    lines: list[str] = []
     for repo in repos:
         try:
             msg = sync_repo(repo, args.tag, dry_run=args.dry_run)
-            print(msg)
+            lines.append(msg)
+            if not args.json:
+                print(msg)
         except Exception as exc:  # noqa: BLE001 — report per-repo failure
-            print(f"{repo}: ERROR {exc}", file=sys.stderr)
+            err = f"{repo}: ERROR {exc}"
+            lines.append(err)
+            if not args.json:
+                print(err, file=sys.stderr)
             status = 1
+
+    if args.json:
+        emit_json(
+            {
+                "dry_run": bool(args.dry_run),
+                "messages": lines,
+                "ok": status == 0,
+                "repos": repos,
+                "tag": normalize_tag(args.tag),
+            }
+        )
     return status
 
 

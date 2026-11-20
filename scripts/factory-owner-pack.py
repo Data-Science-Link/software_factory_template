@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -33,9 +35,12 @@ GATE_LABELS = {
     "shell_hygiene": "Shell hygiene (test-shell-hygiene)",
     "examples_smoke": "Examples smoke (test-examples)",
     "reusable_check": "Reusable workflows (factory-reusable-check)",
+    "dbt_build": "dbt project build (optional)",
     "site_smoke": "Factory site smoke (factory-site-smoke)",
     "release": "Release readiness (factory-release)",
 }
+
+OWNER_WORKFLOW_SYNC_DOC = "docs/OWNER_WORKFLOW_SYNC.md"
 
 DOC_POINTERS = {
     "models_config": "docs/MODEL_SCOUTING.md",
@@ -62,13 +67,19 @@ def script_path(repo: Path, name: str) -> Path:
     return repo / "scripts" / name
 
 
-def run_subprocess(cmd: list[str], *, cwd: Path | None = None) -> tuple[int, str, str]:
+def run_subprocess(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> tuple[int, str, str]:
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             cwd=str(cwd) if cwd else None,
+            env=env,
             check=False,
         )
         return proc.returncode, proc.stdout, proc.stderr
@@ -137,6 +148,19 @@ def remediation_examples_smoke() -> str:
 
 def remediation_reusable_check() -> str:
     return "python3 scripts/factory-reusable-check.py --strict --json"
+
+
+def remediation_dbt_build(repo: Path) -> str:
+    return (
+        f"cd {repo / 'factory' / 'dbt'} && "
+        'dbt build --profiles-dir . --vars "$(python3 scripts/factory-budget-vars.py)"'
+    )
+
+
+def reusable_pack_enabled(repo: Path) -> bool:
+    script = script_path(repo, "factory-reusable-check.py")
+    docs = repo / "docs" / "reusable-workflows"
+    return script.is_file() and docs.is_dir()
 
 
 def tail_output(stdout: str, stderr: str, *, limit: int = 400) -> str:
@@ -322,15 +346,19 @@ def gate_examples_smoke(repo: Path) -> GateRow:
 
 def gate_reusable_check(repo: Path) -> GateRow:
     gid, label = "reusable_check", GATE_LABELS["reusable_check"]
-    path = script_path(repo, "factory-reusable-check.py")
-    if not path.is_file():
-        return GateRow(
-            gid,
-            label,
-            "SKIP",
-            "factory-reusable-check.py not present (optional gate)",
-            "",
+    if not reusable_pack_enabled(repo):
+        missing: list[str] = []
+        if not script_path(repo, "factory-reusable-check.py").is_file():
+            missing.append("scripts/factory-reusable-check.py")
+        if not (repo / "docs" / "reusable-workflows").is_dir():
+            missing.append("docs/reusable-workflows/")
+        detail = (
+            "reusable workflow pack not enabled"
+            if not missing
+            else f"missing {', '.join(missing)} (optional gate)"
         )
+        return GateRow(gid, label, "SKIP", detail, "")
+    path = script_path(repo, "factory-reusable-check.py")
     cmd = [sys.executable, str(path), "--strict", "--json"]
     rc, out, err = run_subprocess(cmd, cwd=repo)
     payload = parse_json(out)
@@ -359,6 +387,83 @@ def gate_reusable_check(repo: Path) -> GateRow:
             remediation_reusable_check(),
         )
     return GateRow(gid, label, "PASS", "reusable workflows check clean", "")
+
+
+def gate_dbt_build(repo: Path) -> GateRow:
+    gid, label = "dbt_build", GATE_LABELS["dbt_build"]
+    dbt_dir = repo / "factory" / "dbt"
+    if not dbt_dir.is_dir():
+        return GateRow(gid, label, "SKIP", "factory/dbt not present", "")
+    if shutil.which("dbt") is None:
+        return GateRow(
+            gid,
+            label,
+            "SKIP",
+            "dbt not on PATH (pip install -r factory/dbt/requirements-dbt.txt)",
+            "",
+        )
+    rc, _out, _err = run_subprocess(
+        [sys.executable, "-c", "import dbt"],
+        cwd=repo,
+    )
+    if rc != 0:
+        return GateRow(
+            gid,
+            label,
+            "SKIP",
+            "dbt Python package not installed",
+            "pip install -r factory/dbt/requirements-dbt.txt",
+        )
+    budget_vars = script_path(repo, "factory-budget-vars.py")
+    if not budget_vars.is_file():
+        return GateRow(gid, label, "SKIP", "factory-budget-vars.py not present", "")
+    env = dict(os.environ)
+    env["DBT_SEND_ANONYMOUS_USAGE_STATS"] = "false"
+    seeds_rel = "tests/dbt/budget-math-week-seeds"
+    seeds_dir = repo / seeds_rel
+    if not seeds_dir.is_dir():
+        return GateRow(
+            gid,
+            label,
+            "SKIP",
+            f"{seeds_rel} fixtures not present",
+            "",
+        )
+    rc, raw_vars, vars_err = run_subprocess(
+        [sys.executable, str(budget_vars)],
+        cwd=repo,
+    )
+    if rc != 0 or not raw_vars.strip():
+        detail = tail_output(raw_vars, vars_err) or "factory-budget-vars.py failed"
+        return GateRow(gid, label, "FAIL", detail, remediation_dbt_build(repo))
+    try:
+        vars_obj = json.loads(raw_vars)
+        vars_obj["as_of_date"] = "2026-11-20"
+        vars_json = json.dumps(vars_obj, sort_keys=True)
+    except json.JSONDecodeError:
+        return GateRow(
+            gid,
+            label,
+            "FAIL",
+            "factory-budget-vars.py did not emit JSON",
+            remediation_dbt_build(repo),
+        )
+    dbt_env = {**env, "FACTORY_SEEDS_DIR": f"../../{seeds_rel}"}
+    rc, out, err = run_subprocess(
+        ["dbt", "build", "--profiles-dir", ".", "--vars", vars_json],
+        cwd=dbt_dir,
+        env=dbt_env,
+    )
+    if rc != 0:
+        detail = tail_output(out, err) or f"dbt build exit {rc}"
+        return GateRow(gid, label, "FAIL", detail, remediation_dbt_build(repo))
+    return GateRow(
+        gid,
+        label,
+        "PASS",
+        "dbt build succeeded (budget-math-week seeds)",
+        "",
+    )
 
 
 def gate_prepublic(repo: Path) -> GateRow:
@@ -566,6 +671,7 @@ def run_pack(
         gate_shell_hygiene(repo),
         gate_examples_smoke(repo),
         gate_reusable_check(repo),
+        gate_dbt_build(repo),
         gate_site_smoke(repo, skip=skip_site),
         gate_release(repo, version),
     ]
@@ -591,10 +697,14 @@ def exit_code(verdict: str, strict: bool) -> int:
 def to_json_payload(
     repo: Path, version: str | None, rows: list[GateRow], verdict: str
 ) -> dict[str, Any]:
+    sync_rel = OWNER_WORKFLOW_SYNC_DOC
+    sync_path = (repo / sync_rel).resolve()
     return {
         "repo_dir": str(repo.resolve()),
         "version": version,
         "verdict": verdict,
+        "owner_workflow_sync": sync_rel,
+        "owner_workflow_sync_path": str(sync_path) if sync_path.is_file() else None,
         "gates": [asdict(r) for r in rows],
         "summary": {
             "pass": sum(1 for r in rows if r.status == "PASS"),
@@ -700,7 +810,7 @@ def main() -> int:
     emit_markdown = emit_json is False and (args.markdown or True)
 
     if emit_json:
-        report_text = json.dumps(payload, indent=2) + "\n"
+        report_text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     elif emit_markdown:
         report_text = render_markdown(repo, version, rows, verdict)
     else:
