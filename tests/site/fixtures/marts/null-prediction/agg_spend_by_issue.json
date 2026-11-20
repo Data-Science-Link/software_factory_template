@@ -1,0 +1,8 @@
+[
+  {
+    "issue_number": 174,
+    "runs": 4,
+    "spend_usd": 0.032112,
+    "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"
+  }
+]
