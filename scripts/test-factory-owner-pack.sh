@@ -140,10 +140,11 @@ run_pack --repo-dir "$stub_repo" --version v0.1.0 --json
 if python3 -c '
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
-for key in ("repo_dir", "verdict", "gates", "summary"):
+for key in ("repo_dir", "verdict", "gates", "summary", "owner_workflow_sync", "owner_workflow_sync_path"):
     assert key in data
 for key in ("pass", "warn", "fail", "skip"):
     assert key in data["summary"]
+assert data["owner_workflow_sync"] == "docs/OWNER_WORKFLOW_SYNC.md"
 for g in data["gates"]:
     for key in ("id", "label", "status", "detail", "remediation"):
         assert key in g
@@ -152,6 +153,66 @@ print("json ok")
 ' "$work/out"
 then ok "--json parses cleanly"
 else bad "--json schema"
+fi
+
+# --- reusable_check SKIPs when pack not enabled ---
+reusable_skip="$work/reusable-skip"
+write_stub_all_pass "$reusable_skip"
+run_pack --repo-dir "$reusable_skip" --json
+if python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+row = next(g for g in data["gates"] if g["id"] == "reusable_check")
+assert row["status"] == "SKIP"
+print("reusable skip ok")
+' "$work/out"; then
+  ok "reusable_check SKIP without reusable-workflows/"
+else
+  bad "reusable_check skip expectation"
+fi
+
+mkdir -p "$reusable_skip/docs/reusable-workflows"
+printf '# stub\n' >"$reusable_skip/docs/reusable-workflows/README.md"
+cat >"$reusable_skip/scripts/factory-reusable-check.py" <<'PY'
+#!/usr/bin/env python3
+import json, sys
+json.dump({"ok": True, "summary": {"pass": 1, "warn": 0, "fail": 0}}, sys.stdout)
+PY
+chmod +x "$reusable_skip/scripts/factory-reusable-check.py"
+run_pack --repo-dir "$reusable_skip" --json
+if python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+row = next(g for g in data["gates"] if g["id"] == "reusable_check")
+assert row["status"] == "PASS"
+' "$work/out"; then
+  ok "reusable_check runs when script and docs/reusable-workflows/ exist"
+else
+  bad "reusable_check enabled path"
+fi
+
+# --- --json determinism ---
+json_a="$work/json-a.json"
+json_b="$work/json-b.json"
+python3 "$pack" --repo-dir "$stub_repo" --version v0.1.0 --json >"$json_a"
+python3 "$pack" --repo-dir "$stub_repo" --version v0.1.0 --json >"$json_b"
+if cmp -s "$json_a" "$json_b"; then
+  ok "--json output is deterministic"
+else
+  bad "--json determinism"
+fi
+
+# --- dbt_build gate: SKIP or PASS on live repo ---
+run_pack --repo-dir "$root" --version v0.1.0 --json
+if python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+row = next(g for g in data["gates"] if g["id"] == "dbt_build")
+assert row["status"] in ("PASS", "SKIP"), row
+print(row["status"])
+' "$work/out"
+then ok "live dbt_build PASS or SKIP"
+else bad "live dbt_build gate"
 fi
 
 # --- new quality gates present on stub + READY ---
