@@ -120,18 +120,26 @@ def changelog_has_section(repo: Path, version: str) -> Check:
     for label in (bare, "Unreleased"):
         body = section_body(text, label)
         if body:
+            which = (
+                f"release section ## [{bare}]"
+                if label == bare
+                else "## [Unreleased] (cut [{bare}] before tagging)"
+            )
             return Check(
                 id="changelog_section",
                 category="changelog",
                 status="pass",
-                detail=f"non-empty ## [{label}] section in CHANGELOG.md",
+                detail=f"CHANGELOG.md has a non-empty {which}",
                 extra={"section": label},
             )
     return Check(
         id="changelog_section",
         category="changelog",
         status="fail",
-        detail=f"CHANGELOG.md needs non-empty ## [{bare}] or ## [Unreleased]",
+        detail=(
+            f"CHANGELOG.md needs a non-empty ## [{bare}] section, "
+            f"or move notes under ## [Unreleased] before tagging"
+        ),
     )
 
 
@@ -375,11 +383,13 @@ def draft_changelog_section(repo: Path, version: str) -> str:
 
 def release_commands(version: str) -> list[str]:
     bare_notes = f"CHANGELOG section for {version}"
+    sync = f"python3 scripts/factory-sync-repos.py --repos-file factory/adopters.txt --tag {version}"
     return [
         f"git tag -a {version} -m \"Release {version}\"",
         f"git push origin {version}",
         f"gh release create {version} --title {version} --notes \"<{bare_notes}>\"",
-        f"python3 scripts/factory-sync-repos.py --tag {version} --dry-run",
+        f"{sync} --dry-run",
+        sync,
     ]
 
 
@@ -468,6 +478,12 @@ def to_json_payload(
     return payload
 
 
+def semver_error_message(version: str) -> str:
+    return (
+        f"factory-release: version {version!r} is not vMAJOR.MINOR.PATCH (example: v0.1.0)"
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--version", required=True, help="Semver tag to validate (e.g. v0.1.0)")
@@ -491,13 +507,40 @@ def main() -> int:
         return 2
 
     version = args.version.strip()
+    semver_ok, bare = parse_semver_tag(version)
+    if not semver_ok:
+        detail = semver_error_message(version)
+        print(detail, file=sys.stderr)
+        if args.json:
+            payload: dict[str, Any] = {
+                "bare_version": None,
+                "checks": [
+                    asdict(
+                        Check(
+                            id="semver_tag",
+                            category="version",
+                            status="fail",
+                            detail=detail.removeprefix("factory-release: "),
+                        )
+                    )
+                ],
+                "release_commands": [],
+                "repo_dir": str(repo),
+                "semver_ok": False,
+                "summary": {"fail": 1, "pass": 0, "skip": 0, "warn": 0},
+                "version": version,
+            }
+            json.dump(payload, sys.stdout, indent=2, sort_keys=True)
+            sys.stdout.write("\n")
+        return 2
+
     checks = build_checks(repo, version)
     draft = draft_changelog_section(repo, version) if args.draft_changelog else None
     commands = release_commands(version)
     payload = to_json_payload(repo, version, checks, draft, commands)
 
     if args.json:
-        json.dump(payload, sys.stdout, indent=2)
+        json.dump(payload, sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
     else:
         print(render_markdown(repo, version, checks, draft, commands))

@@ -33,6 +33,114 @@ TAB_LABELS = (
     ("dbt.html", "dbt"),
 )
 
+FACTORY_LOOP_STAGES = (
+    {
+        "id": "idea",
+        "label": "Idea",
+        "description": (
+            "Work is captured as a GitHub issue that states the desired outcome "
+            "in one sentence."
+        ),
+        "inputs": "Issue title, body, and optional labels.",
+        "outputs": "A tracked issue ready for factory triage.",
+        "guardrails": "No secrets in issue text; one clear outcome per issue.",
+    },
+    {
+        "id": "triage",
+        "label": "Triage",
+        "description": (
+            "The Factory Manager classifies risk, complexity, and whether the "
+            "issue is selected for a run."
+        ),
+        "inputs": "Open issue, labels, and backlog priority.",
+        "outputs": "Risk class, complexity, and selection decision.",
+        "guardrails": "Unselected issues stop; high-risk paths need human gates.",
+    },
+    {
+        "id": "spec",
+        "label": "Spec",
+        "description": (
+            "An approved spec defines scope, files, verification commands, and "
+            "predicted cost before any build runs."
+        ),
+        "inputs": "Selected issue and FACTORY.md conventions.",
+        "outputs": "Machine-readable spec with routing hints.",
+        "guardrails": "Spec lists allowed paths; forbidden paths block the worker.",
+    },
+    {
+        "id": "human-review",
+        "label": "Human Review",
+        "description": (
+            "A human approves the spec (and merge plan) before standard or "
+            "complex work starts."
+        ),
+        "inputs": "Draft spec and predicted cost.",
+        "outputs": "Recorded approval on the issue or PR.",
+        "guardrails": "No build on standard/complex work without approval.",
+    },
+    {
+        "id": "build",
+        "label": "Build",
+        "description": (
+            "A worker agent implements the spec on a feature branch and opens "
+            "or updates a pull request."
+        ),
+        "inputs": "Approved spec, default branch, and toolchain registry.",
+        "outputs": "PR with diff, verification output, and AI disclosure.",
+        "guardrails": "Workers never merge; spend stays under per-issue cap.",
+    },
+    {
+        "id": "verify",
+        "label": "Verify",
+        "description": (
+            "CI and factory scripts run: tests, pr-check, gitleaks, and "
+            "run-record gates."
+        ),
+        "inputs": "Head commit on the PR branch.",
+        "outputs": "Green required checks or a fix loop.",
+        "guardrails": "No bypass hooks; failing gates block merge.",
+    },
+    {
+        "id": "merge",
+        "label": "Merge",
+        "description": (
+            "Merge authority follows risk class: trivial may auto-merge; "
+            "normal and high need a human product gate."
+        ),
+        "inputs": "Green PR, review comments, and merge authority table.",
+        "outputs": "Merged commit on the default branch.",
+        "guardrails": "High-risk and workflow changes need explicit human merge.",
+    },
+    {
+        "id": "monitor",
+        "label": "Monitor",
+        "description": (
+            "Spend, run records, and CI health are tracked against weekly and "
+            "monthly budgets."
+        ),
+        "inputs": "Run records, dbt marts, and budget.yml caps.",
+        "outputs": "Financials tab metrics and budget warnings.",
+        "guardrails": "Warn threshold triggers before hard budget overrun.",
+    },
+    {
+        "id": "feedback",
+        "label": "Feedback",
+        "description": (
+            "Retrospectives update DECISIONS.md, routing, and the backlog for "
+            "the next loop."
+        ),
+        "inputs": "Merged PR, actual cost vs prediction, and review notes.",
+        "outputs": "New issues, spec tweaks, and documented decisions.",
+        "guardrails": "Decisions stay repo-agnostic in published site copy.",
+    },
+)
+
+
+def _page_stem(filename):
+    if filename == "index.html":
+        return "architecture"
+    return filename.replace(".html", "")
+
 
 def esc(value):
     return html.escape(str(value), quote=True)
@@ -51,9 +159,24 @@ def format_percentage(value):
 def build_tabs(active):
     parts = []
     for filename, label in TAB_LABELS:
-        cls = ' class="active"' if filename == active else ""
+        stem = _page_stem(filename)
+        tab_id = "tab-{}".format(stem)
+        panel_id = "panel-{}".format(stem)
+        is_active = filename == active
+        cls = ' class="active"' if is_active else ""
+        selected = "true" if is_active else "false"
+        tabindex = "0" if is_active else "-1"
         parts.append(
-            '<a href="{}"{}>{}</a>'.format(esc(filename), cls, esc(label))
+            '<a href="{}" id="{}" role="tab" aria-selected="{}" '
+            'aria-controls="{}" tabindex="{}"{}>{}</a>'.format(
+                esc(filename),
+                esc(tab_id),
+                selected,
+                esc(panel_id),
+                tabindex,
+                cls,
+                esc(label),
+            )
         )
     return "\n      ".join(parts)
 
@@ -202,10 +325,17 @@ def render_loop_cards(steps):
 
 
 def loop_svg():
-    """Inline SVG loop diagram: ideas -> ... -> feedback. Deterministic, offline."""
+    """Inline SVG loop diagram for the nine factory stages. Deterministic, offline."""
     stages = [
-        "ideas", "triage", "spec", "human review", "implement",
-        "review", "verify", "ship", "monitor", "feedback",
+        "idea",
+        "triage",
+        "spec",
+        "review",
+        "build",
+        "verify",
+        "merge",
+        "monitor",
+        "feedback",
     ]
     node_w = 96
     node_h = 38
@@ -688,6 +818,92 @@ tr:nth-child(even) td { background: var(--fs-row-alt); }
 .dbt-lineage.is-muted .dbt-lineage-edge.is-lineage-focus { opacity: 1; }
 .dbt-lineage-node.is-lineage-focus rect { stroke: var(--fs-accent); stroke-width: 2.2; }
 .dbt-lineage-node.is-lineage-related rect { stroke: var(--fs-accent); stroke-width: 1.6; }
+.config-summary.card {
+  margin: 1rem 0 1.25rem;
+  padding: 1rem 1.15rem;
+  border-radius: 0.35rem;
+  box-shadow: var(--fs-shadow);
+}
+.config-summary h3 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+.config-dl { margin: 0; display: grid; grid-template-columns: 9rem 1fr; gap: 0.45rem 1rem; }
+.config-dl dt { margin: 0; font-weight: 600; color: var(--fs-muted); }
+.config-dl dd { margin: 0; }
+.note-inline { color: var(--fs-muted); font-style: italic; }
+.config-tier-list { margin: 0.25rem 0 0; padding-left: 1.25rem; }
+.factory-loop-interactive { margin: 0.75rem 0 1.5rem; }
+.loop-stage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.loop-stage-btn {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-surface);
+  color: var(--fs-text);
+  cursor: pointer;
+}
+.loop-stage-btn:hover { border-color: var(--fs-accent); }
+.loop-stage-btn:focus-visible {
+  outline: 2px solid var(--fs-accent);
+  outline-offset: 2px;
+}
+.loop-stage-btn.is-active {
+  background: var(--fs-accent-soft);
+  border-color: var(--fs-accent);
+  font-weight: 600;
+}
+.loop-stage-detail {
+  border: 1px solid var(--fs-border);
+  border-radius: 0.35rem;
+  padding: 0.85rem 1rem;
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow);
+  margin-bottom: 0.85rem;
+}
+.loop-stage-detail h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.loop-stage-detail dl { margin: 0.35rem 0 0; }
+.loop-stage-detail dt { font-weight: 600; margin-top: 0.35rem; }
+.loop-stage-detail dd { margin: 0.15rem 0 0 0; color: var(--fs-text); }
+.loop-stage-placeholder { margin: 0; color: var(--fs-muted); }
+nav.tabs a[role="tab"]:focus-visible {
+  outline: 2px solid var(--fs-accent);
+  outline-offset: 2px;
+}
+@media print {
+  #theme-toggle,
+  .copy-btn,
+  .btn-secondary,
+  .backlog-filter,
+  .dbt-filter,
+  .filter-pills,
+  .loop-stage-bar,
+  .financials-runs-toolbar { display: none !important; }
+  body { background: #fff; color: #000; }
+  .site-header {
+    background: #fff;
+    color: #000;
+    box-shadow: none;
+    border-bottom: 1px solid #ccc;
+  }
+  .site-header h1 { color: #000; }
+  .tabs a {
+    background: #eee;
+    color: #000;
+    border: 1px solid #bbb;
+  }
+  .tabs a.active { background: #fff; font-weight: 700; }
+  .content { max-width: none; margin: 0; padding: 0.5rem 0; }
+  table, .card, .loop-stage-detail, .config-summary {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  a[href]::after { content: none !important; }
+}
 </style>"""
 
 
@@ -963,14 +1179,102 @@ def site_enhancement_script():
   if (dbtClear) {
     dbtClear.addEventListener("click", dbtClearLineage);
   }
+
+  var tabNav = document.querySelector('nav.tabs[role="tablist"]');
+  if (tabNav) {
+    var headerTabs = Array.prototype.slice.call(
+      tabNav.querySelectorAll('a[role="tab"]')
+    );
+    tabNav.addEventListener("keydown", function (ev) {
+      if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+      var idx = headerTabs.indexOf(document.activeElement);
+      if (idx < 0) return;
+      ev.preventDefault();
+      var next = ev.key === "ArrowRight" ? idx + 1 : idx - 1;
+      if (next < 0) next = headerTabs.length - 1;
+      if (next >= headerTabs.length) next = 0;
+      headerTabs[next].focus();
+    });
+  }
+
+  var loopRoot = document.getElementById("factory-loop-interactive");
+  if (loopRoot) {
+    var dataEl = document.getElementById("loop-stages-data");
+    var detail = document.getElementById("loop-stage-detail");
+    var stageMap = {};
+    if (dataEl && dataEl.textContent) {
+      try {
+        (JSON.parse(dataEl.textContent) || []).forEach(function (s) {
+          if (s && s.id) stageMap[s.id] = s;
+        });
+      } catch (e) {}
+    }
+    var loopButtons = Array.prototype.slice.call(
+      loopRoot.querySelectorAll(".loop-stage-btn")
+    );
+    function loopDetailHtml(stage) {
+      return (
+        "<h3>" + stage.label + "</h3>" +
+        "<p>" + stage.description + "</p>" +
+        "<dl><dt>Inputs</dt><dd>" + stage.inputs + "</dd>" +
+        "<dt>Outputs</dt><dd>" + stage.outputs + "</dd>" +
+        "<dt>Guardrails</dt><dd>" + stage.guardrails + "</dd></dl>"
+      );
+    }
+    function selectLoopStage(btn) {
+      loopButtons.forEach(function (b) {
+        var on = b === btn;
+        b.classList.toggle("is-active", on);
+        b.setAttribute("aria-selected", on ? "true" : "false");
+        b.tabIndex = on ? 0 : -1;
+      });
+      var sid = btn.getAttribute("data-stage");
+      var stage = sid ? stageMap[sid] : null;
+      if (stage && detail) {
+        detail.innerHTML = loopDetailHtml(stage);
+      }
+    }
+    loopButtons.forEach(function (btn, index) {
+      btn.addEventListener("click", function () { selectLoopStage(btn); });
+      btn.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          selectLoopStage(btn);
+          return;
+        }
+        if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+        ev.preventDefault();
+        var next = ev.key === "ArrowRight" ? index + 1 : index - 1;
+        if (next < 0) next = loopButtons.length - 1;
+        if (next >= loopButtons.length) next = 0;
+        loopButtons[next].focus();
+        selectLoopStage(loopButtons[next]);
+      });
+    });
+    if (loopButtons.length) selectLoopStage(loopButtons[0]);
+  }
 })();
 </script>"""
 
 
-def enhance_page_html(html):
+def enhance_page_html(html, active_filename="index.html"):
     """Inject shared offline UX (theme, filters, export, copy) into rendered HTML."""
+    stem = _page_stem(active_filename)
+    panel_id = "panel-{}".format(stem)
+    tab_id = "tab-{}".format(stem)
     if "</head>" in html:
         html = html.replace("</head>", site_enhancement_css() + "\n</head>", 1)
+    html = html.replace(
+        '<nav class="tabs" aria-label="Site tabs">',
+        '<nav class="tabs" role="tablist" aria-label="Site tabs">',
+        1,
+    )
+    html = html.replace(
+        "<main class=\"content\">",
+        '<main class="content" id="{}" role="tabpanel" aria-labelledby="{}" '
+        'tabindex="0">'.format(panel_id, tab_id),
+        1,
+    )
     marker = '<header class="site-header">\n  <h1>'
     if marker in html:
         html = html.replace(
@@ -1018,15 +1322,161 @@ def when_text(when):
     return str(when)
 
 
+def load_mode(repo_root):
+    path = Path(repo_root) / ".factory" / "mode.yml"
+    if not path.is_file():
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    mode = data.get("mode")
+    return str(mode) if mode is not None else None
+
+
+def _json_script_payload(data):
+    payload = json.dumps(data, separators=(",", ":"), ensure_ascii=True)
+    return payload.replace("</", "<\\/")
+
+
+def render_active_factory_config(repo_root, models_data):
+    """Live summary from mode.yml, models.yaml, and factory/budget.yml when present."""
+    parts = [
+        "<h2>Active Factory Configuration</h2>",
+        '<div id="active-factory-config" class="config-summary card">',
+        "<h3>Live configuration</h3>",
+        '<dl class="config-dl">',
+    ]
+
+    mode_path = Path(repo_root) / ".factory" / "mode.yml"
+    if mode_path.is_file():
+        mode = load_mode(repo_root)
+        parts.append(
+            "<dt>Factory mode</dt><dd>{}</dd>".format(
+                esc(mode if mode else "(unset in mode.yml)")
+            )
+        )
+    else:
+        parts.append(
+            '<dt>Factory mode</dt><dd class="note-inline">'
+            ".factory/mode.yml not found</dd>"
+        )
+
+    models_path = Path(repo_root) / ".factory" / "models.yaml"
+    models = models_data.get("models") if models_data else None
+    if models_path.is_file() and models:
+        tier_lines = []
+        for entry in models:
+            model_id = entry.get("id", "")
+            if not model_id:
+                continue
+            status = entry.get("status") or "unspecified"
+            price_in = entry.get("price_in_per_mtok")
+            price_out = entry.get("price_out_per_mtok")
+            price_bit = ""
+            if price_in is not None and price_out is not None:
+                price_bit = " · ${}/{} in/out per Mtok".format(price_in, price_out)
+            tier_lines.append("{} ({}){}".format(model_id, status, price_bit))
+        if tier_lines:
+            parts.append(
+                "<dt>Model tiers</dt><dd><ul class=\"config-tier-list\">"
+            )
+            for line in tier_lines:
+                parts.append("<li>{}</li>".format(esc(line)))
+            parts.append("</ul></dd>")
+        else:
+            parts.append(
+                '<dt>Model tiers</dt><dd class="note-inline">'
+                "models key empty in models.yaml</dd>"
+            )
+        rules = models_data.get("routing_rules") or []
+        if rules:
+            parts.append(
+                "<dt>Routing rules</dt><dd>{} active rules "
+                "(first match wins)</dd>".format(len(rules))
+            )
+    else:
+        parts.append(
+            '<dt>Model tiers</dt><dd class="note-inline">'
+            ".factory/models.yaml not found or has no models list</dd>"
+        )
+
+    budget_path = Path(repo_root) / "factory" / "budget.yml"
+    budget = _load_budget(repo_root)
+    if budget_path.is_file() and budget:
+        weekly = budget.get("weekly_usd")
+        monthly = budget.get("monthly_usd")
+        weekly_s = (
+            format_currency(float(weekly))
+            if weekly is not None
+            else "not set"
+        )
+        monthly_s = (
+            format_currency(float(monthly))
+            if monthly is not None
+            else "not set"
+        )
+        parts.append(
+            "<dt>Budget caps</dt><dd>Weekly {} · Monthly {}</dd>".format(
+                esc(weekly_s), esc(monthly_s)
+            )
+        )
+    else:
+        parts.append(
+            '<dt>Budget caps</dt><dd class="note-inline">'
+            "factory/budget.yml not found</dd>"
+        )
+
+    parts.append("</dl></div>")
+    return "\n".join(parts)
+
+
+def render_interactive_factory_loop():
+    """Nine-stage loop strip with inspectable detail panel and inline SVG."""
+    parts = [
+        '<div id="factory-loop-interactive" class="factory-loop-interactive">',
+        '<div class="loop-stage-bar" role="tablist" aria-label="Factory loop stages">',
+    ]
+    for stage in FACTORY_LOOP_STAGES:
+        parts.append(
+            '<button type="button" class="loop-stage-btn" role="tab" '
+            'id="loop-stage-{}" data-stage="{}" aria-selected="false" '
+            'aria-controls="loop-stage-detail" tabindex="-1">{}</button>'.format(
+                esc(stage["id"]),
+                esc(stage["id"]),
+                esc(stage["label"]),
+            )
+        )
+    parts.append("</div>")
+    parts.append(
+        '<div id="loop-stage-detail" class="loop-stage-detail" role="tabpanel" '
+        'aria-live="polite" tabindex="0">'
+        '<p class="loop-stage-placeholder">Select a stage to inspect its '
+        "description, inputs, outputs, and guardrails.</p></div>"
+    )
+    parts.append(
+        '<script type="application/json" id="loop-stages-data">'
+        + _json_script_payload(list(FACTORY_LOOP_STAGES))
+        + "</script>"
+    )
+    parts.append(loop_svg())
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
 def architecture_html(repo_root, models_data, factory_md):
     parts = []
+
+    # Live config summary from repo YAML when present.
+    parts.append(render_active_factory_config(repo_root, models_data))
 
     # Newcomer pitch.
     parts.append(newcomer_pitch())
 
-    # Inline SVG loop diagram.
+    # Interactive nine-stage loop with inline SVG.
     parts.append("<h2>The loop</h2>")
-    parts.append(loop_svg())
+    parts.append(render_interactive_factory_loop())
 
     # Loop step cards.
     parts.append("<h2>Loop steps</h2>")
@@ -2597,7 +3047,7 @@ def main() -> None:
             version=esc(version),
             build_time=esc(now),
         )
-        body = enhance_page_html(body)
+        body = enhance_page_html(body, filename)
         with open(out_dir / filename, "w", encoding="utf-8") as fh:
             fh.write(body)
         written.append(filename)

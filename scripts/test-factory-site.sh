@@ -499,6 +499,58 @@ else
 fi
 # (renumbered: UX controls are test 16 after mart tests 14–15)
 
+# ---- test 17: Active Factory Configuration card on architecture tab ----
+if grep -q 'id="active-factory-config"' "$idx10" \
+   && grep -q "Active Factory Configuration" "$idx10"; then
+  echo "PASS  architecture tab renders Active Factory Configuration card"
+  passed=$((passed + 1))
+else
+  echo "FAIL  Active Factory Configuration card missing from architecture tab"
+  failed=$((failed + 1))
+fi
+
+# ---- test 18: interactive nine-stage loop controls ----
+ok18=1
+grep -q 'id="factory-loop-interactive"' "$idx10" || ok18=0
+grep -q 'id="loop-stage-detail"' "$idx10" || ok18=0
+grep -q 'class="loop-stage-btn"' "$idx10" || ok18=0
+grep -q 'data-stage="feedback"' "$idx10" || ok18=0
+if [ "$ok18" = 1 ]; then
+  echo "PASS  architecture tab has interactive nine-stage loop inspector"
+  passed=$((passed + 1))
+else
+  echo "FAIL  interactive loop stages missing from architecture tab"
+  failed=$((failed + 1))
+fi
+
+# ---- test 19: site tab bar uses ARIA tab roles on all primary pages ----
+ok19=1
+for page in index.html financials.html backlog.html dbt.html; do
+  grep -q 'role="tablist"' "site/$page" || ok19=0
+  grep -q 'role="tabpanel"' "site/$page" || ok19=0
+  grep -q 'role="tab"' "site/$page" || ok19=0
+done
+if [ "$ok19" = 1 ]; then
+  echo "PASS  tab bar and main panels expose ARIA tab roles"
+  passed=$((passed + 1))
+else
+  echo "FAIL  ARIA tab roles missing from one or more site pages"
+  failed=$((failed + 1))
+fi
+
+# ---- test 20: print stylesheet block is embedded for PDF export ----
+ok20=1
+for page in index.html financials.html; do
+  grep -q '@media print' "site/$page" || ok20=0
+done
+if [ "$ok20" = 1 ]; then
+  echo "PASS  Financials and Architecture pages include @media print rules"
+  passed=$((passed + 1))
+else
+  echo "FAIL  @media print block missing from architecture or financials HTML"
+  failed=$((failed + 1))
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
