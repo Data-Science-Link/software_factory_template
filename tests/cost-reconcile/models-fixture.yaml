@@ -1,0 +1,8 @@
+# Minimal price table for offline reconcile tests (subset of .factory/models.yaml).
+price_table_version: "test-fixture"
+models:
+  - id: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider: deepinfra
+    price_in_per_mtok: 0.06
+    price_cached_per_mtok: 0.015
+    price_out_per_mtok: 0.18

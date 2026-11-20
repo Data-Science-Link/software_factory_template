@@ -10,6 +10,7 @@ python3 scripts/factory-doctor.py --repo-dir /path/to/repo
 python3 scripts/factory-doctor.py --json
 python3 scripts/factory-doctor.py --strict
 python3 scripts/factory-doctor.py --live
+python3 scripts/factory-doctor.py --public
 ```
 
 | Flag | Meaning |
@@ -18,6 +19,7 @@ python3 scripts/factory-doctor.py --live
 | `--json` | Machine-readable scorecard on stdout. |
 | `--strict` | Exit `1` when any check fails (default: always exit `0`, report only). |
 | `--live` | Optional online checks (never runs unless you pass this). |
+| `--public` | Run the pre-public hygiene scan when `scripts/factory-prepublic-check.py` exists. |
 
 Offline tests: `bash scripts/test-factory-doctor.sh`
 
@@ -31,6 +33,8 @@ Offline tests: `bash scripts/test-factory-doctor.sh`
 | **python_dbt** | Current `python3` version (warn on 3.14+ for dbt) and whether `python3.12` or `python3.13` is on `PATH`. |
 | **protected_scripts** | `scripts/opencode-artifact-scan.sh --list-protected` paths exist on disk and match the mirrored list in `.factory/FACTORY.md` when present. |
 | **workflow_hygiene** | When `scripts/factory-audit-workflows.py` exists, runs it with `--json` and summarizes pass/fail counts (no duplicate workflow rules in the doctor). |
+| **docs_links** | When `scripts/factory-check-docs.py` exists, runs it with `--json` on the target repo. **Fail** on broken relative links or heading anchors; **warn** when only missing-script references remain; **pass** when clean. |
+| **prepublic** | Only with `--public`: when `scripts/factory-prepublic-check.py` exists, runs it with `--json`. **Fail** when any hygiene finding is reported; **pass** when the scan is clean. Skipped when `--public` is omitted or the script is absent. |
 | **live** | Only with `--live`: if `gh` is available and `scripts/protect-main.sh` supports `--verify`, runs that verify mode. Skipped otherwise. |
 
-Related issues: [#178](https://github.com/Data-Science-Link/software_factory_template/issues/178), [#38](https://github.com/Data-Science-Link/software_factory_template/issues/38).
+Related issues: [#178](https://github.com/Data-Science-Link/software_factory_template/issues/178), [#184](https://github.com/Data-Science-Link/software_factory_template/issues/184), [#38](https://github.com/Data-Science-Link/software_factory_template/issues/38).

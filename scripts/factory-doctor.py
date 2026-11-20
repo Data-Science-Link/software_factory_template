@@ -386,6 +386,119 @@ def check_protected_scripts(repo: Path) -> list[Check]:
     return checks
 
 
+def check_docs_links(repo: Path) -> list[Check]:
+    script = repo / "scripts" / "factory-check-docs.py"
+    if not script.is_file():
+        return [
+            Check(
+                id="docs_links",
+                category="docs_links",
+                status="skip",
+                detail="scripts/factory-check-docs.py not present",
+            )
+        ]
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), "--repo-dir", str(repo), "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo,
+        )
+        payload = json.loads(proc.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        return [
+            Check(
+                id="docs_links",
+                category="docs_links",
+                status="fail",
+                detail=f"factory-check-docs.py --json failed: {exc}",
+            )
+        ]
+    summary = payload.get("summary") or {}
+    errors = int(summary.get("errors", 0))
+    warnings = int(summary.get("warnings", 0))
+    broken = int(summary.get("broken_links", errors))
+    files_scanned = int(payload.get("files_scanned", 0))
+    if errors > 0:
+        status = "fail"
+        detail = (
+            f"docs check: {errors} error(s), {warnings} warning(s) "
+            f"({broken} broken link/anchor; {files_scanned} markdown files)"
+        )
+    elif warnings > 0:
+        status = "warn"
+        detail = (
+            f"docs check: no broken links; {warnings} warning(s) "
+            f"({files_scanned} markdown files)"
+        )
+    else:
+        status = "pass"
+        detail = f"docs check: clean ({files_scanned} markdown files)"
+    return [
+        Check(
+            id="docs_links",
+            category="docs_links",
+            status=status,
+            detail=detail,
+            extra={"summary": summary},
+        )
+    ]
+
+
+def check_prepublic_hygiene(repo: Path) -> list[Check]:
+    script = repo / "scripts" / "factory-prepublic-check.py"
+    if not script.is_file():
+        return [
+            Check(
+                id="prepublic_hygiene",
+                category="prepublic",
+                status="skip",
+                detail="scripts/factory-prepublic-check.py not present",
+            )
+        ]
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), str(repo), "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo,
+        )
+        payload = json.loads(proc.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        return [
+            Check(
+                id="prepublic_hygiene",
+                category="prepublic",
+                status="fail",
+                detail=f"factory-prepublic-check.py --json failed: {exc}",
+            )
+        ]
+    count = int(payload.get("finding_count", len(payload.get("findings") or [])))
+    scanned = int(payload.get("scanned_files", 0))
+    if count > 0:
+        kinds = sorted({f.get("kind") for f in payload.get("findings") or [] if f.get("kind")})
+        kind_note = f"; kinds: {', '.join(kinds)}" if kinds else ""
+        return [
+            Check(
+                id="prepublic_hygiene",
+                category="prepublic",
+                status="fail",
+                detail=f"pre-public scan: {count} finding(s) in {scanned} file(s){kind_note}",
+                extra={"finding_count": count},
+            )
+        ]
+    return [
+        Check(
+            id="prepublic_hygiene",
+            category="prepublic",
+            status="pass",
+            detail=f"pre-public scan: no findings ({scanned} files)",
+        )
+    ]
+
+
 def check_workflow_hygiene(repo: Path) -> list[Check]:
     audit = repo / "scripts" / "factory-audit-workflows.py"
     if not audit.is_file():
@@ -504,7 +617,7 @@ def check_live_protect_main(repo: Path) -> list[Check]:
     ]
 
 
-def run_doctor(repo: Path, live: bool) -> list[Check]:
+def run_doctor(repo: Path, *, live: bool, public: bool) -> list[Check]:
     checks: list[Check] = []
     checks.extend(check_factory_mode(repo))
     checks.extend(check_core_artifacts(repo))
@@ -512,6 +625,9 @@ def run_doctor(repo: Path, live: bool) -> list[Check]:
     checks.extend(check_python_dbt(repo))
     checks.extend(check_protected_scripts(repo))
     checks.extend(check_workflow_hygiene(repo))
+    checks.extend(check_docs_links(repo))
+    if public:
+        checks.extend(check_prepublic_hygiene(repo))
     if live:
         checks.extend(check_live_protect_main(repo))
     return checks
@@ -576,13 +692,18 @@ def main() -> int:
         action="store_true",
         help="Run online checks (protect-main --verify) when gh is available",
     )
+    ap.add_argument(
+        "--public",
+        action="store_true",
+        help="Run pre-public hygiene (factory-prepublic-check.py) when that script exists",
+    )
     args = ap.parse_args()
     repo = (args.repo_dir or repo_root_from_script()).resolve()
     if not repo.is_dir():
         print(f"factory-doctor: not a directory: {repo}", file=sys.stderr)
         return 2
 
-    checks = run_doctor(repo, live=args.live)
+    checks = run_doctor(repo, live=args.live, public=args.public)
     payload = to_json_payload(repo, checks)
 
     if args.json:
