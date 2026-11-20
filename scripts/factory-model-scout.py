@@ -56,7 +56,7 @@ class ProposalItem:
 
 
 def err(msg: str) -> None:
-    print(f"ERROR: {msg}", file=sys.stderr)
+    print(f"model-scout: {msg}", file=sys.stderr)
 
 
 def load_models_yaml(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:

@@ -68,7 +68,7 @@ rc=$?
 set -e
 if [ "$rc" -ne 1 ]; then
   fail "malformed catalog (expected exit 1, got $rc)"
-elif grep -Fq "ERROR:" "$tmpdir/mal.err"; then
+elif grep -Fq "model-scout:" "$tmpdir/mal.err"; then
   note "malformed catalog -> exit 1 with ERROR on stderr"
 else
   fail "malformed catalog (missing stderr message)"
@@ -79,7 +79,7 @@ set +e
 "${SCOUT[@]}" >"$tmpdir/nosrc.out" 2>"$tmpdir/nosrc.err"
 rc=$?
 set -e
-if [ "$rc" -eq 1 ] && grep -Fq "ERROR:" "$tmpdir/nosrc.err" && grep -Fq "provide --catalog" "$tmpdir/nosrc.err"; then
+if [ "$rc" -eq 1 ] && grep -Fq "model-scout:" "$tmpdir/nosrc.err" && grep -Fq "provide --catalog" "$tmpdir/nosrc.err"; then
   note "missing catalog source -> exit 1"
 else
   fail "missing catalog source (expected exit 1)"
@@ -118,7 +118,7 @@ set +e
   >"$tmpdir/bm.out" 2>"$tmpdir/bm.err"
 rc=$?
 set -e
-if [ "$rc" -eq 1 ] && grep -Fq "ERROR:" "$tmpdir/bm.err"; then
+if [ "$rc" -eq 1 ] && grep -Fq "model-scout:" "$tmpdir/bm.err"; then
   note "invalid models.yaml -> exit 1 ERROR"
 else
   fail "invalid models.yaml (rc=$rc)"
