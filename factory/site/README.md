@@ -14,7 +14,10 @@ A small static four-tab website generated from the factory's own source files:
   epic list with done/total, and a sorted issue table linking to each issue, always
   showing titles (issue #172). The data comes from `site-data/backlog.json`,
   produced by `scripts/factory-backlog.py`.
-- **dbt** (`dbt.html`) — not available yet; lands in issue #173.
+- **dbt** (`dbt.html`) — model table, column and test metadata, inline SVG lineage
+  (seeds → staging → marts) and links to full static dbt docs (`dbt-docs.html` when
+  a live build runs `dbt docs generate --static`). Driven by
+  `factory/dbt/target/manifest.json` (committed fixture in `--sample` builds).
 
 The renderer is `scripts/factory-site.py`. It uses only the Python standard library
 (`string.Template`) and PyYAML, applies `html.escape` to every text value, and emits
