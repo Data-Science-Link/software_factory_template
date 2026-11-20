@@ -68,8 +68,8 @@ rc=$?
 set -e
 if [ "$rc" -ne 1 ]; then
   fail "malformed catalog (expected exit 1, got $rc)"
-elif grep -Fq "model-scout:" "$tmpdir/mal.err"; then
-  note "malformed catalog -> exit 1 with error on stderr"
+elif grep -Fq "ERROR:" "$tmpdir/mal.err"; then
+  note "malformed catalog -> exit 1 with ERROR on stderr"
 else
   fail "malformed catalog (missing stderr message)"
 fi
@@ -79,10 +79,49 @@ set +e
 "${SCOUT[@]}" >"$tmpdir/nosrc.out" 2>"$tmpdir/nosrc.err"
 rc=$?
 set -e
-if [ "$rc" -eq 1 ] && grep -Fq "provide --catalog" "$tmpdir/nosrc.err"; then
+if [ "$rc" -eq 1 ] && grep -Fq "ERROR:" "$tmpdir/nosrc.err" && grep -Fq "provide --catalog" "$tmpdir/nosrc.err"; then
   note "missing catalog source -> exit 1"
 else
   fail "missing catalog source (expected exit 1)"
+fi
+
+cat >"$tmpdir/empty-catalog.json" <<'JSON'
+{"models": [], "candidates": []}
+JSON
+set +e
+out="$( "${SCOUT[@]}" --catalog "$tmpdir/empty-catalog.json" --format json 2>"$tmpdir/empty.err" )"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -Fq '"status": "no_change"'; then
+  note "empty catalog -> exit 0, no_change JSON"
+else
+  fail "empty catalog (rc=$rc)"
+fi
+
+set +e
+"${SCOUT[@]}" --catalog tests/model-scout/catalog-no-change.json --format json \
+  --checked-at 2026-11-20 >"$tmpdir/j1.out" 2>/dev/null
+"${SCOUT[@]}" --catalog tests/model-scout/catalog-no-change.json --format json \
+  --checked-at 2026-11-20 >"$tmpdir/j2.out" 2>/dev/null
+set -e
+if cmp -s "$tmpdir/j1.out" "$tmpdir/j2.out"; then
+  note "JSON output deterministic (sort_keys)"
+else
+  fail "JSON determinism"
+fi
+
+cat >"$tmpdir/bad-models.yaml" <<'YAML'
+models: "not-a-list"
+YAML
+set +e
+"${SCOUT[@]}" --catalog tests/model-scout/catalog-no-change.json --models "$tmpdir/bad-models.yaml" \
+  >"$tmpdir/bm.out" 2>"$tmpdir/bm.err"
+rc=$?
+set -e
+if [ "$rc" -eq 1 ] && grep -Fq "ERROR:" "$tmpdir/bm.err"; then
+  note "invalid models.yaml -> exit 1 ERROR"
+else
+  fail "invalid models.yaml (rc=$rc)"
 fi
 
 printf '\nSummary: %s passed, %s failed\n' "$passed" "$failed"

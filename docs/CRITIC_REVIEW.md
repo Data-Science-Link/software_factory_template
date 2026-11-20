@@ -77,6 +77,7 @@ Fixtures: `tests/critic-context/`, `tests/critic-run/`.
 ## Cost tracking
 
 - `critic-run-record.json` uses `work_type: review`, real token fields when live, and `cost_method: usage_x_price_table` priced from `.factory/models.yaml`.
+- `harness_version` defaults to `0.1.0` (`FACTORY_CRITIC_VERSION` override in CI). CLI failures print `ERROR:` on stderr and exit non-zero without Python tracebacks.
 - Review dollars add to the same **per-issue** spend ceiling as build and fix runs (`issue_cap_usd` in `factory/budget.yml` / `models.yaml` budget block).
 - Validate records offline: `python3 scripts/factory-validate-run.py /path/to/critic-run-record.json`.
 

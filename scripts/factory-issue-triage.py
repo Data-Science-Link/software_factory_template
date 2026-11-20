@@ -54,8 +54,15 @@ SCRIPT_PATH_RE = re.compile(
 
 
 def load_issues_json(path: Path) -> list:
-    with open(path, encoding="utf-8") as fh:
-        data = json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except OSError as exc:
+        sys.stderr.write(f"ERROR: cannot read issues JSON {path}: {exc}\n")
+        sys.exit(1)
+    except (json.JSONDecodeError, ValueError) as exc:
+        sys.stderr.write(f"ERROR: issues JSON is not valid JSON: {exc}\n")
+        sys.exit(1)
     if not isinstance(data, list):
         sys.stderr.write("ERROR: issues JSON must be an array\n")
         sys.exit(1)
@@ -439,7 +446,7 @@ def main() -> None:
     report = triage(all_items, repo_slug, repo_dir)
 
     if args.json:
-        print(json.dumps(report, indent=2, ensure_ascii=False))
+        print(json.dumps(report, indent=2, ensure_ascii=False, sort_keys=True))
     else:
         print(render_markdown(report), end="")
 
