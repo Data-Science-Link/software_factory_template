@@ -425,6 +425,82 @@ else
   note "no model call, no secret printed"
 fi
 
+# ---- edge: missing --input ----
+set +e
+"${REVIEW[@]}" --input "$tmpdir/missing-run.json" >"$tmpdir/out-miss.json" 2>"$tmpdir/err-miss.txt"
+rc=$?
+set -e
+if [ "$rc" -eq 2 ] && grep -q '^ERROR: cannot read --input' "$tmpdir/err-miss.txt" \
+   && ! grep -q '^Traceback' "$tmpdir/err-miss.txt"; then
+  note "missing --input exits 2 with ERROR"
+else
+  fail "missing --input error handling"
+fi
+
+# ---- edge: empty --input ----
+touch "$tmpdir/empty-run.json"
+set +e
+"${REVIEW[@]}" --input "$tmpdir/empty-run.json" >"$tmpdir/out-empty.json" 2>"$tmpdir/err-empty.txt"
+rc=$?
+set -e
+if [ "$rc" -eq 2 ] && grep -q '^ERROR: --input is empty' "$tmpdir/err-empty.txt"; then
+  note "empty --input rejected"
+else
+  fail "empty --input"
+fi
+
+# ---- edge: minimal run object (missing optional fields) ----
+cat >"$tmpdir/minimal-run.json" <<'JSON'
+{"run_id": "offline-minimal", "status": "completed", "conclusion": "success"}
+JSON
+set +e
+"${REVIEW[@]}" --input "$tmpdir/minimal-run.json" >"$tmpdir/out-min.json" 2>"$tmpdir/err-min.txt"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && python3 - "$tmpdir/out-min.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["run_id"] == "offline-minimal"
+assert d["cost_usd"] is None
+assert d["tool_counts"] == {}
+assert list(d) == sorted(d), list(d)
+PY
+then
+  note "minimal --input run object with sort_keys JSON"
+else
+  fail "minimal --input run object"
+fi
+
+# ---- edge: bad --live-dir ----
+set +e
+"${REVIEW[@]}" --live-dir "$tmpdir/not-a-dir-file" >"$tmpdir/out-ld.json" 2>"$tmpdir/err-ld.txt"
+rc=$?
+set -e
+if [ ! -d "$tmpdir/not-a-dir-file" ]; then
+  touch "$tmpdir/not-a-dir-file"
+fi
+set +e
+"${REVIEW[@]}" --live-dir "$tmpdir/not-a-dir-file" >"$tmpdir/out-ld.json" 2>"$tmpdir/err-ld.txt"
+rc=$?
+set -e
+if [ "$rc" -eq 2 ] && grep -q '^ERROR: --live-dir is not a directory' "$tmpdir/err-ld.txt"; then
+  note "non-directory --live-dir rejected"
+else
+  fail "non-directory --live-dir"
+fi
+
+empty_live="$tmpdir/empty-live"
+mkdir -p "$empty_live"
+set +e
+"${REVIEW[@]}" --live-dir "$empty_live" >"$tmpdir/out-eld.json" 2>"$tmpdir/err-eld.txt"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && python3 -c 'import json; d=json.load(open("'"$tmpdir/out-eld.json"'")); assert d["runs"]==[] and list(d)==sorted(d)' 2>/dev/null; then
+  note "empty --live-dir yields empty runs and sorted JSON"
+else
+  fail "empty --live-dir"
+fi
+
 echo ""
 echo "Results: $((passed)) passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
