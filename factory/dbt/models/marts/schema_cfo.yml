@@ -1,0 +1,78 @@
+version: 2
+
+models:
+  - name: mart_model_efficiency
+    description: >-
+      Per model, harness, and provider: run volume, gate pass rate, cost totals and medians,
+      token usage, and average duration for factory model-efficiency review.
+    data_tests:
+      - unique:
+          column_name: efficiency_grain_key
+      - not_null:
+          column_name: efficiency_grain_key
+      - not_null:
+          column_name: model
+      - not_null:
+          column_name: run_count
+    columns:
+      - name: model
+        description: "Normalized model identifier."
+      - name: harness
+        description: "Agent harness that executed the run."
+      - name: provider
+        description: "Model provider (for example DeepInfra or Cursor)."
+      - name: efficiency_grain_key
+        description: "Stable key for model || harness || provider."
+      - name: run_count
+        description: "Number of runs in the group."
+      - name: passed_count
+        description: "Runs that passed the pre-spin-down gate."
+      - name: pass_rate_pct
+        description: "Gate pass rate as a percentage of run_count; 0–100 when run_count > 0."
+      - name: total_cost_usd
+        description: "Sum of actual_cost_usd for the group."
+      - name: avg_cost_usd
+        description: "Average actual cost per run in USD."
+      - name: median_cost_usd
+        description: "Median actual cost per run in USD."
+      - name: cost_per_passed_run_usd
+        description: "total_cost_usd divided by passed_count; null when passed_count is 0."
+      - name: total_tokens
+        description: "Sum of input, output, and reasoning tokens."
+      - name: avg_duration_seconds
+        description: "Mean run duration in seconds."
+
+  - name: mart_monthly_cfo
+    description: >-
+      Monthly CFO rollup over the three-month reporting window: spend, issue count,
+      budget utilization, and gate pass rate for factory review and budget tracking.
+    data_tests:
+      - unique:
+          column_name: month_start
+      - not_null:
+          column_name: month_start
+      - not_null:
+          column_name: run_count
+      - not_null:
+          column_name: distinct_issues
+      - not_null:
+          column_name: total_cost_usd
+      - not_null:
+          column_name: monthly_budget_usd
+    columns:
+      - name: month_start
+        description: "First calendar day (UTC) of the month."
+      - name: run_count
+        description: "Number of runs that month; 0 when there were none."
+      - name: distinct_issues
+        description: "Distinct issue numbers with at least one run that month."
+      - name: total_cost_usd
+        description: "Sum of actual_cost_usd for runs in the month."
+      - name: monthly_budget_usd
+        description: "Configured monthly DeepInfra budget in USD from project vars."
+      - name: budget_used_pct
+        description: "Monthly spend as a percentage of monthly_budget_usd, rounded to six decimals."
+      - name: pass_rate_pct
+        description: "Gate pass rate for the month; null when run_count is 0."
+      - name: avg_cost_per_issue_usd
+        description: "total_cost_usd divided by distinct_issues; null when distinct_issues is 0."
