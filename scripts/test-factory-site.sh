@@ -350,7 +350,135 @@ else
   failed=$((failed + 1))
 fi
 
-# ---- test 14: UX controls render on the offline sample site ----
+# ---- test 14: Model Efficiency and monthly CFO marts render from sample JSON ----
+root_marts="$tmpdir/root-marts"
+out_marts="$tmpdir/out-marts"
+make_root "$root_marts" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
+data_marts="$tmpdir/data-marts"
+mkdir -p "$data_marts/marts"
+cp tests/site-data/sample-marts/*.json "$data_marts/marts/"
+"$PYTHON" - "$data_marts/marts" <<'PY'
+import json, sys
+from pathlib import Path
+out = Path(sys.argv[1])
+eff = [
+    {
+        "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+        "harness": "cursor-cloud",
+        "provider": "deepinfra",
+        "run_count": 4,
+        "pass_rate_pct": 75.0,
+        "total_cost_usd": 0.42,
+        "avg_cost_usd": 0.105,
+        "cost_per_passed_run_usd": 0.14,
+    }
+]
+cfo = [
+    {
+        "month_start": "2026-11-01",
+        "distinct_issues": 3,
+        "avg_cost_per_issue_usd": 0.166667,
+        "pass_rate_pct": 80.0,
+        "budget_used_pct": 5.0,
+    }
+]
+(out / "mart_model_efficiency.json").write_text(json.dumps(eff, indent=2) + "\n", encoding="utf-8")
+(out / "mart_monthly_cfo.json").write_text(json.dumps(cfo, indent=2) + "\n", encoding="utf-8")
+PY
+if "$PYTHON" scripts/factory-site.py --repo-root "$root_marts" --data "$data_marts" --out "$out_marts" --now "2026-11-11 12:00:00" >/dev/null; then
+  ok14m=1
+  fin="$out_marts/financials.html"
+  grep -q 'id="model-efficiency-table"' "$fin" || ok14m=0
+  grep -q "deepseek-ai/DeepSeek-V4-Flash-0731" "$fin" || ok14m=0
+  grep -q '\$0.4200' "$fin" || ok14m=0
+  grep -q 'id="monthly-cfo-table"' "$fin" || ok14m=0
+  grep -q "75.0%" "$fin" || ok14m=0
+  if "$PYTHON" - "$fin" <<'PY'
+import re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+me = re.search(r'id="model-efficiency-table".*?</table>', html, re.S)
+if not me:
+    raise SystemExit("model efficiency table missing")
+headers = re.findall(r"<th>([^<]+)</th>", me.group(0).split("<tbody>")[0])
+need = [
+    "Model",
+    "Harness",
+    "Provider",
+    "Runs",
+    "Pass rate",
+    "Total cost",
+    "Avg cost",
+    "Cost / passed run",
+]
+if headers != need:
+    raise SystemExit("headers mismatch: %r" % headers)
+cfo = re.search(r'id="monthly-cfo-table".*?</table>', html, re.S)
+if not cfo:
+    raise SystemExit("monthly cfo table missing")
+if "2026-11-01" not in cfo.group(0) or "5.0%" not in cfo.group(0):
+    raise SystemExit("monthly cfo values missing")
+PY
+  then
+    :
+  else
+    ok14m=0
+  fi
+  if [ "$ok14m" = 1 ]; then
+    echo "PASS  Model Efficiency and monthly CFO tables render expected columns and values"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  Model Efficiency or monthly CFO table missing expected content"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  renderer crashed for mart financials check"
+  failed=$((failed + 1))
+fi
+
+# ---- test 15: dbt tab lists mart_model_efficiency and mart_monthly_cfo from manifest ----
+root_dbt="$tmpdir/root-dbt"
+out_dbt="$tmpdir/out-dbt"
+make_root "$root_dbt" tests/site/fixtures/FACTORY.md tests/site/fixtures/models.yaml
+mkdir -p "$root_dbt/factory/dbt/target"
+"$PYTHON" - "$root_dbt/factory/dbt/target/manifest.json" <<'PY'
+import copy, json, sys
+from pathlib import Path
+src = Path("tests/site/fixtures/manifest.json")
+manifest = json.loads(src.read_text(encoding="utf-8"))
+nodes = manifest.setdefault("nodes", {})
+template = next(iter(nodes.values()))
+for name in ("mart_model_efficiency", "mart_monthly_cfo"):
+    node = copy.deepcopy(template)
+    node["name"] = name
+    node["unique_id"] = f"model.factory.{name}"
+    node["original_file_path"] = f"models/marts/{name}.sql"
+    node["path"] = f"marts/{name}.sql"
+    node["fqn"] = ["factory", "marts", name]
+    node["description"] = f"Mart model {name}."
+    node.setdefault("depends_on", {})["nodes"] = ["model.factory.fct_agent_runs"]
+    nodes[node["unique_id"]] = node
+Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
+mkdir -p "$tmpdir/emptydata/marts"
+if "$PYTHON" scripts/factory-site.py --repo-root "$root_dbt" --out "$out_dbt" --data "$tmpdir/emptydata" --now "2026-11-11 12:00:00" >/dev/null; then
+  dbt_html="$out_dbt/dbt.html"
+  ok15=1
+  grep -q "mart_model_efficiency" "$dbt_html" || ok15=0
+  grep -q "mart_monthly_cfo" "$dbt_html" || ok15=0
+  grep -q 'id="model-mart_model_efficiency"' "$dbt_html" || ok15=0
+  if [ "$ok15" = 1 ]; then
+    echo "PASS  dbt tab catalog includes mart_model_efficiency and mart_monthly_cfo"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  dbt tab missing CFO mart models in catalog/lineage"
+    failed=$((failed + 1))
+  fi
+else
+  echo "FAIL  renderer crashed for dbt mart catalog check"
+  failed=$((failed + 1))
+fi
+
+# ---- test 16: UX controls render on the offline sample site ----
 ok14=1
 for page in index.html financials.html backlog.html dbt.html; do
   grep -qF 'id="theme-toggle"' "site/$page" || ok14=0
@@ -369,6 +497,7 @@ else
   echo "FAIL  UX controls missing from sample site HTML"
   failed=$((failed + 1))
 fi
+# (renumbered: UX controls are test 16 after mart tests 14–15)
 
 echo ""
 echo "Results: $passed passed, $failed failed"
