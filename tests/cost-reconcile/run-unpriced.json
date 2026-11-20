@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "run_id": "test-unpriced-1",
+  "model": "example/Unknown-Model-0000",
+  "tokens_in": 1000,
+  "tokens_cached": 0,
+  "tokens_out": 100,
+  "actual_cost_usd": 0.01
+}

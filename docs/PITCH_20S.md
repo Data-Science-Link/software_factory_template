@@ -27,22 +27,28 @@ Deep playbook: [`.factory/FACTORY.md`](../.factory/FACTORY.md). Vision and defau
 
 | Step | Command / doc | What it does |
 |---|---|---|
-| 1 — Bootstrap | `python3 scripts/factory-init-repo.py` *(planned #37)* | Copy `.factory/`, `scripts/`, `.github/` stubs, and per-repo doc map starters. **Today:** manual copy per [docs/SETUP.md](SETUP.md) §1. |
+| 1 — Bootstrap | `python3 scripts/factory-init-repo.py` · [docs/INIT_REPO.md](INIT_REPO.md) | Stamp `.factory/`, `scripts/`, workflow caller stubs, and per-repo doc map starters into a target repo. |
 | 2 — Harden | `bash scripts/harden-repo.sh` | Owner-only: ruleset / protection, Dependabot, secret scanning where the plan allows, one-time gitleaks history pass. |
-| 3 — Verify | `python3 scripts/factory-doctor.py` *(planned #178)* | Offline readiness checks (labels, secrets names, hooks, docs links). **Today:** [docs/SETUP.md](SETUP.md) “Check the install” and `python3 scripts/factory-check-docs.py`. |
+| 3 — Verify | `python3 scripts/factory-doctor.py` · [docs/DOCTOR.md](DOCTOR.md) | Offline readiness scorecard (mode, artifacts, models budget, protected scripts, workflow audit, docs links). Add `--public` for the pre-public hygiene pass. |
+
+**Reusable workflows (copy caller YAML from the template)**
+
+- [docs/reusable-workflows/](reusable-workflows/README.md) — pinned `workflow_call` bundles for `/oc run`, spec, fix, pr-check, and factory site refresh.
 
 **Adoption reading list**
 
 - [ADOPTING.md](../ADOPTING.md) — labels, `/oc` commands, merge rules, agent hard rules.
 - [docs/SETUP.md](SETUP.md) — new-repo checklist, secrets *names*, branch protection, site hosting.
-- `docs/DOCTOR.md` *(planned #178)* — single entry for install health; until it lands, use SETUP’s checklist and `factory-check-docs.py`.
 
-**Docs hygiene (offline, no network)**
+**Docs and public hygiene (offline, no network)**
 
 ```bash
-python3 scripts/factory-check-docs.py            # human-readable report
+python3 scripts/factory-check-docs.py            # human-readable link + anchor report
 python3 scripts/factory-check-docs.py --strict   # CI-friendly non-zero on broken links
-bash scripts/test-factory-check-docs.sh          # fixture suite
+python3 scripts/factory-prepublic-check.py       # before making the repo public
+python3 scripts/factory-cost-digest.py --help    # weekly spend rollup from run records
+bash scripts/test-factory-check-docs.sh
+bash scripts/test-factory-prepublic-check.sh
 ```
 
 ## One-page operator reminders
