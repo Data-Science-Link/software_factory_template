@@ -164,6 +164,12 @@ COMMANDS: tuple[CommandSpec, ...] = (
         "DeepInfra prompt-cache hit rates from factory run records.",
     ),
     CommandSpec(
+        "monthly-review",
+        "Spend & Site",
+        "factory-monthly-review.py",
+        "Deterministic 30-day health, spend, and routing review packet (Markdown or JSON).",
+    ),
+    CommandSpec(
         "site",
         "Spend & Site",
         "factory-site.py",

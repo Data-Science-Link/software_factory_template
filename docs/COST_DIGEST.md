@@ -25,7 +25,7 @@ python3 scripts/factory-cost-digest.py --as-of 2026-11-20 --days 30 --tz America
 1. **Headline scorecard** — runs in the window, total spend, weekly and monthly burn vs budget caps from `models.yaml` (`deepinfra_monthly_limit_usd`, derived weekly = monthly÷4 unless `weekly_usd` is set), average cost per issue vs `issue_target_usd`, pass rate, and overall cache hit rate.
 2. **Top issues by spend** — flags issues over target, over cap, or approaching `issue_cap_usd`.
 3. **Breakdowns** — by model, harness, and provider (runs, spend, average per run, cache hit when token fields exist).
-4. **Review readiness** — month-over-month cost trend, failure/overrun counts, and concrete next-step bullets for the [1-month factory review](https://github.com/Data-Science-Link/software_factory_template/issues/110).
+4. **Review readiness** — month-over-month cost trend, failure/overrun counts, and concrete next-step bullets for the monthly factory review ritual ([docs/MONTHLY_REVIEW.md](MONTHLY_REVIEW.md)).
 
 ## Weekly vs monthly review (#110)
 
@@ -46,6 +46,7 @@ Fixtures live under `tests/factory-cost-digest/` with deterministic expected mat
 
 ## Related tooling
 
+- [docs/MONTHLY_REVIEW.md](MONTHLY_REVIEW.md) (`scripts/factory-monthly-review.py`, `python3 scripts/factory-cli.py monthly-review`) — full 30-day health packet with Keep / Tune / Investigate prompts
 - `scripts/factory-cache-report.py` — cache hit rates only
 - `scripts/factory-routing-report.py` — model routing quality slices
 - `scripts/factory-budget-vars.py` — committed `factory/budget.yml` for dbt/site marts (digest reads caps from `models.yaml` by default)
