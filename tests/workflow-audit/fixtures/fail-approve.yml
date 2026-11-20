@@ -1,0 +1,9 @@
+name: approve-oc-runs
+on:
+  pull_request_target:
+permissions: {}
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo no workflow_run
