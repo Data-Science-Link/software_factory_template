@@ -81,6 +81,70 @@ else
   bad "--json schema" "$json_out"
 fi
 
+# --- live docs: missing script refs still warn ---
+live_warn_dir="$(mktemp -d)"
+trap 'rm -rf "$live_warn_dir"' EXIT
+printf '%s\n' '# Live doc' '`scripts/no-such-factory-script.sh`' >"$live_warn_dir/bad-live.md"
+live_warn_json="$(python3 "${root}/scripts/factory-check-docs.py" --repo-dir "$live_warn_dir" --json 2>&1)"
+if echo "$live_warn_json" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+w = data.get('summary', {}).get('warnings', 0)
+assert w >= 1, w
+assert any(f.get('kind') == 'missing_script' for f in data.get('findings', []))
+"; then
+  ok "live docs warn on missing script refs"
+else
+  bad "live docs warn on missing script refs" "$live_warn_json"
+fi
+
+# --- historical specs: default skips orphan script warnings ---
+hist_json="$(python3 "${root}/scripts/factory-check-docs.py" --repo-dir "$root" --json 2>&1)"
+if echo "$hist_json" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+spec_hits = [f for f in data.get('findings', []) if (f.get('file') or '').startswith('factory/specs/')]
+assert not spec_hits, spec_hits
+"; then
+  ok "historical factory/specs skipped for orphan script warnings"
+else
+  bad "historical factory/specs skipped for orphan script warnings" "$hist_json"
+fi
+
+# --- historical specs: opt-in via --include-historical-specs ---
+hist_opt_json="$(python3 "${root}/scripts/factory-check-docs.py" --repo-dir "$root" --include-historical-specs --json 2>&1)"
+if echo "$hist_opt_json" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+spec_hits = [f for f in data.get('findings', []) if (f.get('file') or '').startswith('factory/specs/')]
+assert spec_hits, 'expected warnings from factory/specs'
+"; then
+  ok "--include-historical-specs warns on archived specs"
+else
+  bad "--include-historical-specs warns on archived specs" "$hist_opt_json"
+fi
+
+# --- live template repo: --strict clean (0 errors, 0 warnings) ---
+set +e
+strict_out="$(python3 "${root}/scripts/factory-check-docs.py" --repo-dir "$root" --strict 2>&1)"
+strict_rc=$?
+set -e
+strict_json="$(python3 "${root}/scripts/factory-check-docs.py" --repo-dir "$root" --json)"
+if [ "$strict_rc" -ne 0 ]; then
+  bad "live repo --strict exit 0" "exit $strict_rc\n$strict_out"
+elif echo "$strict_json" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+s = data.get('summary', {})
+assert s.get('errors', 1) == 0, s
+assert s.get('warnings', 1) == 0, s
+assert data.get('findings', []) == [], data.get('findings')
+"; then
+  ok "live repo --strict zero errors and warnings"
+else
+  bad "live repo --strict zero errors and warnings" "$strict_json"
+fi
+
 echo ""
 echo "factory-check-docs tests: ${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]
