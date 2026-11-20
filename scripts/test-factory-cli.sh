@@ -51,10 +51,11 @@ data = json.load(open(sys.argv[1], encoding="utf-8"))
 cmds = data["commands"]
 names = {c["name"] for c in cmds}
 expected = {
-    "doctor", "init", "models-check", "triage", "spec-lint", "spec-check", "backlog",
-    "decision-log", "run-review", "fix-policy", "audit-workflows", "check-docs", "test-all",
-    "cost-digest", "cost-reconcile", "predict-cost", "site", "site-smoke",
-    "prepublic", "branch-cleanup", "release", "sync-repos", "migrate-adopter", "owner-pack",
+    "doctor", "init", "models-check", "model-scout", "triage", "spec-lint", "spec-check",
+    "backlog", "decision-log", "run-review", "fix-policy", "audit-workflows", "check-docs",
+    "critic-context", "critic-run", "test-all", "cost-digest", "cost-reconcile", "predict-cost",
+    "routing-report", "cache-report", "site", "site-smoke", "prepublic", "branch-cleanup",
+    "release", "sync-repos", "reusable-check", "migrate-adopter", "owner-pack",
 }
 missing = expected - names
 assert not missing, f"missing commands in list: {missing}"
@@ -148,6 +149,42 @@ if grep -qi "usage" "$work/out"; then
   ok "branch-cleanup --help shows usage"
 else
   bad "branch-cleanup --help shows usage"
+fi
+
+# Pass-through: reusable-check --help
+run_cli reusable-check --help
+assert_rc "reusable-check --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "reusable-check --help shows usage"
+else
+  bad "reusable-check --help shows usage"
+fi
+
+# Pass-through: critic-context --help
+run_cli critic-context --help
+assert_rc "critic-context --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "critic-context --help shows usage"
+else
+  bad "critic-context --help shows usage"
+fi
+
+# Pass-through: routing-report --help
+run_cli routing-report --help
+assert_rc "routing-report --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "routing-report --help shows usage"
+else
+  bad "routing-report --help shows usage"
+fi
+
+# Pass-through: model-scout --help
+run_cli model-scout --help
+assert_rc "model-scout --help" 0
+if grep -qi "usage" "$work/out"; then
+  ok "model-scout --help shows usage"
+else
+  bad "model-scout --help shows usage"
 fi
 
 # Unknown subcommand suggests close match
