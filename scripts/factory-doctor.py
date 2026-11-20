@@ -634,6 +634,72 @@ def check_decision_log(repo: Path) -> list[Check]:
     ]
 
 
+def check_reusable_workflows(repo: Path) -> list[Check]:
+    script = repo / "scripts" / "factory-reusable-check.py"
+    workflows_dir = repo / "docs" / "reusable-workflows"
+    if not script.is_file() or not workflows_dir.is_dir():
+        missing: list[str] = []
+        if not script.is_file():
+            missing.append("scripts/factory-reusable-check.py")
+        if not workflows_dir.is_dir():
+            missing.append("docs/reusable-workflows/")
+        return [
+            Check(
+                id="reusable_workflows",
+                category="reusable_workflows",
+                status="skip",
+                detail=f"reusable workflow check skipped ({', '.join(missing)} absent)",
+            )
+        ]
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--dir",
+                str(workflows_dir),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=repo,
+            check=False,
+        )
+        payload = json.loads(proc.stdout)
+    except (OSError, json.JSONDecodeError) as exc:
+        return [
+            Check(
+                id="reusable_workflows",
+                category="reusable_workflows",
+                status="fail",
+                detail=f"factory-reusable-check.py --json failed: {exc}",
+            )
+        ]
+    summary = payload.get("summary") or {}
+    n_fail = int(summary.get("fail", 0))
+    n_warn = int(summary.get("warn", 0))
+    n_pass = int(summary.get("pass", 0))
+    total = int(summary.get("total", n_pass + n_warn + n_fail))
+    if n_fail > 0:
+        status = "fail"
+        detail = f"reusable-check: {n_fail} fail(s), {n_warn} warn(s) ({total} finding(s))"
+    elif n_warn > 0:
+        status = "warn"
+        detail = f"reusable-check: no fails; {n_warn} warn(s) ({total} finding(s))"
+    else:
+        status = "pass"
+        detail = f"reusable-check: clean ({total} finding(s))"
+    return [
+        Check(
+            id="reusable_workflows",
+            category="reusable_workflows",
+            status=status,
+            detail=detail,
+            extra={"summary": summary},
+        )
+    ]
+
+
 def check_workflow_hygiene(repo: Path) -> list[Check]:
     audit = repo / "scripts" / "factory-audit-workflows.py"
     if not audit.is_file():
@@ -760,6 +826,7 @@ def run_doctor(repo: Path, *, live: bool, public: bool) -> list[Check]:
     checks.extend(check_python_dbt(repo))
     checks.extend(check_protected_scripts(repo))
     checks.extend(check_workflow_hygiene(repo))
+    checks.extend(check_reusable_workflows(repo))
     checks.extend(check_models_config(repo))
     checks.extend(check_decision_log(repo))
     checks.extend(check_docs_links(repo))
