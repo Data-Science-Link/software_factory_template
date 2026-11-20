@@ -4,24 +4,25 @@ Copyable method for repos where AI agents do most of the building and a human ke
 
 **Peer pitch (~20 seconds):** [docs/PITCH_20S.md](docs/PITCH_20S.md)
 
+## Adopt in 3 steps (`v0.1.0`)
+
+From a checkout of this repo. Install validators once: `pip install -r requirements-factory.txt`.
+
+| Step | What to run | Read next |
+|---|---|---|
+| **1 — Preview** | Offline Factory Site from golden run records (no product repo, no network): `bash scripts/factory-site-build.sh --offline --runs-dir examples/sample-runs --now "2026-11-20 12:00:00"` then open `site/index.html`. | [examples/README.md](examples/README.md) |
+| **2 — Bootstrap** | One-command adopter init (preview with `--dry-run` first): `python3 scripts/factory-init-repo.py --target /path/to/product-repo --owner YOUR_GITHUB_LOGIN --template-repo YOUR_ORG/software_factory_template --tag v0.1.0` | [docs/INIT_REPO.md](docs/INIT_REPO.md) · [examples/minimal-product-repo/](examples/minimal-product-repo/) |
+| **3 — Verify** | Readiness and public hygiene: `python3 scripts/factory-doctor.py --repo-dir /path/to/product-repo --public` | [docs/SETUP.md](docs/SETUP.md) · [docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md) |
+
+Owner launch and workflow paste order: [docs/PUBLIC_LAUNCH_RUNBOOK.md](docs/PUBLIC_LAUNCH_RUNBOOK.md). Monthly spend ritual: [docs/MONTHLY_REVIEW.md](docs/MONTHLY_REVIEW.md). Pending workflow edits: [docs/OWNER_WORKFLOW_SYNC.md](docs/OWNER_WORKFLOW_SYNC.md).
+
+CLI index: `python3 scripts/factory-cli.py --help` · [docs/CLI.md](docs/CLI.md)
+
 ## What it is
 
 Work enters as a **GitHub issue**. The owner marks what to work on (`factory:selected`). A **Factory Manager** bot drafts a **spec**, routes model and cost, and starts **GitHub Actions** workers on **DeepInfra** via owner comments: `/oc spec`, `/oc run`, and `/oc fix`. Each run opens or updates a **PR** with a standard shape, a **gate** before the runner stops, and a **run record** under `factory/runs/`. Spend rolls into dbt marts and a static **factory site**; caps live in owner-only `factory/budget.yml` and `.factory/models.yaml`.
 
 The loop is boring on purpose: same spec sections, same PR template, same JSON per run — comparable cost and quality issue to issue. Deep playbook: [`.factory/FACTORY.md`](.factory/FACTORY.md). Design notes: [`.factory/VISION.md`](.factory/VISION.md).
-
-## CLI quickstart
-
-From a checkout of this template (see [docs/CLI.md](docs/CLI.md) for the full command list):
-
-```bash
-python3 scripts/factory-cli.py --help
-python3 scripts/factory-cli.py doctor --public
-python3 scripts/factory-cli.py init --target /path/to/product-repo
-python3 scripts/factory-cli.py owner-pack --version v0.1.0
-```
-
-Command reference: [docs/CLI.md](docs/CLI.md). Bootstrap detail: [docs/INIT_REPO.md](docs/INIT_REPO.md). Health checks: [docs/DOCTOR.md](docs/DOCTOR.md).
 
 ## Default worker path (cloud)
 
@@ -35,7 +36,7 @@ Command reference: [docs/CLI.md](docs/CLI.md). Bootstrap detail: [docs/INIT_REPO
 | Review | Manager | One `Factory review` comment; CI + harness evidence on the PR. |
 | Merge | Manager or owner | By risk class ([ADOPTING.md](ADOPTING.md)); workers never merge. |
 
-**Inference** is billed per token on DeepInfra (Actions-only key in the `DEEPINFRA_API_KEY` secret). **Compute** is a clean `ubuntu-latest` runner per job. **Cursor cloud agents** help build the factory itself and remain a backup harness; they are not the default for selected product issues.
+**Inference** is billed per token on DeepInfra (Actions-only key in the `DEEPINFRA_API_KEY` secret). **Compute** is a clean `ubuntu-latest` runner per job. **Hosted cloud agents** help build the factory itself and remain a backup harness; they are not the default for selected product issues.
 
 ## Doc map (adoption and ops)
 
@@ -49,6 +50,7 @@ Command reference: [docs/CLI.md](docs/CLI.md). Bootstrap detail: [docs/INIT_REPO
 | Using the factory day to day | [ADOPTING.md](ADOPTING.md) |
 | New-repo setup checklist | [docs/SETUP.md](docs/SETUP.md) |
 | Public launch | [docs/PUBLIC_LAUNCH_RUNBOOK.md](docs/PUBLIC_LAUNCH_RUNBOOK.md) |
+| Monthly spend review | [docs/MONTHLY_REVIEW.md](docs/MONTHLY_REVIEW.md) |
 | Releases and tags | [docs/RELEASING.md](docs/RELEASING.md) · [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) |
 | Spend digest | [docs/COST_DIGEST.md](docs/COST_DIGEST.md) |
 | Backlog triage | [docs/TRIAGE.md](docs/TRIAGE.md) |
@@ -77,7 +79,7 @@ Static HTML under `site/` (see [`factory/site/README.md`](factory/site/README.md
 
 ## Rollout checklist (copy into another repo)
 
-1. **Bootstrap** — `python3 scripts/factory-cli.py init --target /path/to/product` or [docs/INIT_REPO.md](docs/INIT_REPO.md).
+1. **Bootstrap** — `python3 scripts/factory-init-repo.py` (step 2 above) or [docs/INIT_REPO.md](docs/INIT_REPO.md).
 2. **Per-repo config** — [`.factory/DOCS.md`](.factory/DOCS.md), [`.factory/DECISIONS.md`](.factory/DECISIONS.md), repo `AGENTS.md`, [`.factory/MODEL_ROUTING.md`](.factory/MODEL_ROUTING.md), `factory/budget.yml`.
 3. **Secrets (names only)** — `DEEPINFRA_API_KEY` and variable `FACTORY_DEEPINFRA_KEY_NAME` → `DEEPINFRA_API_KEY`. [docs/SETUP.md](docs/SETUP.md) §2.
 4. **Workflows** — Thin caller stubs from [docs/reusable-workflows/](docs/reusable-workflows/README.md); owner pastes YAML ([docs/SETUP.md](docs/SETUP.md) §5–7, [ADOPTING.md](ADOPTING.md)).
