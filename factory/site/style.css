@@ -124,6 +124,20 @@ h2 {
   margin: 1rem 0;
 }
 
+.dbt-lineage {
+  display: block;
+  width: 100%;
+  max-width: 48rem;
+  height: auto;
+  margin: 1rem 0;
+}
+
+.dbt-model {
+  margin: 1.5rem 0;
+  padding: 0.75rem 0;
+  border-top: 1px solid #e0e3ea;
+}
+
 .loop-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));

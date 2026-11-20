@@ -101,14 +101,19 @@ fi
 # 3. budget vars + dbt build (live only; never in --sample)
 if [ "$SAMPLE" = 1 ]; then
   echo "SKIP  dbt build (--sample never runs live dbt)"
+  echo "SKIP  dbt docs (--sample offline build)"
 elif ! command -v dbt >/dev/null 2>&1; then
   echo "SKIP  dbt build (dbt not installed)"
+  echo "SKIP  dbt docs (dbt not installed)"
 elif ! "$PYTHON" -c "import dbt" >/dev/null 2>&1; then
   echo "SKIP  dbt build (dbt Python package not installed)"
+  echo "SKIP  dbt docs (dbt Python package not installed)"
 else
   if [ "$DRY_RUN" = 1 ]; then
     run_cmd "dbt build" bash -c \
       "cd \"$DBT_DIR\" && dbt build --profiles-dir . --vars \"\$($PYTHON \"$REPO_ROOT/scripts/factory-budget-vars.py\")\""
+    run_cmd "dbt docs (static)" bash -c \
+      "cd \"$DBT_DIR\" && dbt docs generate --static --profiles-dir ."
   else
     echo "RUN   dbt build"
     export DBT_SEND_ANONYMOUS_USAGE_STATS=false
@@ -116,6 +121,25 @@ else
       cd "$DBT_DIR"
       dbt build --profiles-dir . --vars "$("$PYTHON" "$REPO_ROOT/scripts/factory-budget-vars.py")"
     )
+    echo "RUN   dbt docs (static)"
+    DBT_DOCS_OK=0
+    if (
+      cd "$DBT_DIR"
+      dbt docs generate --static --profiles-dir .
+    ); then
+      DBT_DOCS_OK=1
+    else
+      echo "NOTE  dbt docs generate --static failed (dbt version may lack --static); skipping dbt-docs.html"
+    fi
+    if [ "$DBT_DOCS_OK" = 1 ]; then
+      if [ -f "$DBT_DIR/target/static_index.html" ]; then
+        mkdir -p site
+        cp "$DBT_DIR/target/static_index.html" site/dbt-docs.html
+        echo "RUN   copy static dbt docs -> site/dbt-docs.html"
+      else
+        echo "NOTE  static_index.html not found after dbt docs generate"
+      fi
+    fi
   fi
 fi
 
@@ -155,6 +179,18 @@ if [ "$SAMPLE" = 1 ]; then
 else
   run_py "backlog (live gh issue list)" scripts/factory-backlog.py \
     --out site-data/backlog.json
+fi
+
+# 4d. dbt manifest fixture for offline dbt tab (--sample only)
+if [ "$SAMPLE" = 1 ]; then
+  echo "RUN   dbt manifest fixture (--sample)"
+  if [ "$DRY_RUN" != 1 ]; then
+    mkdir -p factory/dbt/target
+    cp tests/site/fixtures/manifest.json factory/dbt/target/manifest.json
+  else
+    echo "        cp tests/site/fixtures/manifest.json factory/dbt/target/manifest.json"
+  fi
+  echo "SKIP  dbt static docs (--sample; dbt-docs.html not produced offline)"
 fi
 
 # 5. render (always, including --sample)

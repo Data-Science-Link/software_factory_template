@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json"
+  },
+  "nodes": {
+    "model.factory.bare_model": {
+      "columns": {
+        "id": {
+          "description": "Identifier.",
+          "name": "id"
+        }
+      },
+      "config": {
+        "materialized": "view"
+      },
+      "depends_on": {
+        "nodes": []
+      },
+      "description": "",
+      "fqn": [
+        "factory",
+        "staging",
+        "bare_model"
+      ],
+      "name": "bare_model",
+      "original_file_path": "models/staging/bare_model.sql",
+      "package_name": "factory",
+      "path": "bare_model.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.bare_model"
+    }
+  }
+}
