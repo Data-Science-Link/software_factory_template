@@ -4,6 +4,62 @@ Short **Symptom → Cause → Fix** notes for factory operators. All paths are r
 
 Related setup: [SETUP.md](SETUP.md), [CLI.md](CLI.md), [DOCTOR.md](DOCTOR.md), [OWNER_WORKFLOW_SYNC.md](OWNER_WORKFLOW_SYNC.md).
 
+Operator scripts (owner-only, from your `gh` login): [`scripts/factory-status.sh`](../scripts/factory-status.sh), [`scripts/factory-merge.sh`](../scripts/factory-merge.sh), [`scripts/factory-kick-checks.sh`](../scripts/factory-kick-checks.sh).
+
+---
+
+## Agent run failure classes (`factory-classify-failure.py`)
+
+After a failed `/oc` **agent** job, CI runs [`scripts/factory-classify-failure.py`](../scripts/factory-classify-failure.py) on the artifact `opencode.log` (and optional sidecar `agent-failure-reason.txt`). The script is deterministic, offline, and always prints exactly one line `error_class=<name>` with **exit code 0** (missing log, empty log, and invalid UTF-8 bytes decode safely; no traceback).
+
+Offline repro: `bash scripts/test-factory-classify-failure.sh`.
+
+| `error_class` | Root cause | Recovery |
+| --- | --- | --- |
+| `tool_or_reasoning_format` | **Three or more** log lines match OpenCode / AI SDK tool-call or reasoning-format patterns (for example `SchemaError`, `AI_NoSuchToolError`, `invalid tool call`). | Let the next owner-triggered run apply [models.yaml](../.factory/models.yaml) rule 5 (DeepSeek tool failures may route to Qwen3-Coder). If it repeats, tighten the spec’s tool/file instructions or switch harness. |
+| `empty_instruction` | Sidecar `agent-failure-reason.txt` next to the log contains `empty_instruction` (worker refused before OpenCode started — bare `/oc` with no instruction). | Re-trigger `/oc` or `/oc fix` with a concrete instruction in the issue comment; see also `bash scripts/test-oc-empty-instruction.sh`. |
+| `other` | Default bucket: verification failures, path-policy blocks, spend caps, spec lint, timeouts, rate limits, or any exit not matching the rules above. | Use the symptom table below and the sections in this doc; [`scripts/factory-run-start.py`](../scripts/factory-run-start.py) still applies other routing rules (for example Flash → Pro once) using the same `error_class` string in the #84 failure marker. |
+
+### Common symptoms still classified as `other`
+
+These often appear in `opencode.log` but **do not** change `error_class` today (they remain `other` until the classifier gains dedicated patterns). Match the log, then follow the recovery column.
+
+| Log / symptom | Root cause | Recovery |
+| --- | --- | --- |
+| `opencode-artifact-scan` / path policy / protected script | Worker patch touched `scripts/`, `.factory/`, or a `PROTECTED_SCRIPTS` path. | See [opencode-artifact-scan blocks](#opencode-artifact-scan-blocks-script-or-factory-edits); list guards with `bash scripts/opencode-artifact-scan.sh --list-protected`. |
+| Budget / issue cap exceeded | [`scripts/factory-run-start.py`](../scripts/factory-run-start.py) or spend guard refused another run. | `python3 scripts/factory-issue-spend.py` and [`scripts/factory-fix-policy.py`](../scripts/factory-fix-policy.py); split the issue or escalate harness per [Complex build](#complex-build-burns-fix-rounds-without-progress). |
+| Spec lint / masked pipes | Invalid spec front matter or disallowed commands in the spec body. | `python3 scripts/factory-spec-lint.py <spec>`; see [Tests “pass” but failed (pipes)](#tests-pass-in-the-pr-but-actually-failed-pipes). |
+| Verification / harness `FAIL` | Tests or verification commands failed in the worker VM. | Fix the failing `bash scripts/test-*.sh` named in the spec; refresh PR Verification without masked pipes; see [pr-check fails on verification](#pr-check-fails-on-disclosure-cost-or-verification). |
+| Timeout / rate limit / API errors | Provider or network errors in the log without repeated tool-schema lines. | Retry later; check DeepInfra status; if persistent, change model tier in the approved spec or route to a Cursor Cloud Agent. |
+| Unknown / empty log | Worker killed, no log, or message not matching any rule above. | Inspect Actions artifacts (`opencode.log`, `spec.md`); run `python3 scripts/factory-run-review.py` on the run record if present; owner triage. |
+
+---
+
+## Bot PR missing required checks (`pr-check` / `gitleaks`)
+
+**Symptom:** Same-repo `oc/issue-*` PR was opened or updated by the workflow `GITHUB_TOKEN`; `pr-check` and/or `gitleaks` never attach to the head commit (or show as failed with no jobs) — see issue **#74** in the tracker.
+
+**Cause:** `pull_request` workflows triggered only by the bot token can sit in `action_required` or never run; `workflow_dispatch` does not satisfy branch protection.
+
+**Fix:**
+
+1. From the **owner** `gh` session (not Actions): `bash scripts/factory-kick-checks.sh <pr> [--dry-run]`.
+2. Script refuses fork PRs, closed PRs, and non-`oc/issue-<N>-<run_id>` heads; use `--force` to close/reopen even when checks already exist.
+3. Wait for checks: `gh pr checks <pr> --watch`, then continue the factory loop.
+4. Offline repro: `bash scripts/test-factory-kick-checks.sh` and owner-script coverage in `bash scripts/test-factory-owner-scripts.sh`.
+
+---
+
+## Owner status and merge helpers
+
+| Script | Purpose | When it fails |
+| --- | --- | --- |
+| [`scripts/factory-status.sh`](../scripts/factory-status.sh) | Compact digest: open PRs, in-flight `/oc` runs, unapproved spec drafts. | Missing `gh`, bad `--repo`, or `gh pr list` error — pass `--repo owner/repo`; run `--help`. |
+| [`scripts/factory-merge.sh`](../scripts/factory-merge.sh) | Records human product gate on the PR body and merges when `pr-check`, `run-records`, and `gitleaks` are green on the head commit. | Missing `--approval` / `--when`, red or pending checks, branch behind default (use `--update`), or non-open PR — messages start with `factory-merge:`. |
+| [`scripts/factory-kick-checks.sh`](../scripts/factory-kick-checks.sh) | Close + reopen bot PR to attach required checks. | Non-numeric PR, fork, wrong branch pattern, or missing `gh` on `PATH`. |
+
+Offline repro: `bash scripts/test-factory-owner-scripts.sh`.
+
 ---
 
 ## `/oc` PR checks stuck on “Waiting for approval”

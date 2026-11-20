@@ -15,12 +15,31 @@
 # anyway). Uses only `gh pr view`, `gh pr checks`, `gh pr close` and `gh pr reopen`.
 set -euo pipefail
 
+usage() {
+  echo "usage: factory-kick-checks.sh <PR number> [--dry-run] [--force]" >&2
+}
+
+if [ "${1:-}" = -h ] || [ "${1:-}" = --help ]; then
+  usage
+  exit 0
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "kick-checks: gh not found on PATH; install GitHub CLI and authenticate" >&2
+  exit 2
+fi
+
 pr="${1:-}"; shift || true
 dry=no force=no
 for a in "$@"; do
-  case "$a" in --dry-run) dry=yes ;; --force) force=yes ;; *) echo "kick-checks: unknown argument $a" >&2; exit 2 ;; esac
+  case "$a" in
+    --dry-run) dry=yes ;;
+    --force) force=yes ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "kick-checks: unknown argument $a" >&2; exit 2 ;;
+  esac
 done
-case "$pr" in '' | *[!0-9]*) echo "usage: factory-kick-checks.sh <PR number> [--dry-run] [--force]" >&2; exit 2 ;; esac
+case "$pr" in '' | *[!0-9]*) usage; exit 2 ;; esac
 REQUIRED=(pr-check gitleaks)
 
 info="$(gh pr view "$pr" --json state,isCrossRepository,headRefName,headRefOid \
