@@ -168,7 +168,7 @@ prompt_case() { # label want instruction
 }
 prompt_case "prompt built from /oc fix text" ok $'/oc fix  also rename the column\nthanks'
 if grep -q 'also rename the column' "$work/prompt.txt" && grep -q 'Path policy' "$work/prompt.txt" \
-  && grep -q 'REVIEW-BODY' "$work/prompt.txt" && grep -q 'pull request #72 (issue #33)' "$work/prompt.txt" \
+  && grep -q 'REVIEW-BODY' "$work/prompt.txt" && grep -q 'Pull request: #72 (issue #33)' "$work/prompt.txt" \
   && ! grep -qE '^/oc fix' "$work/prompt.txt" && grep -qx 'thanks' "$work/prompt.txt"; then ok "agent-fix: prompt has instruction, rules, review context"
 else bad "agent-fix: prompt content"; fi
 prompt_case "bare /oc fix uses the review comments" ok "/oc fix"
