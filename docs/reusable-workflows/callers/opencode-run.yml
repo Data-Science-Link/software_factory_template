@@ -1,0 +1,25 @@
+# Thin product-repo workflow: paste into .github/workflows/opencode-run.yml (owner paste).
+# Issue build worker (/oc, not /oc spec). Requires DEEPINFRA_API_KEY and FACTORY_DEEPINFRA_KEY_NAME.
+name: opencode-run
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  factory-run:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.action == 'created' &&
+      startsWith(github.event.comment.body, '/oc') &&
+      !startsWith(github.event.comment.body, '/oc spec') &&
+      github.event.comment.user.login == 'YOUR_OWNER_GITHUB_LOGIN' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.issue.pull_request == null
+    uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-opencode-run.yml@v0.1.0
+    secrets: inherit
+    with:
+      factory_ref: v0.1.0
+      owner_login: YOUR_OWNER_GITHUB_LOGIN
