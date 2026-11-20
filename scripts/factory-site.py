@@ -402,61 +402,189 @@ def placeholder_html(tab_name):
     )
 
 
-def financials_html(data_dir):
-    """Generate the Financials tab content from marts data."""
+def _load_marts(data_dir):
+    """Load mart JSON files into a dict of row lists."""
     marts_dir = Path(data_dir) / "marts"
     if not marts_dir.is_dir():
-        return placeholder_html("Financials")
-    
-    # Check if any mart files exist
+        return None, {}
     if not any(marts_dir.glob("*.json")):
-        return placeholder_html("Financials")
-    
-    # Load budget data
-    budget_path = Path(".") / "factory" / "budget.yml"
+        return marts_dir, {}
+
+    marts = {}
+    for mart_file in sorted(marts_dir.glob("*.json")):
+        try:
+            with open(mart_file, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            marts[mart_file.stem] = []
+            continue
+        if isinstance(data, list):
+            marts[mart_file.stem] = [r for r in data if isinstance(r, dict)]
+        elif isinstance(data, dict) and "rows" in data:
+            rows = data["rows"]
+            marts[mart_file.stem] = (
+                [r for r in rows if isinstance(r, dict)]
+                if isinstance(rows, list)
+                else []
+            )
+        else:
+            marts[mart_file.stem] = []
+    return marts_dir, marts
+
+
+def _load_budget(repo_root):
+    budget_path = Path(repo_root) / "factory" / "budget.yml"
     try:
         with open(budget_path, encoding="utf-8") as fh:
             budget_data = yaml.safe_load(fh) or {}
     except (OSError, yaml.YAMLError):
         budget_data = {}
-    
-    weekly_budget_usd = budget_data.get("weekly_usd", 0)
-    monthly_budget_usd = budget_data.get("monthly_usd", 0)
-    issue_target_usd = budget_data.get("issue_target_usd", 0.15)
-    issue_cap_usd = budget_data.get("issue_cap_usd", 1.0)
-    warn_pct = budget_data.get("warn_pct", 80)
-    fixed_costs_monthly_usd = budget_data.get("fixed_costs_monthly_usd", 0)
-    actions_minutes_month = budget_data.get("actions_minutes_month", 0)
-    
-    # Load mart data
-    marts = {}
-    for mart_file in marts_dir.glob("*.json"):
+    return budget_data
+
+
+def _financials_as_of(as_of_utc, rpt_run_rate):
+    if as_of_utc:
         try:
-            with open(mart_file, encoding="utf-8") as fh:
-                data = json.load(fh)
-                # Ensure data is a list of dicts
-                if isinstance(data, list):
-                    # Validate that each item in the list is a dict
-                    validated_data = [item for item in data if isinstance(item, dict)]
-                    marts[mart_file.stem] = validated_data
-                elif isinstance(data, dict) and 'rows' in data:
-                    # Handle exported format { "model": "...", "rows": [...] }
-                    rows = data['rows']
-                    if isinstance(rows, list):
-                        # Validate that each item in the rows list is a dict
-                        validated_rows = [item for item in rows if isinstance(item, dict)]
-                        marts[mart_file.stem] = validated_rows
-                    else:
-                        marts[mart_file.stem] = []
-                else:
-                    marts[mart_file.stem] = []
-        except (OSError, ValueError):
-            marts[mart_file.stem] = []
-    
-    # If no marts were loaded, show placeholder
-    if not marts:
+            return datetime.datetime.strptime(
+                as_of_utc[:19], "%Y-%m-%d %H:%M:%S"
+            ).date()
+        except ValueError:
+            pass
+    if rpt_run_rate:
+        row = rpt_run_rate[0]
+        if isinstance(row, dict):
+            as_of = row.get("as_of_date")
+            if as_of:
+                try:
+                    return datetime.date.fromisoformat(str(as_of)[:10])
+                except ValueError:
+                    pass
+    return datetime.date(2026, 11, 11)
+
+
+def _issue_key(row):
+    if not isinstance(row, dict):
+        return None
+    num = row.get("issue_number")
+    if num is None:
+        num = row.get("issue")
+    return num
+
+
+def _assert_non_negative_spend(collection, name):
+    spend_keys = ("spend_usd", "mtd_variable_usd", "actual_cost_usd", "predicted_cost_usd", "predicted_usd", "actual_usd")
+    for item in collection:
+        if not isinstance(item, dict):
+            raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
+        for key in spend_keys:
+            if key not in item:
+                continue
+            value = item[key]
+            if isinstance(value, (int, float)) and value < 0:
+                raise ValueError(f"Negative value in {name}: {key}={value}")
+
+
+def _compliance_summary_rows(rpt_issue_target_compliance, issue_target_usd, issue_cap_usd):
+    """Return (under_target_pct, over_cap_count) from mart rows or a summary row."""
+    if not rpt_issue_target_compliance:
+        return None, None
+    first = rpt_issue_target_compliance[0]
+    if isinstance(first, dict) and "under_target_pct" in first:
+        return (
+            float(first.get("under_target_pct", 0)),
+            int(first.get("over_cap_count", 0)),
+        )
+
+    compliance_by_issue = {}
+    for row in rpt_issue_target_compliance:
+        if not isinstance(row, dict):
+            continue
+        issue = _issue_key(row)
+        if issue is None:
+            continue
+        compliance_by_issue[issue] = row
+
+    if not compliance_by_issue:
+        return None, None
+
+    under_target = sum(
+        1 for row in compliance_by_issue.values() if row.get("under_target")
+    )
+    total = len(compliance_by_issue)
+    under_target_pct = (under_target / total * 100.0) if total else 0.0
+    over_cap_count = sum(
+        1 for row in compliance_by_issue.values() if not row.get("under_cap", True)
+    )
+    return under_target_pct, over_cap_count
+
+
+def _prediction_fields(row):
+    pred = row.get("predicted_cost_usd")
+    if pred is None:
+        pred = row.get("predicted_usd")
+    actual = row.get("actual_cost_usd")
+    if actual is None:
+        actual = row.get("actual_usd")
+    error_pct = row.get("error_pct")
+    if error_pct is not None:
+        abs_error = abs(float(error_pct))
+    elif pred is not None and actual is not None:
+        denom = float(pred) if float(pred) else 1.0
+        abs_error = abs(float(actual) - float(pred)) / denom * 100.0
+    else:
+        abs_error = row.get("absolute_error")
+        if abs_error is not None:
+            abs_error = abs(float(abs_error))
+    return pred, actual, abs_error
+
+
+def _format_utc_chicago(ts):
+    if not ts:
+        return "", ""
+    try:
+        dt = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return esc(str(ts)), esc(str(ts))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    utc_s = dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        from zoneinfo import ZoneInfo
+
+        chicago = dt.astimezone(ZoneInfo("America/Chicago")).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
+    except Exception:
+        chicago = utc_s
+    return esc(utc_s), esc(chicago)
+
+
+def _card(class_warn, title, amount_html, detail_html):
+    warn_cls = " warn" if class_warn else ""
+    return (
+        f'<div class="card{warn_cls}">'
+        f"<h3>{esc(title)}</h3>"
+        f'<p class="amount">{amount_html}</p>'
+        f"<p>{detail_html}</p>"
+        "</div>"
+    )
+
+
+def financials_html(data_dir, repo_root=".", as_of_utc=None):
+    """Generate the Financials tab content from marts data."""
+    marts_dir, marts = _load_marts(data_dir)
+    if marts_dir is None or not marts:
         return placeholder_html("Financials")
-    
+
+    budget_data = _load_budget(repo_root)
+    weekly_budget_usd = float(budget_data.get("weekly_usd", 0) or 0)
+    monthly_budget_usd = float(budget_data.get("monthly_usd", 0) or 0)
+    issue_target_usd = float(budget_data.get("issue_target_usd", 0.15) or 0.15)
+    issue_cap_usd = float(budget_data.get("issue_cap_usd", 1.0) or 1.0)
+    warn_pct = float(budget_data.get("warn_pct", 80) or 80)
+    fixed_costs_monthly_usd = float(budget_data.get("fixed_costs_monthly_usd", 0) or 0)
+    actions_minutes_month = int(budget_data.get("actions_minutes_month", 0) or 0)
+
     rpt_run_rate = marts.get("rpt_run_rate", [])
     agg_spend_weekly = marts.get("agg_spend_weekly", [])
     agg_spend_monthly = marts.get("agg_spend_monthly", [])
@@ -465,275 +593,312 @@ def financials_html(data_dir):
     agg_spend_by_model = marts.get("agg_spend_by_model", [])
     fct_forecast_vs_actual = marts.get("fct_forecast_vs_actual", [])
     fct_agent_runs = marts.get("fct_agent_runs", [])
-    
-    # Check for negative values and fail loudly
-    # Ensure all items are dictionaries before accessing keys
-    for item in rpt_run_rate:
-        if not isinstance(item, dict):
-            raise ValueError(f"Expected dict in rpt_run_rate, got {type(item)}: {item}")
-        for key in item:
-            if isinstance(item[key], (int, float)) and item[key] < 0:
-                raise ValueError(f"Negative value found in rpt_run_rate: {key} = {item[key]}")
-    
-    for item in agg_spend_weekly:
-        if not isinstance(item, dict):
-            raise ValueError(f"Expected dict in agg_spend_weekly, got {type(item)}: {item}")
-        if item.get("spend_usd", 0) < 0:
-            raise ValueError(f"Negative spend found in agg_spend_weekly: {item}")
-    
-    for item in agg_spend_monthly:
-        if not isinstance(item, dict):
-            raise ValueError(f"Expected dict in agg_spend_monthly, got {type(item)}: {item}")
-        if item.get("spend_usd", 0) < 0:
-            raise ValueError(f"Negative spend found in agg_spend_monthly: {item}")
-    
-    for item in agg_spend_by_issue:
-        if not isinstance(item, dict):
-            raise ValueError(f"Expected dict in agg_spend_by_issue, got {type(item)}: {item}")
-        if item.get("spend_usd", 0) < 0:
-            raise ValueError(f"Negative spend found in agg_spend_by_issue: {item}")
-    
-    # Also check other collections
-    for collection_name, collection in [("rpt_issue_target_compliance", rpt_issue_target_compliance), 
-                                        ("agg_spend_by_model", agg_spend_by_model), 
-                                        ("fct_forecast_vs_actual", fct_forecast_vs_actual), 
-                                        ("fct_agent_runs", fct_agent_runs)]:
+
+    _assert_non_negative_spend(rpt_run_rate, "rpt_run_rate")
+    _assert_non_negative_spend(agg_spend_weekly, "agg_spend_weekly")
+    _assert_non_negative_spend(agg_spend_monthly, "agg_spend_monthly")
+    _assert_non_negative_spend(agg_spend_by_issue, "agg_spend_by_issue")
+    for name, collection in (
+        ("agg_spend_by_model", agg_spend_by_model),
+        ("fct_forecast_vs_actual", fct_forecast_vs_actual),
+        ("fct_agent_runs", fct_agent_runs),
+        ("rpt_issue_target_compliance", rpt_issue_target_compliance),
+    ):
         for item in collection:
             if not isinstance(item, dict):
-                raise ValueError(f"Expected dict in {collection_name}, got {type(item)}: {item}")
-    
-    # Generate content sections
+                raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
+        _assert_non_negative_spend(collection, name)
+
+    as_of = _financials_as_of(as_of_utc, rpt_run_rate)
     parts = []
-    
-    # 1. Headline cards
-    parts.append("<h2>Headline Cards <small>(source: rpt_run_rate)</small></h2>")
-    if rpt_run_rate:
-        rate = rpt_run_rate[0]  # Should be exactly one row
-        week_spend = rate.get("trailing_7d_usd_per_day", 0) * 7
-        week_used = rate.get("budget_used_pct", 0)
-        month_spend = rate.get("mtd_variable_usd", 0)
-        month_used = (month_spend / monthly_budget_usd * 100) if monthly_budget_usd > 0 else 0
-        warn_class = " class=\"warn\"" if week_used >= warn_pct or month_used >= warn_pct else ""
-        
-        parts.append(f"<div class=\"cards\"{warn_class}>")
-        parts.append("<div class=\"card\">")
-        parts.append("<h3>This Week</h3>")
-        parts.append(f"<p class=\"amount\">${week_spend:.2f}</p>")
-        parts.append(f"<p>of ${weekly_budget_usd:.2f} budget ({week_used:.1f}%)</p>")
-        parts.append("</div>")
-        
-        parts.append("<div class=\"card\">")
-        parts.append("<h3>Month-to-Date</h3>")
-        parts.append(f"<p class=\"amount\">${month_spend:.2f}</p>")
-        parts.append(f"<p>of ${monthly_budget_usd:.2f} budget ({month_used:.1f}%)</p>")
-        parts.append("</div>")
-        
-        parts.append("<div class=\"card\">")
-        parts.append("<h3>Projected Month-End</h3>")
-        proj_var = rate.get("projected_month_end_variable_usd", 0)
-        parts.append(f"<p class=\"amount\">${proj_var:.2f}</p>")
-        parts.append(f"<p>+ ${fixed_costs_monthly_usd:.2f} fixed costs</p>")
-        parts.append("</div>")
-        
-        parts.append("<div class=\"card\">")
-        parts.append("<h3>Total MTD</h3>")
-        total_mtd = rate.get("total_mtd_usd", 0)
-        parts.append(f"<p class=\"amount\">${total_mtd:.2f}</p>")
-        total_budget = monthly_budget_usd + fixed_costs_monthly_usd
-        parts.append(f"<p>of ${total_budget:.2f} total budget</p>")
-        parts.append("</div>")
-        
-        parts.append("<div class=\"card\">")
-        parts.append("<h3>Actions Minutes</h3>")
-        actions_mtd = rate.get("actions_minutes_mtd", 0)
-        actions_pct = rate.get("actions_minutes_used_pct", 0)
-        parts.append(f"<p class=\"amount\">{actions_mtd} min</p>")
-        parts.append(f"<p>of {actions_minutes_month} min ({actions_pct:.1f}%)</p>")
-        parts.append("</div>")
-        parts.append("</div>")
-    else:
-        parts.append("<p>No run rate data available.</p>")
-    
-    # 2. Budget vs spend charts
-    parts.append("<h2>Budget vs Spend <small>(sources: agg_spend_weekly, agg_spend_monthly)</small></h2>")
-    if agg_spend_weekly or agg_spend_monthly:
-        # Import chart functions
-        try:
-            # Add factory/site to Python path
-            factory_site_path = str(Path(__file__).parent.parent / "factory" / "site")
-            if factory_site_path not in sys.path:
-                sys.path.insert(0, factory_site_path)
-            
-            from charts import svg_chart_weekly, svg_chart_monthly
-            
-            # Weekly chart
-            if agg_spend_weekly:
-                svg_weekly, table_weekly = svg_chart_weekly(agg_spend_weekly, weekly_budget_usd)
-                parts.append("<h3>Weekly Spend (Last 12 Weeks)</h3>")
-                parts.append(svg_weekly)
-                parts.append("<details><summary>Table fallback</summary>")
-                parts.append(table_weekly)
-                parts.append("</details>")
-            
-            # Monthly chart
-            if agg_spend_monthly:
-                svg_monthly, table_monthly = svg_chart_monthly(agg_spend_monthly, monthly_budget_usd)
-                parts.append("<h3>Monthly Spend (Last 6 Months)</h3>")
-                parts.append(svg_monthly)
-                parts.append("<details><summary>Table fallback</summary>")
-                parts.append(table_monthly)
-                parts.append("</details>")
-        except Exception as e:
-            parts.append(f"<p>Chart module error: {esc(str(e))}</p>")
-    else:
-        parts.append("<p>No budget vs spend data available.</p>")
-    
-    # 3. Per-issue economics
-    parts.append("<h2>Per-Issue Economics <small>(sources: agg_spend_by_issue, rpt_issue_target_compliance)</small></h2>")
+
+    parts.append('<h2>Headline Cards <small>(source: rpt_run_rate)</small></h2>')
+    rate = rpt_run_rate[0] if rpt_run_rate else {}
+    week_spend = float(rate.get("trailing_7d_usd_per_day", 0) or 0) * 7
+    month_spend = float(rate.get("mtd_variable_usd", 0) or 0)
+    week_used = (week_spend / weekly_budget_usd * 100) if weekly_budget_usd > 0 else 0
+    month_used = (month_spend / monthly_budget_usd * 100) if monthly_budget_usd > 0 else 0
+    week_budget_detail = (
+        f"of ${weekly_budget_usd:.2f} budget ({week_used:.1f}%)"
+        if weekly_budget_usd > 0
+        else "no budget set"
+    )
+    month_budget_detail = (
+        f"of ${monthly_budget_usd:.2f} budget ({month_used:.1f}%)"
+        if monthly_budget_usd > 0
+        else "no budget set"
+    )
+
+    parts.append('<div class="cards">')
+    parts.append(_card(week_used >= warn_pct, "This Week", f"${week_spend:.2f}", week_budget_detail))
+    parts.append(_card(month_used >= warn_pct, "Month-to-Date", f"${month_spend:.2f}", month_budget_detail))
+    proj_var = float(rate.get("projected_month_end_variable_usd", 0) or 0)
+    proj_total = float(rate.get("projected_month_end_total_usd", 0) or 0)
+    parts.append(
+        _card(
+            False,
+            "Projected Month-End",
+            f"${proj_var:.2f}",
+            f"total incl. fixed: ${proj_total:.2f}",
+        )
+    )
+    fixed_mtd = float(rate.get("fixed_costs_month_usd", fixed_costs_monthly_usd) or 0)
+    parts.append(_card(False, "Fixed Costs", f"${fixed_mtd:.2f}", "monthly fixed costs"))
+    total_mtd = float(rate.get("total_mtd_usd", 0) or 0)
+    total_budget = monthly_budget_usd + fixed_costs_monthly_usd
+    total_detail = (
+        f"of ${total_budget:.2f} total budget" if total_budget > 0 else "no budget set"
+    )
+    parts.append(_card(False, "Total MTD", f"${total_mtd:.2f}", total_detail))
+    actions_mtd = int(rate.get("actions_minutes_mtd", 0) or 0)
+    actions_pct = float(rate.get("actions_minutes_used_pct", 0) or 0)
+    quota = int(rate.get("actions_minutes_quota", actions_minutes_month) or actions_minutes_month)
+    parts.append(
+        _card(
+            actions_pct >= warn_pct,
+            "Actions Minutes",
+            f"{actions_mtd} min",
+            f"of {quota} min ({actions_pct:.1f}%)",
+        )
+    )
+    parts.append("</div>")
+
+    parts.append(
+        '<h2>Budget vs Spend <small>(sources: agg_spend_weekly, agg_spend_monthly)</small></h2>'
+    )
+    factory_site_path = str(Path(__file__).parent.parent / "factory" / "site")
+    if factory_site_path not in sys.path:
+        sys.path.insert(0, factory_site_path)
+    from charts import svg_chart_monthly, svg_chart_weekly
+
+    svg_weekly, table_weekly = svg_chart_weekly(
+        agg_spend_weekly, weekly_budget_usd, as_of_date=as_of
+    )
+    parts.append("<h3>Weekly Spend (Last 12 Weeks)</h3>")
+    parts.append(svg_weekly)
+    parts.append('<details><summary>Table fallback</summary>')
+    parts.append(table_weekly)
+    parts.append("</details>")
+
+    svg_monthly, table_monthly = svg_chart_monthly(
+        agg_spend_monthly, monthly_budget_usd, as_of_date=as_of
+    )
+    parts.append("<h3>Monthly Spend (Last 6 Months)</h3>")
+    parts.append(svg_monthly)
+    parts.append('<details><summary>Table fallback</summary>')
+    parts.append(table_monthly)
+    parts.append("</details>")
+
+    parts.append(
+        "<h2>Per-Issue Economics <small>(sources: agg_spend_by_issue, rpt_issue_target_compliance)</small></h2>"
+    )
+    compliance_map = {}
+    for row in rpt_issue_target_compliance:
+        if not isinstance(row, dict):
+            continue
+        issue = _issue_key(row)
+        if issue is None:
+            continue
+        compliance_map[issue] = row
+
     if agg_spend_by_issue:
-        # Sort by spend descending and take top 15
-        top_issues = sorted(agg_spend_by_issue, key=lambda x: x.get("spend_usd", 0), reverse=True)[:15]
-        
+        top_issues = sorted(
+            agg_spend_by_issue, key=lambda x: float(x.get("spend_usd", 0) or 0), reverse=True
+        )[:15]
         parts.append("<table>")
-        parts.append("<thead><tr>")
-        parts.append("<th>Issue</th><th>Runs</th><th>Spend</th><th>Under Target</th><th>Under Cap</th><th>Headroom</th>")
-        parts.append("</tr></thead><tbody>")
-        
+        parts.append(
+            "<thead><tr><th>Issue</th><th>Runs</th><th>Spend</th>"
+            "<th>Under Target</th><th>Under Cap</th><th>Headroom</th></tr></thead><tbody>"
+        )
         for issue in top_issues:
-            issue_num = issue.get("issue_number", "Unknown")
+            issue_num = _issue_key(issue)
             runs = issue.get("runs", 0)
-            spend = issue.get("spend_usd", 0)
-            under_target = "✓" if spend <= issue_target_usd else "✗"
-            under_cap = "✓" if spend <= issue_cap_usd else "✗"
-            headroom = max(0, issue_cap_usd - spend)
-            
+            spend = float(issue.get("spend_usd", 0) or 0)
+            comp = compliance_map.get(issue_num, {})
+            if "under_target" in comp:
+                under_target = "✓" if comp.get("under_target") else "✗"
+            else:
+                under_target = "✓" if spend <= issue_target_usd else "✗"
+            if "under_cap" in comp:
+                under_cap = "✓" if comp.get("under_cap") else "✗"
+            else:
+                under_cap = "✓" if spend <= issue_cap_usd else "✗"
+            headroom = issue.get("cap_headroom_usd")
+            if headroom is None:
+                headroom = max(0.0, issue_cap_usd - spend)
+            else:
+                headroom = float(headroom)
             parts.append("<tr>")
-            parts.append(f"<td>#{issue_num}</td>")
-            parts.append(f"<td>{runs}</td>")
+            parts.append(f"<td>#{esc(issue_num)}</td>")
+            parts.append(f"<td>{esc(runs)}</td>")
             parts.append(f"<td>${spend:.4f}</td>")
             parts.append(f"<td>{under_target}</td>")
             parts.append(f"<td>{under_cap}</td>")
             parts.append(f"<td>${headroom:.4f}</td>")
             parts.append("</tr>")
-        
         parts.append("</tbody></table>")
-        
-        # Compliance summary
-        if rpt_issue_target_compliance:
-            compliance = rpt_issue_target_compliance[0] if rpt_issue_target_compliance else {}
-            under_target_pct = compliance.get("under_target_pct", 0)
-            over_cap_count = compliance.get("over_cap_count", 0)
-            
+
+        under_target_pct, over_cap_count = _compliance_summary_rows(
+            rpt_issue_target_compliance, issue_target_usd, issue_cap_usd
+        )
+        if under_target_pct is not None:
             parts.append("<h3>Compliance Summary</h3>")
-            parts.append(f"<p>{under_target_pct:.1f}% of issues under target (${issue_target_usd})</p>")
-            parts.append(f"<p>{over_cap_count} issues over cap (${issue_cap_usd})</p>")
+            parts.append(
+                f"<p>{under_target_pct:.1f}% of issues under target (${issue_target_usd:.2f})</p>"
+            )
+            parts.append(
+                f"<p>{int(over_cap_count)} issues over cap (${issue_cap_usd:.2f})</p>"
+            )
     else:
         parts.append("<p>No per-issue data available.</p>")
-    
-    # 4. By model and by work type
-    parts.append("<h2>By Model and Work Type <small>(sources: agg_spend_by_model, fct_agent_runs)</small></h2>")
+
+    parts.append(
+        "<h2>By Model and Work Type <small>(sources: agg_spend_by_model, fct_agent_runs)</small></h2>"
+    )
     if agg_spend_by_model:
+        parts.append("<h3>By model (mart aggregate)</h3>")
         parts.append("<table>")
-        parts.append("<thead><tr>")
-        parts.append("<th>Model</th><th>Work Type</th><th>Spend</th><th>Runs</th><th>Avg Cost/Run</th>")
-        parts.append("</tr></thead><tbody>")
-        
-        # Group by model and work type
-        model_work_data = {}
-        for item in agg_spend_by_model:
-            model = item.get("model", "Unknown")
-            work_type = item.get("work_type", "Unknown")
-            spend = item.get("spend_usd", 0)
-            runs = item.get("runs", 0)
-            avg_cost = spend / runs if runs > 0 else 0
-            
-            if model not in model_work_data:
-                model_work_data[model] = {}
-            model_work_data[model][work_type] = {"spend": spend, "runs": runs, "avg_cost": avg_cost}
-        
-        # Display data
-        for model in sorted(model_work_data.keys()):
-            work_types = model_work_data[model]
-            for work_type in sorted(work_types.keys()):
-                data = work_types[work_type]
-                parts.append("<tr>")
-                parts.append(f"<td>{esc(model)}</td>")
-                parts.append(f"<td>{esc(work_type)}</td>")
-                parts.append(f"<td>${data['spend']:.4f}</td>")
-                parts.append(f"<td>{data['runs']}</td>")
-                parts.append(f"<td>${data['avg_cost']:.6f}</td>")
-                parts.append("</tr>")
-        
+        parts.append(
+            "<thead><tr><th>Model</th><th>Spend</th><th>Runs</th><th>Gate pass rate</th>"
+            "</tr></thead><tbody>"
+        )
+        for row in sorted(agg_spend_by_model, key=lambda r: str(r.get("model_id", ""))):
+            model = row.get("model_id") or row.get("model") or "Unknown"
+            spend = float(row.get("spend_usd", 0) or 0)
+            runs = int(row.get("runs", 0) or 0)
+            gate = row.get("gate_pass_rate")
+            gate_s = f"{float(gate) * 100:.1f}%" if isinstance(gate, (int, float)) else "—"
+            parts.append(
+                "<tr><td>{}</td><td>${:.4f}</td><td>{}</td><td>{}</td></tr>".format(
+                    esc(model), spend, esc(runs), esc(gate_s)
+                )
+            )
         parts.append("</tbody></table>")
-    else:
+
+    work_groups = {}
+    for row in fct_agent_runs:
+        if not isinstance(row, dict):
+            continue
+        model = row.get("model_id") or row.get("model") or "Unknown"
+        work_type = row.get("work_type") or "unknown"
+        spend = float(row.get("actual_cost_usd", 0) or 0)
+        key = (model, work_type)
+        if key not in work_groups:
+            work_groups[key] = {"spend": 0.0, "runs": 0}
+        work_groups[key]["spend"] += spend
+        work_groups[key]["runs"] += 1
+
+    if work_groups:
+        parts.append("<h3>By model and work type (agent runs)</h3>")
+        parts.append("<table>")
+        parts.append(
+            "<thead><tr><th>Model</th><th>Work Type</th><th>Spend</th>"
+            "<th>Runs</th><th>Avg Cost/Run</th></tr></thead><tbody>"
+        )
+        for model, work_type in sorted(work_groups.keys()):
+            data = work_groups[(model, work_type)]
+            avg = data["spend"] / data["runs"] if data["runs"] else 0.0
+            parts.append(
+                "<tr><td>{}</td><td>{}</td><td>${:.4f}</td><td>{}</td><td>${:.6f}</td></tr>".format(
+                    esc(model),
+                    esc(work_type),
+                    data["spend"],
+                    data["runs"],
+                    avg,
+                )
+            )
+        parts.append("</tbody></table>")
+    elif not agg_spend_by_model:
         parts.append("<p>No model/work-type data available.</p>")
-    
-    # 5. Prediction accuracy
-    parts.append("<h2>Prediction Accuracy <small>(source: fct_forecast_vs_actual)</small></h2>")
+
+    parts.append(
+        '<h2>Prediction Accuracy <small>(source: fct_forecast_vs_actual)</small></h2>'
+    )
+    skipped_count = 0
+    valid_rows = []
+    error_pcts = []
     if fct_forecast_vs_actual:
-        # Filter out rows with null predicted_cost_usd
-        valid_predictions = [row for row in fct_forecast_vs_actual if row.get("predicted_cost_usd") is not None]
-        skipped_count = len(fct_forecast_vs_actual) - len(valid_predictions)
-        
-        if valid_predictions:
-            # Calculate absolute errors
-            errors = []
-            for row in valid_predictions:
-                actual = row.get("actual_cost_usd", 0)
-                predicted = row.get("predicted_cost_usd", 0)
-                error = abs(predicted - actual)
-                errors.append(error)
-            
-            if errors:
-                median_error = sorted(errors)[len(errors) // 2]
-                worst_error = max(errors)
-                
-                parts.append("<table>")
-                parts.append("<thead><tr>")
-                parts.append("<th>Median Absolute Error</th><th>Worst Absolute Error</th><th>Recalibrate Flag</th>")
-                parts.append("</tr></thead><tbody>")
-                parts.append("<tr>")
-                parts.append(f"<td>${median_error:.4f}</td>")
-                parts.append(f"<td>${worst_error:.4f}</td>")
-                recalibrate = "YES" if median_error / issue_target_usd >= 1.0 else "NO"  # 100% of target
-                parts.append(f"<td>{recalibrate}</td>")
-                parts.append("</tr>")
-                parts.append("</tbody></table>")
-        
-        if skipped_count > 0:
-            parts.append(f"<p>Note: {skipped_count} rows with null predictions were excluded from accuracy statistics.</p>")
+        for row in fct_forecast_vs_actual:
+            pred, actual, abs_err = _prediction_fields(row)
+            if pred is None:
+                skipped_count += 1
+                continue
+            valid_rows.append((row, pred, actual, abs_err))
+            if abs_err is not None:
+                error_pcts.append(float(abs_err))
+        if valid_rows:
+            parts.append("<table>")
+            parts.append(
+                "<thead><tr><th>Grain</th><th>Key</th><th>Predicted</th>"
+                "<th>Actual</th><th>|Error %|</th></tr></thead><tbody>"
+            )
+            for row, pred, actual, abs_err in sorted(
+                valid_rows,
+                key=lambda t: (str(t[0].get("grain", "")), str(t[0].get("grain_key", t[0].get("issue_number", "")))),
+            ):
+                grain = row.get("grain") or "issue"
+                key = row.get("grain_key") or row.get("issue_number") or "—"
+                err_s = f"{float(abs_err):.2f}%" if abs_err is not None else "—"
+                parts.append(
+                    "<tr><td>{}</td><td>{}</td><td>${:.4f}</td><td>${:.4f}</td><td>{}</td></tr>".format(
+                        esc(grain),
+                        esc(key),
+                        float(pred),
+                        float(actual or 0),
+                        esc(err_s),
+                    )
+                )
+            parts.append("</tbody></table>")
+
+        if error_pcts:
+            sorted_errs = sorted(error_pcts)
+            median_error = sorted_errs[len(sorted_errs) // 2]
+            worst_error = max(error_pcts)
+            parts.append("<h3>Summary</h3>")
+            parts.append("<table>")
+            parts.append(
+                "<thead><tr><th>Median |Error %|</th><th>Worst |Error %|</th>"
+                "<th>Recalibrate priors</th></tr></thead><tbody><tr>"
+            )
+            parts.append(f"<td>{median_error:.2f}%</td>")
+            parts.append(f"<td>{worst_error:.2f}%</td>")
+            recalibrate = "YES" if median_error > 100.0 else "NO"
+            parts.append(f"<td>{recalibrate}</td></tr></tbody></table>")
+        if skipped_count:
+            parts.append(
+                f"<p>Note: {skipped_count} rows with null predictions were excluded from accuracy statistics.</p>"
+            )
     else:
         parts.append("<p>No prediction accuracy data available.</p>")
-    
-    # 6. Data freshness
-    parts.append("<h2>Data Freshness <small>(source: fct_agent_runs)</small></h2>")
+
+    parts.append('<h2>Data Freshness <small>(source: fct_agent_runs)</small></h2>')
     if fct_agent_runs:
-        # Find latest run time
-        latest_run = max([item.get("ended_at_utc", "") for item in fct_agent_runs if item.get("ended_at_utc")], default="")
-        
-        if latest_run:
+        timestamps = []
+        invalid_records = 0
+        for row in fct_agent_runs:
+            ts = row.get("started_at_utc") or row.get("ended_at_utc") or ""
+            if not row.get("run_id") or not ts:
+                invalid_records += 1
+                continue
+            timestamps.append(ts)
+        if timestamps:
+            latest_run = max(timestamps)
+            utc_s, chicago_s = _format_utc_chicago(latest_run)
             parts.append("<table>")
-            parts.append("<thead><tr>")
-            parts.append("<th>Latest Run Time (UTC)</th><th>Latest Run Time (America/Chicago)</th><th>Total Records</th><th>Invalid Records Skipped</th>")
-            parts.append("</tr></thead><tbody>")
-            
-            # Count records
-            total_records = len(fct_agent_runs)
-            invalid_records = len([item for item in fct_agent_runs if not item.get("ended_at_utc")])
-            
-            parts.append("<tr>")
-            parts.append(f"<td>{latest_run}</td>")
-            # Note: Converting timezone would require additional libraries, so we'll just note it
-            parts.append(f"<td>{latest_run} (convert manually to Chicago time)</td>")
-            parts.append(f"<td>{total_records}</td>")
-            parts.append(f"<td>{invalid_records}</td>")
-            parts.append("</tr>")
-            parts.append("</tbody></table>")
+            parts.append(
+                "<thead><tr><th>Latest Run Time (UTC)</th><th>Latest Run Time (America/Chicago)</th>"
+                "<th>Total Records</th><th>Invalid Records Skipped</th></tr></thead><tbody><tr>"
+            )
+            parts.append(
+                f"<td>{utc_s}</td><td>{chicago_s}</td>"
+                f"<td>{len(fct_agent_runs)}</td><td>{invalid_records}</td>"
+            )
+            parts.append("</tr></tbody></table>")
         else:
             parts.append("<p>No valid run times found.</p>")
     else:
         parts.append("<p>No data freshness information available.</p>")
-    
+
     return "\n".join(parts)
 
 
@@ -928,7 +1093,7 @@ def main() -> None:
 
     content_by_page = {
         "index.html": architecture_html(repo_root, models_data, factory_md),
-        "financials.html": financials_html(args.data),
+        "financials.html": financials_html(args.data, repo_root, now),
         "backlog.html": backlog_html(args.data),
         "dbt.html": dbt_html(repo_root),
     }
