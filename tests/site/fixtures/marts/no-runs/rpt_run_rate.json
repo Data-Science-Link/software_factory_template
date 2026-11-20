@@ -1,0 +1,20 @@
+[
+  {
+    "as_of_date": "2026-11-11",
+    "month_start": "2026-11-01",
+    "days_elapsed": 11,
+    "days_in_month": 30,
+    "mtd_variable_usd": 0,
+    "trailing_7d_usd_per_day": 0,
+    "trailing_30d_usd_per_day": 0,
+    "projected_month_end_variable_usd": 0,
+    "fixed_costs_month_usd": 20,
+    "total_mtd_usd": 20,
+    "projected_month_end_total_usd": 20,
+    "deepinfra_budget_usd": 10,
+    "budget_used_pct": 0,
+    "actions_minutes_mtd": 0,
+    "actions_minutes_quota": 2000,
+    "actions_minutes_used_pct": 0
+  }
+]

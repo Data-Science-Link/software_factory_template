@@ -1,0 +1,25 @@
+{
+  "id": "stub-chat-1",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Factory Critic review\n\nVerdict: pass\n\nHarness verification: PASS — stub response.\n\nChecked: spec match, diff vs scope, verification output, edge cases, security/forbidden paths.\nFor the owner: nothing\n"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 50000,
+    "completion_tokens": 800,
+    "total_tokens": 50800,
+    "prompt_tokens_details": {
+      "cached_tokens": 40000
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    }
+  }
+}

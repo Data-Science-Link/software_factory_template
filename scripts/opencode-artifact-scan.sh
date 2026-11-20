@@ -69,6 +69,7 @@ PROTECTED_SCRIPTS=(
   scripts/factory-check-model.py
   scripts/factory-classify-failure.py
   scripts/factory-cost.sh
+  scripts/factory-merge.sh
   scripts/factory-predict-cost.py
   scripts/factory-run-body.sh
   scripts/factory-run-end.sh
@@ -78,6 +79,7 @@ PROTECTED_SCRIPTS=(
   scripts/factory-run-start.py
   scripts/factory-run-start.sh
   scripts/factory-spec-check.py
+  scripts/factory-status.sh
   scripts/factory-usage.py
   scripts/factory-validate-run.py
   scripts/install-gitleaks-ci.sh
