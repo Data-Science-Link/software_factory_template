@@ -38,11 +38,32 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - run: bash scripts/test-all.sh
+      - run: bash scripts/test-shell-hygiene.sh
+      - run: bash scripts/test-pr-check.sh
+      - run: bash scripts/test-predict-cost.sh
+      - run: bash scripts/test-spec-template-drift.sh
       - run: python3 scripts/factory-check-docs.py --strict
       - run: python3 scripts/factory-prepublic-check.py --strict
-      - run: python3 scripts/factory-models-check.py
-      - run: python3 scripts/factory-site-smoke.py --build
+YML
+cat >"$pass_dir/factory-site.yml" <<'YML'
+name: factory-site
+on:
+  push:
+    paths:
+      - "factory/**"
+      - "factory/budget.yml"
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: bash scripts/factory-site-build.sh
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
 YML
 cat >"$pass_dir/opencode-spike.yml" <<'YML'
 name: opencode-spike
@@ -74,6 +95,9 @@ on:
 permissions: {}
 jobs:
   approve:
+    if: >-
+      startsWith(github.event.pull_request.head.ref, 'oc/') &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -155,11 +179,12 @@ import json,sys
 d=json.load(sys.stdin)
 codes={f['check'] for f in d['findings'] if f['status']=='fail'}
 need={
-    'pr_check_test_all',
+    'pr_check_shell_hygiene',
+    'pr_check_pr_check_tests',
+    'pr_check_predict_cost',
+    'pr_check_spec_template_drift',
     'pr_check_check_docs',
     'pr_check_prepublic',
-    'pr_check_models_check',
-    'pr_check_site_smoke',
     'oc_agent_python_pin',
     'approve_oc_workflow_run',
     'critic_review_job',
@@ -175,6 +200,34 @@ if echo "$md" | grep -q '^| FAIL |' && echo "$md" | grep -q 'Workflow audit'; th
   ok "markdown report renders"
 else
   bad "markdown report"
+fi
+
+if echo "$md" | grep -q '^## '; then
+  ok "markdown groups findings by category"
+else
+  bad "markdown category sections"
+fi
+
+json1="$tmpdir/json1.json"
+json2="$tmpdir/json2.json"
+"${PY[@]}" --workflows-dir "$pass_dir" --json >"$json1"
+"${PY[@]}" --workflows-dir "$pass_dir" --json >"$json2"
+if cmp -s "$json1" "$json2"; then
+  ok "--json output is deterministic on pass-all fixture"
+else
+  bad "--json determinism"
+fi
+
+if "$PYTHON" -c "
+import json
+d=json.load(open('$json1'))
+assert 'categories' in d and 'owner_workflow_sync' in d
+for f in d['findings']:
+    assert 'category' in f
+"; then
+  ok "--json includes categories and owner_workflow_sync"
+else
+  bad "--json category schema"
 fi
 
 echo ""
