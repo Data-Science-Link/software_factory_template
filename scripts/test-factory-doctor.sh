@@ -128,6 +128,68 @@ grep -q '"category": "protected_scripts"' "$work/out" || bad "template json incl
 grep -q '"category": "docs_links"' "$work/out" || bad "template json includes docs_links"
 grep -q '"category": "models_config"' "$work/out" || bad "template json includes models_config"
 grep -q '"category": "decision_log"' "$work/out" || bad "template json includes decision_log"
+grep -q '"category": "reusable_workflows"' "$work/out" || bad "template json includes reusable_workflows"
+
+# reusable_workflows: skip when script or docs tree absent
+copy_healthy "$work/repo"
+run_doctor --repo-dir "$work/repo" --strict
+grep -q "reusable_workflows" "$work/out" && grep -q "skip" "$work/out" && ok "reusable_workflows skips on minimal fixture" \
+  || bad "reusable_workflows skip when script or docs missing"
+
+# reusable_workflows: pass with bundled script and live docs tree
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-reusable-check.py" "$work/repo/scripts/"
+mkdir -p "$work/repo/docs"
+cp -a "$root/docs/reusable-workflows" "$work/repo/docs/"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "reusable_workflows live tree strict" 0
+grep -q "reusable_workflows" "$work/out" || bad "reusable_workflows id present"
+grep -q "reusable-check: clean" "$work/out" && ok "reusable_workflows pass on live docs" \
+  || bad "reusable_workflows pass on live docs"
+
+# reusable_workflows: fail on contract violations
+copy_healthy "$work/repo"
+cp "$root/scripts/factory-reusable-check.py" "$work/repo/scripts/"
+fail_root="$work/fail-contract"
+mkdir -p "$fail_root/callers"
+cat >"$fail_root/reusable-demo.yml" <<'YML'
+name: reusable-demo
+on:
+  workflow_call:
+    inputs:
+      factory_ref:
+        type: string
+        required: true
+    secrets:
+      DEMO_SECRET:
+        required: true
+permissions:
+  contents: read
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+YML
+cat >"$fail_root/callers/demo.yml" <<'YML'
+name: demo-caller
+on:
+  workflow_dispatch:
+permissions: write-all
+jobs:
+  call:
+    uses: YOUR_ORG/software_factory_template/.github/workflows/reusable-demo.yml@v0.1.0
+    secrets:
+      WRONG_SECRET: ${{ secrets.DEMO_SECRET }}
+    with:
+      factory_ref: v0.1.0
+      unknown_input: oops
+YML
+mkdir -p "$work/repo/docs"
+cp -a "$fail_root" "$work/repo/docs/reusable-workflows"
+run_doctor --repo-dir "$work/repo" --strict
+assert_rc "reusable_workflows broken fixture strict" 1
+grep -q "reusable_workflows" "$work/out" || bad "reusable_workflows fail row"
 
 # models_config: skip when factory-models-check.py absent in target repo
 copy_healthy "$work/repo"

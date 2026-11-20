@@ -79,6 +79,54 @@ if [ "$init_checks_ok" -eq 1 ]; then
   else
     fail "step 2: .factory/DECISIONS.md adoption entry"
   fi
+  if grep -q "Data-Science-Link/software_factory_template" "$repo/.github/workflows/pr-check.yml" \
+    && ! grep -q "YOUR_ORG" "$repo/.github/workflows/pr-check.yml"; then
+    pass "step 2: pr-check substitutes template-repo placeholder"
+  else
+    fail "step 2: pr-check substitutes template-repo placeholder"
+  fi
+fi
+
+# ---- Step 2b: init with custom --template-repo and --owner (zero template placeholders) ----
+repo_owned="$work/adopter-owned"
+mkdir -p "$repo_owned"
+TEMPLATE_REPO="example-org/software_factory_template"
+OWNER_LOGIN="example-product-owner"
+set +e
+owned_out="$("$PYTHON" "$ROOT/scripts/factory-init-repo.py" \
+  --target "$repo_owned" \
+  --tag "$TAG" \
+  --template-dir "$ROOT" \
+  --template-repo "$TEMPLATE_REPO" \
+  --owner "$OWNER_LOGIN" \
+  --repo-name adopter-owned 2>&1)"
+owned_rc=$?
+set -e
+if [ "$owned_rc" -eq 0 ]; then
+  pass "step 2b: init with --owner and --template-repo"
+else
+  fail "step 2b: init with --owner and --template-repo" "$owned_out"
+fi
+placeholder_hits="$(
+  grep -R -l -E 'YOUR_ORG|YOUR_OWNER_GITHUB_LOGIN' "$repo_owned/.github/workflows" 2>/dev/null \
+    || true
+)"
+if [ -z "$placeholder_hits" ]; then
+  pass "step 2b: caller workflows have zero template placeholders"
+else
+  fail "step 2b: caller workflows have zero template placeholders" "$placeholder_hits"
+fi
+if grep -q "$TEMPLATE_REPO" "$repo_owned/.github/workflows/opencode-run.yml" \
+  && grep -q "$OWNER_LOGIN" "$repo_owned/.github/workflows/opencode-run.yml"; then
+  pass "step 2b: opencode-run pins template-repo and owner"
+else
+  fail "step 2b: opencode-run pins template-repo and owner"
+fi
+if ! "$ROOT/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-init-repo.py' \
+  && ! "$ROOT/scripts/opencode-artifact-scan.sh" --list-protected | grep -q 'factory-migrate-adopter.py'; then
+  pass "step 2b: init/migrate scripts not in PROTECTED_SCRIPTS"
+else
+  fail "step 2b: init/migrate scripts not in PROTECTED_SCRIPTS"
 fi
 
 # ---- Step 3: factory-doctor.py (JSON scorecard, no --strict) ----

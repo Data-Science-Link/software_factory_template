@@ -235,10 +235,50 @@ while IFS= read -r prot; do
 done < <(bash "$scan" --list-protected)
 if [ -z "$missing_prot" ]; then ok "--list-rules and FACTORY.md include every --list-protected path"
 else bad "--list-protected not mirrored:$missing_prot"; fi
-if bash "$scan" --list-protected | grep -qxF 'scripts/opencode-artifact-scan.sh' \
-  && bash "$scan" --list-protected | grep -qxF 'scripts/protect-main.sh'; then
-  ok "--list-protected includes the path-policy script and protect-main.sh"
-else bad "--list-protected missing required entries"; fi
+req_missing=""
+for req in \
+  scripts/opencode-artifact-scan.sh \
+  scripts/protect-main.sh \
+  scripts/harden-repo.sh \
+  scripts/factory-issue-spend.py \
+  scripts/opencode-worker-test.sh; do
+  bash "$scan" --list-protected | grep -qxF "$req" || req_missing="$req_missing $req"
+done
+if [ -z "$req_missing" ]; then
+  ok "--list-protected includes path-policy, protect-main, harden-repo, issue-spend, worker-test"
+else bad "--list-protected missing required entries:$req_missing"; fi
+
+# --- #107 #115 #44: newly protected scripts blocked in template and product mode ---
+assert_protected_edit_blocked() { # $1 = repo path under scripts/
+  local rel="$1" name
+  name="${rel#scripts/}"
+  new_repo
+  case "$rel" in
+    *.py) printf 'pass\n' >"$rel" ;;
+    *) printf '#!/usr/bin/env bash\necho stub\n' >"$rel"; chmod +x "$rel" ;;
+  esac
+  g add -A
+  g commit -qm "track $rel"
+  printf '\n# tamper\n' >>"$rel"
+  capture
+  expect fail "template: workers cannot edit protected $name" "protected spend/security script"
+  new_repo
+  case "$rel" in
+    *.py) printf 'pass\n' >"$rel" ;;
+    *) printf '#!/usr/bin/env bash\necho stub\n' >"$rel"; chmod +x "$rel" ;;
+  esac
+  g add -A
+  g commit -qm "track $rel"
+  printf '\n# tamper\n' >>"$rel"
+  capture
+  expect_product fail "product: workers cannot edit protected $name" "forbidden path"
+}
+for prot in \
+  scripts/factory-issue-spend.py \
+  scripts/harden-repo.sh \
+  scripts/opencode-worker-test.sh; do
+  assert_protected_edit_blocked "$prot"
+done
 missing=""
 while IFS= read -r pat; do
   grep -qxF -- "- $pat" <<<"$rules" || missing="$missing $pat"
