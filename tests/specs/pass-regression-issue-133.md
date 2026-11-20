@@ -85,6 +85,10 @@ Create only **new** files:
 - [ ] No arguments and no `OPENCODE_USAGE_FIXTURE` → exit 2; a missing path → exit 2; the `OPENCODE_USAGE_FIXTURE` override gives the same output as positional arguments.
 - [ ] No key or token printed: with a sentinel env var set (for example `FACTORY_TEST_SECRET=sentinel-value`), the sentinel appears in neither stdout nor stderr of any case.
 
+## Bad inputs and edge cases
+- Unparseable JSON, wrong file type, unknown token keys, missing cache, no assistant messages, and duplicate session id each exit 3 with empty stdout; covered by runtime-mutated fixtures in `scripts/test-factory-usage.sh`.
+- No inputs and no `OPENCODE_USAGE_FIXTURE` → exit 2; missing path → exit 2; covered by the same test script.
+
 ## Verification
 
 ```bash

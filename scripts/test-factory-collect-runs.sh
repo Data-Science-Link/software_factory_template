@@ -88,6 +88,21 @@ else
   fail "collector: second run byte-identical"
 fi
 
+if GITHUB_REPOSITORY='acme-corp/widget-factory' "$PYTHON" -c "
+from pathlib import Path
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    'collect', Path('scripts/factory-collect-runs.py'))
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+assert mod.resolve_github_repo(None) == 'acme-corp/widget-factory'
+assert mod.resolve_github_repo('override/org-repo') == 'override/org-repo'
+"; then
+  pass "collector: resolve_github_repo uses env and --repo override"
+else
+  fail "collector: resolve_github_repo uses env and --repo override"
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then

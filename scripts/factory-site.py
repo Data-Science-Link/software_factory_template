@@ -16,6 +16,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from string import Template
 
@@ -33,6 +34,16 @@ TAB_LABELS = (
 
 def esc(value):
     return html.escape(str(value), quote=True)
+
+
+def format_currency(value):
+    """Format a numeric value as currency."""
+    return f"${value:,.4f}" if value else "$0.0000"
+
+
+def format_percentage(value):
+    """Format a numeric value as percentage."""
+    return f"{value:.1f}%" if value else "0.0%"
 
 
 def build_tabs(active):
@@ -111,18 +122,51 @@ def strip_markdown(text):
     return text
 
 
-def render_table(rows):
+def repo_agnostic_copy(text):
+    """Replace template-repo owner/bot names with role labels for the public site."""
+    text = str(text)
+    text = re.sub(r"\bMichael's\b", "the owner's", text)
+    text = re.sub(r"\bMichael\b", "the owner", text)
+    text = re.sub(r"\bGrok Bot\b", "the Factory Manager", text)
+    return text
+
+
+def render_inline_markdown(text, agnostic=False):
+    """Render `**bold**` and `code` as HTML; escape everything else."""
+    if agnostic:
+        text = repo_agnostic_copy(text)
+    text = str(text)
+    parts = []
+    pos = 0
+    for m in re.finditer(r"\*\*(.+?)\*\*|`([^`]+)`", text):
+        if m.start() > pos:
+            parts.append(esc(text[pos:m.start()]))
+        if m.group(1) is not None:
+            parts.append("<strong>{}</strong>".format(esc(m.group(1))))
+        else:
+            parts.append("<code>{}</code>".format(esc(m.group(2))))
+        pos = m.end()
+    if pos < len(text):
+        parts.append(esc(text[pos:]))
+    return "".join(parts) if parts else esc(text)
+
+
+def render_table(rows, agnostic=False):
     if not rows:
         return ""
     out = ["<table><thead><tr>"]
     for cell in rows[0]:
-        out.append("<th>{}</th>".format(esc(strip_markdown(cell))))
+        out.append("<th>{}</th>".format(render_inline_markdown(cell, agnostic=agnostic)))
     out.append("</tr></thead><tbody>")
     for row in rows[1:]:
         out.append("<tr>")
         for i, cell in enumerate(row):
             tag = "th" if i == 0 else "td"
-            out.append("<{}>{}</{}>".format(tag, esc(strip_markdown(cell)), tag))
+            out.append(
+                "<{}>{}</{}>".format(
+                    tag, render_inline_markdown(cell, agnostic=agnostic), tag
+                )
+            )
         out.append("</tr>")
     out.append("</tbody></table>")
     return "\n".join(out)
@@ -131,21 +175,25 @@ def render_table(rows):
 def render_loop_cards(steps):
     out = ['<div class="loop-cards">']
     for num, text in steps:
-        body = strip_markdown(text).strip()
+        body = repo_agnostic_copy(text).strip()
         title = str(num)
         desc = ""
-        m = re.match(r"^\d+\.\s*(.*?)\s*(?:—|-)\s*(.*)$", body)
+        m = re.match(r"^\d+\.\s*(.*?)\s*(?:—|-)\s*(.*)$", body, re.DOTALL)
         if m:
             title = m.group(1).strip()
             desc = m.group(2).strip()
         else:
-            m2 = re.match(r"^\d+\.\s*(.*)$", body)
+            m2 = re.match(r"^\d+\.\s*(.*)$", body, re.DOTALL)
             if m2:
                 title = m2.group(1).strip()
         out.append('<div class="loop-card">')
-        out.append('<h3 class="loop-card-title">{}</h3>'.format(esc(title)))
+        out.append(
+            '<h3 class="loop-card-title">{}</h3>'.format(render_inline_markdown(title))
+        )
         if desc:
-            out.append('<p class="loop-card-desc">{}</p>'.format(esc(desc)))
+            out.append(
+                '<p class="loop-card-desc">{}</p>'.format(render_inline_markdown(desc))
+            )
         out.append("</div>")
     out.append("</div>")
     return "\n".join(out)
@@ -256,14 +304,35 @@ def depth_links():
     )
 
 
+def _format_when_value(value):
+    if isinstance(value, list):
+        bits = []
+        for item in value:
+            if isinstance(item, dict):
+                bits.append(
+                    ", ".join(
+                        "{}={}".format(k, item[k]) for k in sorted(item.keys())
+                    )
+                )
+            else:
+                bits.append(str(item))
+        return "[{}]".format(" | ".join(bits))
+    if isinstance(value, dict):
+        return "{{{}}}".format(
+            ", ".join("{}={}".format(k, v) for k, v in sorted(value.items()))
+        )
+    return str(value)
+
+
 def when_text(when):
     if not when:
         return "(always)"
     if isinstance(when, dict):
         return ", ".join(
-            "{}={}".format(esc(k), esc(v)) for k, v in sorted(when.items())
+            "{}={}".format(k, _format_when_value(v))
+            for k, v in sorted(when.items())
         )
-    return esc(when)
+    return str(when)
 
 
 def architecture_html(repo_root, models_data, factory_md):
@@ -300,7 +369,7 @@ def architecture_html(repo_root, models_data, factory_md):
     if roles is None:
         parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Roles)")))
     else:
-        rendered = render_table(parse_markdown_table(roles))
+        rendered = render_table(parse_markdown_table(roles), agnostic=True)
         if rendered:
             parts.append(rendered)
         else:
@@ -314,7 +383,7 @@ def architecture_html(repo_root, models_data, factory_md):
     if merge is None:
         parts.append('<p class="note">{}</p>'.format(esc(SECTION_NOT_FOUND + " (Merge authority)")))
     else:
-        rendered = render_table(parse_markdown_table(merge))
+        rendered = render_table(parse_markdown_table(merge), agnostic=True)
         if rendered:
             parts.append(rendered)
         else:
@@ -340,7 +409,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     m.get("status", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     # Routing rules in first-match order with their model.
     parts.append("<h2>Routing rules (first match wins)</h2>")
@@ -359,7 +428,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     r.get("model", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     # Guard checks.
     parts.append("<h2>Guard checks</h2>")
@@ -378,7 +447,7 @@ def architecture_html(repo_root, models_data, factory_md):
                     c.get("action", ""),
                 ]
             )
-        parts.append(render_table(rows))
+        parts.append(render_table(rows, agnostic=True))
 
     return "\n".join(parts)
 
@@ -391,15 +460,504 @@ def placeholder_html(tab_name):
     )
 
 
-def financials_html(data_dir):
+def _load_marts(data_dir):
+    """Load mart JSON files into a dict of row lists."""
     marts_dir = Path(data_dir) / "marts"
-    if marts_dir.is_dir() and any(marts_dir.glob("*.json")):
+    if not marts_dir.is_dir():
+        return None, {}
+    if not any(marts_dir.glob("*.json")):
+        return marts_dir, {}
+
+    marts = {}
+    for mart_file in sorted(marts_dir.glob("*.json")):
+        try:
+            with open(mart_file, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            marts[mart_file.stem] = []
+            continue
+        if isinstance(data, list):
+            marts[mart_file.stem] = [r for r in data if isinstance(r, dict)]
+        elif isinstance(data, dict) and "rows" in data:
+            rows = data["rows"]
+            marts[mart_file.stem] = (
+                [r for r in rows if isinstance(r, dict)]
+                if isinstance(rows, list)
+                else []
+            )
+        else:
+            marts[mart_file.stem] = []
+    return marts_dir, marts
+
+
+def _load_budget(repo_root):
+    budget_path = Path(repo_root) / "factory" / "budget.yml"
+    try:
+        with open(budget_path, encoding="utf-8") as fh:
+            budget_data = yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError):
+        budget_data = {}
+    return budget_data
+
+
+def _financials_as_of(as_of_utc, rpt_run_rate):
+    if as_of_utc:
+        try:
+            return datetime.datetime.strptime(
+                as_of_utc[:19], "%Y-%m-%d %H:%M:%S"
+            ).date()
+        except ValueError:
+            pass
+    if rpt_run_rate:
+        row = rpt_run_rate[0]
+        if isinstance(row, dict):
+            as_of = row.get("as_of_date")
+            if as_of:
+                try:
+                    return datetime.date.fromisoformat(str(as_of)[:10])
+                except ValueError:
+                    pass
+    return datetime.date(2026, 11, 11)
+
+
+def _issue_key(row):
+    if not isinstance(row, dict):
+        return None
+    num = row.get("issue_number")
+    if num is None:
+        num = row.get("issue")
+    return num
+
+
+def _assert_non_negative_spend(collection, name):
+    spend_keys = ("spend_usd", "mtd_variable_usd", "actual_cost_usd", "predicted_cost_usd", "predicted_usd", "actual_usd")
+    for item in collection:
+        if not isinstance(item, dict):
+            raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
+        for key in spend_keys:
+            if key not in item:
+                continue
+            value = item[key]
+            if isinstance(value, (int, float)) and value < 0:
+                raise ValueError(f"Negative value in {name}: {key}={value}")
+
+
+def _compliance_summary_rows(rpt_issue_target_compliance, issue_target_usd, issue_cap_usd):
+    """Return (under_target_pct, over_cap_count) from mart rows or a summary row."""
+    if not rpt_issue_target_compliance:
+        return None, None
+    first = rpt_issue_target_compliance[0]
+    if isinstance(first, dict) and "under_target_pct" in first:
         return (
-            "<h2>Financials</h2>\n"
-            '<div class="placeholder"><p>Financials data is present, but the full '
-            'tab lands in issue #174.</p></div>'
+            float(first.get("under_target_pct", 0)),
+            int(first.get("over_cap_count", 0)),
         )
-    return placeholder_html("Financials")
+
+    compliance_by_issue = {}
+    for row in rpt_issue_target_compliance:
+        if not isinstance(row, dict):
+            continue
+        issue = _issue_key(row)
+        if issue is None:
+            continue
+        compliance_by_issue[issue] = row
+
+    if not compliance_by_issue:
+        return None, None
+
+    under_target = sum(
+        1 for row in compliance_by_issue.values() if row.get("under_target")
+    )
+    total = len(compliance_by_issue)
+    under_target_pct = (under_target / total * 100.0) if total else 0.0
+    over_cap_count = sum(
+        1 for row in compliance_by_issue.values() if not row.get("under_cap", True)
+    )
+    return under_target_pct, over_cap_count
+
+
+def _prediction_fields(row):
+    pred = row.get("predicted_cost_usd")
+    if pred is None:
+        pred = row.get("predicted_usd")
+    actual = row.get("actual_cost_usd")
+    if actual is None:
+        actual = row.get("actual_usd")
+    error_pct = row.get("error_pct")
+    if error_pct is not None:
+        abs_error = abs(float(error_pct))
+    elif pred is not None and actual is not None:
+        denom = float(pred) if float(pred) else 1.0
+        abs_error = abs(float(actual) - float(pred)) / denom * 100.0
+    else:
+        abs_error = row.get("absolute_error")
+        if abs_error is not None:
+            abs_error = abs(float(abs_error))
+    return pred, actual, abs_error
+
+
+def _format_utc_chicago(ts):
+    if not ts:
+        return "", ""
+    try:
+        dt = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return esc(str(ts)), esc(str(ts))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    utc_s = dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        from zoneinfo import ZoneInfo
+
+        chicago = dt.astimezone(ZoneInfo("America/Chicago")).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
+    except Exception:
+        chicago = utc_s
+    return esc(utc_s), esc(chicago)
+
+
+def _card(class_warn, title, amount_html, detail_html):
+    warn_cls = " warn" if class_warn else ""
+    return (
+        f'<div class="card{warn_cls}">'
+        f"<h3>{esc(title)}</h3>"
+        f'<p class="amount">{amount_html}</p>'
+        f"<p>{detail_html}</p>"
+        "</div>"
+    )
+
+
+def financials_html(data_dir, repo_root=".", as_of_utc=None):
+    """Generate the Financials tab content from marts data."""
+    marts_dir, marts = _load_marts(data_dir)
+    if marts_dir is None or not marts:
+        return placeholder_html("Financials")
+
+    budget_data = _load_budget(repo_root)
+    weekly_budget_usd = float(budget_data.get("weekly_usd", 0) or 0)
+    monthly_budget_usd = float(budget_data.get("monthly_usd", 0) or 0)
+    issue_target_usd = float(budget_data.get("issue_target_usd", 0.15) or 0.15)
+    issue_cap_usd = float(budget_data.get("issue_cap_usd", 1.0) or 1.0)
+    warn_pct = float(budget_data.get("warn_pct", 80) or 80)
+    fixed_costs_monthly_usd = float(budget_data.get("fixed_costs_monthly_usd", 0) or 0)
+    actions_minutes_month = int(budget_data.get("actions_minutes_month", 0) or 0)
+
+    rpt_run_rate = marts.get("rpt_run_rate", [])
+    agg_spend_weekly = marts.get("agg_spend_weekly", [])
+    agg_spend_monthly = marts.get("agg_spend_monthly", [])
+    agg_spend_by_issue = marts.get("agg_spend_by_issue", [])
+    rpt_issue_target_compliance = marts.get("rpt_issue_target_compliance", [])
+    agg_spend_by_model = marts.get("agg_spend_by_model", [])
+    fct_forecast_vs_actual = marts.get("fct_forecast_vs_actual", [])
+    fct_agent_runs = marts.get("fct_agent_runs", [])
+
+    _assert_non_negative_spend(rpt_run_rate, "rpt_run_rate")
+    _assert_non_negative_spend(agg_spend_weekly, "agg_spend_weekly")
+    _assert_non_negative_spend(agg_spend_monthly, "agg_spend_monthly")
+    _assert_non_negative_spend(agg_spend_by_issue, "agg_spend_by_issue")
+    for name, collection in (
+        ("agg_spend_by_model", agg_spend_by_model),
+        ("fct_forecast_vs_actual", fct_forecast_vs_actual),
+        ("fct_agent_runs", fct_agent_runs),
+        ("rpt_issue_target_compliance", rpt_issue_target_compliance),
+    ):
+        for item in collection:
+            if not isinstance(item, dict):
+                raise ValueError(f"Expected dict in {name}, got {type(item)}: {item}")
+        _assert_non_negative_spend(collection, name)
+
+    as_of = _financials_as_of(as_of_utc, rpt_run_rate)
+    parts = []
+
+    parts.append('<h2>Headline Cards <small>(source: rpt_run_rate)</small></h2>')
+    rate = rpt_run_rate[0] if rpt_run_rate else {}
+    week_spend = float(rate.get("trailing_7d_usd_per_day", 0) or 0) * 7
+    month_spend = float(rate.get("mtd_variable_usd", 0) or 0)
+    week_used = (week_spend / weekly_budget_usd * 100) if weekly_budget_usd > 0 else 0
+    month_used = (month_spend / monthly_budget_usd * 100) if monthly_budget_usd > 0 else 0
+    week_budget_detail = (
+        f"of ${weekly_budget_usd:.2f} budget ({week_used:.1f}%)"
+        if weekly_budget_usd > 0
+        else "no budget set"
+    )
+    month_budget_detail = (
+        f"of ${monthly_budget_usd:.2f} budget ({month_used:.1f}%)"
+        if monthly_budget_usd > 0
+        else "no budget set"
+    )
+
+    parts.append('<div class="cards">')
+    parts.append(_card(week_used >= warn_pct, "This Week", f"${week_spend:.2f}", week_budget_detail))
+    parts.append(_card(month_used >= warn_pct, "Month-to-Date", f"${month_spend:.2f}", month_budget_detail))
+    proj_var = float(rate.get("projected_month_end_variable_usd", 0) or 0)
+    proj_total = float(rate.get("projected_month_end_total_usd", 0) or 0)
+    parts.append(
+        _card(
+            False,
+            "Projected Month-End",
+            f"${proj_var:.2f}",
+            f"total incl. fixed: ${proj_total:.2f}",
+        )
+    )
+    fixed_mtd = float(rate.get("fixed_costs_month_usd", fixed_costs_monthly_usd) or 0)
+    parts.append(_card(False, "Fixed Costs", f"${fixed_mtd:.2f}", "monthly fixed costs"))
+    total_mtd = float(rate.get("total_mtd_usd", 0) or 0)
+    total_budget = monthly_budget_usd + fixed_costs_monthly_usd
+    total_detail = (
+        f"of ${total_budget:.2f} total budget" if total_budget > 0 else "no budget set"
+    )
+    parts.append(_card(False, "Total MTD", f"${total_mtd:.2f}", total_detail))
+    actions_mtd = int(rate.get("actions_minutes_mtd", 0) or 0)
+    actions_pct = float(rate.get("actions_minutes_used_pct", 0) or 0)
+    quota = int(rate.get("actions_minutes_quota", actions_minutes_month) or actions_minutes_month)
+    parts.append(
+        _card(
+            actions_pct >= warn_pct,
+            "Actions Minutes",
+            f"{actions_mtd} min",
+            f"of {quota} min ({actions_pct:.1f}%)",
+        )
+    )
+    parts.append("</div>")
+
+    parts.append(
+        '<h2>Budget vs Spend <small>(sources: agg_spend_weekly, agg_spend_monthly)</small></h2>'
+    )
+    factory_site_path = str(Path(__file__).parent.parent / "factory" / "site")
+    if factory_site_path not in sys.path:
+        sys.path.insert(0, factory_site_path)
+    from charts import svg_chart_monthly, svg_chart_weekly
+
+    svg_weekly, table_weekly = svg_chart_weekly(
+        agg_spend_weekly, weekly_budget_usd, as_of_date=as_of
+    )
+    parts.append("<h3>Weekly Spend (Last 12 Weeks)</h3>")
+    parts.append(svg_weekly)
+    parts.append('<details><summary>Table fallback</summary>')
+    parts.append(table_weekly)
+    parts.append("</details>")
+
+    svg_monthly, table_monthly = svg_chart_monthly(
+        agg_spend_monthly, monthly_budget_usd, as_of_date=as_of
+    )
+    parts.append("<h3>Monthly Spend (Last 6 Months)</h3>")
+    parts.append(svg_monthly)
+    parts.append('<details><summary>Table fallback</summary>')
+    parts.append(table_monthly)
+    parts.append("</details>")
+
+    parts.append(
+        "<h2>Per-Issue Economics <small>(sources: agg_spend_by_issue, rpt_issue_target_compliance)</small></h2>"
+    )
+    compliance_map = {}
+    for row in rpt_issue_target_compliance:
+        if not isinstance(row, dict):
+            continue
+        issue = _issue_key(row)
+        if issue is None:
+            continue
+        compliance_map[issue] = row
+
+    if agg_spend_by_issue:
+        top_issues = sorted(
+            agg_spend_by_issue, key=lambda x: float(x.get("spend_usd", 0) or 0), reverse=True
+        )[:15]
+        parts.append("<table>")
+        parts.append(
+            "<thead><tr><th>Issue</th><th>Runs</th><th>Spend</th>"
+            "<th>Under Target</th><th>Under Cap</th><th>Headroom</th></tr></thead><tbody>"
+        )
+        for issue in top_issues:
+            issue_num = _issue_key(issue)
+            runs = issue.get("runs", 0)
+            spend = float(issue.get("spend_usd", 0) or 0)
+            comp = compliance_map.get(issue_num, {})
+            if "under_target" in comp:
+                under_target = "✓" if comp.get("under_target") else "✗"
+            else:
+                under_target = "✓" if spend <= issue_target_usd else "✗"
+            if "under_cap" in comp:
+                under_cap = "✓" if comp.get("under_cap") else "✗"
+            else:
+                under_cap = "✓" if spend <= issue_cap_usd else "✗"
+            headroom = issue.get("cap_headroom_usd")
+            if headroom is None:
+                headroom = max(0.0, issue_cap_usd - spend)
+            else:
+                headroom = float(headroom)
+            parts.append("<tr>")
+            parts.append(f"<td>#{esc(issue_num)}</td>")
+            parts.append(f"<td>{esc(runs)}</td>")
+            parts.append(f"<td>${spend:.4f}</td>")
+            parts.append(f"<td>{under_target}</td>")
+            parts.append(f"<td>{under_cap}</td>")
+            parts.append(f"<td>${headroom:.4f}</td>")
+            parts.append("</tr>")
+        parts.append("</tbody></table>")
+
+        under_target_pct, over_cap_count = _compliance_summary_rows(
+            rpt_issue_target_compliance, issue_target_usd, issue_cap_usd
+        )
+        if under_target_pct is not None:
+            parts.append("<h3>Compliance Summary</h3>")
+            parts.append(
+                f"<p>{under_target_pct:.1f}% of issues under target (${issue_target_usd:.2f})</p>"
+            )
+            parts.append(
+                f"<p>{int(over_cap_count)} issues over cap (${issue_cap_usd:.2f})</p>"
+            )
+    else:
+        parts.append("<p>No per-issue data available.</p>")
+
+    parts.append(
+        "<h2>By Model and Work Type <small>(sources: agg_spend_by_model, fct_agent_runs)</small></h2>"
+    )
+    if agg_spend_by_model:
+        parts.append("<h3>By model (mart aggregate)</h3>")
+        parts.append("<table>")
+        parts.append(
+            "<thead><tr><th>Model</th><th>Spend</th><th>Runs</th><th>Gate pass rate</th>"
+            "</tr></thead><tbody>"
+        )
+        for row in sorted(agg_spend_by_model, key=lambda r: str(r.get("model_id", ""))):
+            model = row.get("model_id") or row.get("model") or "Unknown"
+            spend = float(row.get("spend_usd", 0) or 0)
+            runs = int(row.get("runs", 0) or 0)
+            gate = row.get("gate_pass_rate")
+            gate_s = f"{float(gate) * 100:.1f}%" if isinstance(gate, (int, float)) else "—"
+            parts.append(
+                "<tr><td>{}</td><td>${:.4f}</td><td>{}</td><td>{}</td></tr>".format(
+                    esc(model), spend, esc(runs), esc(gate_s)
+                )
+            )
+        parts.append("</tbody></table>")
+
+    work_groups = {}
+    for row in fct_agent_runs:
+        if not isinstance(row, dict):
+            continue
+        model = row.get("model_id") or row.get("model") or "Unknown"
+        work_type = row.get("work_type") or "unknown"
+        spend = float(row.get("actual_cost_usd", 0) or 0)
+        key = (model, work_type)
+        if key not in work_groups:
+            work_groups[key] = {"spend": 0.0, "runs": 0}
+        work_groups[key]["spend"] += spend
+        work_groups[key]["runs"] += 1
+
+    if work_groups:
+        parts.append("<h3>By model and work type (agent runs)</h3>")
+        parts.append("<table>")
+        parts.append(
+            "<thead><tr><th>Model</th><th>Work Type</th><th>Spend</th>"
+            "<th>Runs</th><th>Avg Cost/Run</th></tr></thead><tbody>"
+        )
+        for model, work_type in sorted(work_groups.keys()):
+            data = work_groups[(model, work_type)]
+            avg = data["spend"] / data["runs"] if data["runs"] else 0.0
+            parts.append(
+                "<tr><td>{}</td><td>{}</td><td>${:.4f}</td><td>{}</td><td>${:.6f}</td></tr>".format(
+                    esc(model),
+                    esc(work_type),
+                    data["spend"],
+                    data["runs"],
+                    avg,
+                )
+            )
+        parts.append("</tbody></table>")
+    elif not agg_spend_by_model:
+        parts.append("<p>No model/work-type data available.</p>")
+
+    parts.append(
+        '<h2>Prediction Accuracy <small>(source: fct_forecast_vs_actual)</small></h2>'
+    )
+    skipped_count = 0
+    valid_rows = []
+    error_pcts = []
+    if fct_forecast_vs_actual:
+        for row in fct_forecast_vs_actual:
+            pred, actual, abs_err = _prediction_fields(row)
+            if pred is None:
+                skipped_count += 1
+                continue
+            valid_rows.append((row, pred, actual, abs_err))
+            if abs_err is not None:
+                error_pcts.append(float(abs_err))
+        if valid_rows:
+            parts.append("<table>")
+            parts.append(
+                "<thead><tr><th>Grain</th><th>Key</th><th>Predicted</th>"
+                "<th>Actual</th><th>|Error %|</th></tr></thead><tbody>"
+            )
+            for row, pred, actual, abs_err in sorted(
+                valid_rows,
+                key=lambda t: (str(t[0].get("grain", "")), str(t[0].get("grain_key", t[0].get("issue_number", "")))),
+            ):
+                grain = row.get("grain") or "issue"
+                key = row.get("grain_key") or row.get("issue_number") or "—"
+                err_s = f"{float(abs_err):.2f}%" if abs_err is not None else "—"
+                parts.append(
+                    "<tr><td>{}</td><td>{}</td><td>${:.4f}</td><td>${:.4f}</td><td>{}</td></tr>".format(
+                        esc(grain),
+                        esc(key),
+                        float(pred),
+                        float(actual or 0),
+                        esc(err_s),
+                    )
+                )
+            parts.append("</tbody></table>")
+
+        if error_pcts:
+            sorted_errs = sorted(error_pcts)
+            median_error = sorted_errs[len(sorted_errs) // 2]
+            worst_error = max(error_pcts)
+            parts.append("<h3>Summary</h3>")
+            parts.append("<table>")
+            parts.append(
+                "<thead><tr><th>Median |Error %|</th><th>Worst |Error %|</th>"
+                "<th>Recalibrate priors</th></tr></thead><tbody><tr>"
+            )
+            parts.append(f"<td>{median_error:.2f}%</td>")
+            parts.append(f"<td>{worst_error:.2f}%</td>")
+            recalibrate = "YES" if median_error > 100.0 else "NO"
+            parts.append(f"<td>{recalibrate}</td></tr></tbody></table>")
+        if skipped_count:
+            parts.append(
+                f"<p>Note: {skipped_count} rows with null predictions were excluded from accuracy statistics.</p>"
+            )
+    else:
+        parts.append("<p>No prediction accuracy data available.</p>")
+
+    parts.append('<h2>Data Freshness <small>(source: fct_agent_runs)</small></h2>')
+    if fct_agent_runs:
+        timestamps = []
+        invalid_records = 0
+        for row in fct_agent_runs:
+            ts = row.get("started_at_utc") or row.get("ended_at_utc") or ""
+            if not row.get("run_id") or not ts:
+                invalid_records += 1
+                continue
+            timestamps.append(ts)
+        if timestamps:
+            latest_run = max(timestamps)
+            utc_s, chicago_s = _format_utc_chicago(latest_run)
+            parts.append("<table>")
+            parts.append(
+                "<thead><tr><th>Latest Run Time (UTC)</th><th>Latest Run Time (America/Chicago)</th>"
+                "<th>Total Records</th><th>Invalid Records Skipped</th></tr></thead><tbody><tr>"
+            )
+            parts.append(
+                f"<td>{utc_s}</td><td>{chicago_s}</td>"
+                f"<td>{len(fct_agent_runs)}</td><td>{invalid_records}</td>"
+            )
+            parts.append("</tr></tbody></table>")
+        else:
+            parts.append("<p>No valid run times found.</p>")
+    else:
+        parts.append("<p>No data freshness information available.</p>")
+
+    return "\n".join(parts)
 
 
 PRIORITY_ORDER = {"high": 2, "low": 1, "none": 0}
@@ -412,17 +970,45 @@ STATUS_LABELS = {
 }
 
 
+def _issues_missing_priority_or_risk(issues):
+    return sum(
+        1
+        for i in issues
+        if i.get("priority") == "none" or i.get("risk") == "unlabeled"
+    )
+
+
+def _unlabeled_notice(issues):
+    unlabeled = _issues_missing_priority_or_risk(issues)
+    if unlabeled == 0:
+        return ""
+    return (
+        '<div class="backlog-unlabeled note">'
+        "<p><strong>Unlabeled issues:</strong> "
+        "{} open issue(s) lack <code>priority:*</code> and/or "
+        "<code>risk:*</code> GitHub labels. "
+        "In the issue sidebar, add labels such as "
+        "<code>priority:high</code>, <code>priority:low</code>, "
+        "<code>risk:high</code>, <code>risk:medium</code>, or "
+        "<code>risk:low</code> so the priority × risk grid reflects triage.</p>"
+        "</div>".format(esc(unlabeled))
+    )
+
+
 def _summary_cards(issues):
     open_count = len(issues)
     high = sum(1 for i in issues if i.get("priority") == "high")
     owner_action = sum(1 for i in issues if i.get("status") == "owner-action")
     selected = sum(1 for i in issues if i.get("status") == "factory:selected")
+    unlabeled = _issues_missing_priority_or_risk(issues)
     cards = [
         ("Open", open_count),
         ("High priority", high),
         ("Owner-action", owner_action),
         ("Selected", selected),
     ]
+    if unlabeled > 0:
+        cards.append(("Unlabeled", unlabeled))
     out = ['<div class="cards">']
     for label, count in cards:
         out.append(
@@ -511,6 +1097,7 @@ def backlog_html(data_dir):
     out = [
         "<h2>Backlog</h2>",
         _summary_cards(issues),
+        _unlabeled_notice(issues),
         "<h2>Open issues by priority and risk</h2>",
         _priority_risk_table(issues),
     ]
@@ -522,15 +1109,347 @@ def backlog_html(data_dir):
     return "\n".join(out)
 
 
-def dbt_html(repo_root):
-    manifest = Path(repo_root) / "factory" / "dbt" / "target" / "manifest.json"
-    if manifest.is_file():
+DBT_LAYERS = ("seed", "staging", "marts")
+DBT_LAYER_DEPTH = {"seed": 0, "staging": 1, "marts": 2, "other": 3}
+
+
+def _dbt_manifest_path(repo_root):
+    return Path(repo_root) / "factory" / "dbt" / "target" / "manifest.json"
+
+
+def _dbt_catalog_path(repo_root):
+    return Path(repo_root) / "factory" / "dbt" / "target" / "catalog.json"
+
+
+def _load_json(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _dbt_layer(node):
+    if node.get("resource_type") == "seed":
+        return "seed"
+    path = (node.get("original_file_path") or node.get("path") or "").lower()
+    fqn = node.get("fqn") or []
+    if "staging" in path or (len(fqn) > 1 and fqn[1] == "staging"):
+        return "staging"
+    if "marts" in path or (len(fqn) > 1 and fqn[1] == "marts"):
+        return "marts"
+    return "other"
+
+
+def _dbt_resource_nodes(manifest):
+    nodes = manifest.get("nodes") or {}
+    out = []
+    for node in nodes.values():
+        if not isinstance(node, dict):
+            continue
+        rt = node.get("resource_type")
+        if rt in ("model", "seed"):
+            out.append(node)
+    out.sort(key=lambda n: (DBT_LAYER_DEPTH.get(_dbt_layer(n), 9), n.get("name") or ""))
+    return out
+
+
+def _dbt_unique_by_name(nodes):
+    by_name = {}
+    for node in nodes:
+        name = node.get("name")
+        if name:
+            by_name[name] = node
+    return by_name
+
+
+def _dbt_description(node):
+    text = (node.get("description") or "").strip()
+    return text if text else "no description"
+
+
+def _dbt_materialization(node):
+    cfg = node.get("config") or {}
+    mat = cfg.get("materialized")
+    if mat:
+        return str(mat)
+    if node.get("resource_type") == "seed":
+        return "seed"
+    return "view"
+
+
+def _dbt_column_count(node):
+    cols = node.get("columns")
+    if isinstance(cols, dict):
+        return len(cols)
+    return 0
+
+
+def _dbt_tests_by_model(manifest):
+    by_model = {}
+    names_by_model = {}
+    for node in (manifest.get("nodes") or {}).values():
+        if not isinstance(node, dict) or node.get("resource_type") != "test":
+            continue
+        deps = (node.get("depends_on") or {}).get("nodes") or []
+        label = node.get("name") or "test"
+        meta = node.get("test_metadata") or {}
+        if meta.get("name"):
+            label = "{}.{}".format(meta.get("name"), meta.get("column_name") or "")
+        for dep in deps:
+            by_model[dep] = by_model.get(dep, 0) + 1
+            names_by_model.setdefault(dep, []).append(label)
+    for dep in names_by_model:
+        names_by_model[dep].sort()
+    return by_model, names_by_model
+
+
+def _dbt_lineage_sets(nodes):
+    by_id = {n.get("unique_id"): n for n in nodes if n.get("unique_id")}
+    ids = set(by_id)
+    upstream = {}
+    downstream = {}
+    for uid, node in by_id.items():
+        parents = [
+            p for p in (node.get("depends_on") or {}).get("nodes") or []
+            if p in ids
+        ]
+        upstream[uid] = parents
+        for p in parents:
+            downstream.setdefault(p, []).append(uid)
+    for uid in downstream:
+        downstream[uid].sort()
+    return upstream, downstream, by_id
+
+
+def _dbt_model_link(name, by_name):
+    if name in by_name:
+        return '<a href="#model-{}">{}</a>'.format(esc(name), esc(name))
+    return esc(name)
+
+
+def _dbt_docs_banner(out_dir):
+    docs = Path(out_dir) / "dbt-docs.html"
+    if docs.is_file():
+        return (
+            '<p><a href="dbt-docs.html">Full interactive lineage</a> '
+            "(dbt static docs)</p>"
+        )
+    return (
+        '<p class="note">Full interactive dbt docs are not available in this build '
+        "(run a live <code>dbt docs generate --static</code> build to produce "
+        "<code>dbt-docs.html</code>).</p>"
+    )
+
+
+def _dbt_model_table(nodes, by_name, test_counts):
+    if not nodes:
+        return '<p class="note">No models found in manifest.</p>'
+    header = [
+        "Name",
+        "Layer",
+        "Materialization",
+        "Description",
+        "Columns",
+        "Tests",
+    ]
+    rows = [header]
+    for node in nodes:
+        uid = node.get("unique_id") or ""
+        name = node.get("name") or ""
+        rows.append(
+            [
+                name,
+                _dbt_layer(node),
+                _dbt_materialization(node),
+                _dbt_description(node),
+                str(_dbt_column_count(node)),
+                str(test_counts.get(uid, 0)),
+            ]
+        )
+    return render_table(rows)
+
+
+def _dbt_model_details(nodes, by_name, upstream, downstream, test_names):
+    by_uid = {n.get("unique_id"): n for n in nodes if n.get("unique_id")}
+    parts = ["<h2>Model details</h2>"]
+    for node in nodes:
+        uid = node.get("unique_id") or ""
+        name = node.get("name") or ""
+        parts.append('<section class="dbt-model" id="model-{}">'.format(esc(name)))
+        parts.append("<h3>{}</h3>".format(esc(name)))
+        parts.append("<p>{}</p>".format(esc(_dbt_description(node))))
+        up_links = []
+        for parent_id in upstream.get(uid) or []:
+            parent = by_uid.get(parent_id)
+            if parent and parent.get("name"):
+                up_links.append(_dbt_model_link(parent["name"], by_name))
+        down_links = []
+        for child_id in downstream.get(uid) or []:
+            child = by_uid.get(child_id)
+            if child and child.get("name"):
+                down_links.append(_dbt_model_link(child["name"], by_name))
+        parts.append(
+            "<p><strong>Upstream:</strong> {}</p>".format(
+                ", ".join(up_links) if up_links else "(none)"
+            )
+        )
+        parts.append(
+            "<p><strong>Downstream:</strong> {}</p>".format(
+                ", ".join(down_links) if down_links else "(none)"
+            )
+        )
+        tests = test_names.get(uid) or []
+        if tests:
+            parts.append("<p><strong>Data tests:</strong></p><ul>")
+            for t in tests:
+                parts.append("<li>{}</li>".format(esc(t)))
+            parts.append("</ul>")
+        else:
+            parts.append("<p><strong>Data tests:</strong> (none listed)</p>")
+        cols = node.get("columns") or {}
+        if isinstance(cols, dict) and cols:
+            parts.append(
+                "<table><thead><tr><th>Column</th><th>Description</th></tr>"
+                "</thead><tbody>"
+            )
+            for col_name in sorted(cols):
+                col = cols[col_name] or {}
+                desc = (col.get("description") or "").strip() or "no description"
+                parts.append(
+                    "<tr><th>{}</th><td>{}</td></tr>".format(
+                        esc(col_name), esc(desc)
+                    )
+                )
+            parts.append("</tbody></table>")
+        else:
+            parts.append('<p class="note">No column metadata in manifest.</p>')
+        parts.append("</section>")
+    return "\n".join(parts)
+
+
+def _dbt_lineage_svg(nodes, upstream, by_name):
+    layers = {layer: [] for layer in DBT_LAYERS}
+    for node in nodes:
+        layer = _dbt_layer(node)
+        if layer in layers:
+            layers[layer].append(node)
+        elif layer == "other":
+            layers["marts"].append(node)
+    for layer in layers:
+        layers[layer].sort(key=lambda n: n.get("name") or "")
+    col_w = 130
+    node_h = 30
+    gap_y = 10
+    gap_x = 50
+    margin = 12
+    max_rows = max((len(layers[l]) for l in DBT_LAYERS), default=1)
+    height = margin * 2 + max_rows * (node_h + gap_y)
+    width = margin * 2 + len(DBT_LAYERS) * col_w + (len(DBT_LAYERS) - 1) * gap_x
+    positions = {}
+    parts = [
+        '<svg class="dbt-lineage" viewBox="0 0 {} {}" role="img" '
+        'aria-label="dbt model lineage by layer">'.format(width, height)
+    ]
+    parts.append(
+        '<defs><marker id="dbt-arrow" markerWidth="8" markerHeight="8" '
+        'refX="7" refY="3" orient="auto" markerUnits="strokeWidth">'
+        '<path d="M0,0 L0,6 L7,3 z" fill="#1f2430"/></marker></defs>'
+    )
+    for col, layer in enumerate(DBT_LAYERS):
+        x = margin + col * (col_w + gap_x)
+        parts.append(
+            '<text x="{}" y="{}" text-anchor="middle" font-size="11" '
+            'font-weight="600" fill="#555d6b">{}</text>'.format(
+                x + col_w / 2, margin, esc(layer)
+            )
+        )
+        for row, node in enumerate(layers[layer]):
+            y = margin + 16 + row * (node_h + gap_y)
+            uid = node.get("unique_id")
+            name = node.get("name") or ""
+            positions[uid] = (x + col_w / 2, y + node_h / 2, x, y)
+            parts.append(
+                '<rect x="{}" y="{}" width="{}" height="{}" rx="5" '
+                'fill="#eef0f4" stroke="#1f2430" stroke-width="1.2"/>'.format(
+                    x, y, col_w, node_h
+                )
+            )
+            label = name if len(name) <= 16 else name[:14] + "…"
+            parts.append(
+                '<text x="{}" y="{}" text-anchor="middle" font-size="10" '
+                'fill="#1f2430">{}</text>'.format(
+                    x + col_w / 2, y + node_h / 2 + 3, esc(label)
+                )
+            )
+    for node in nodes:
+        uid = node.get("unique_id")
+        if uid not in positions:
+            continue
+        cx, cy, _, _ = positions[uid]
+        for parent_id in upstream.get(uid) or []:
+            if parent_id not in positions:
+                continue
+            px, py, plx, ply = positions[parent_id]
+            _, _, px0, py0 = positions[parent_id]
+            _, _, nx0, ny0 = positions[uid]
+            # parent right edge to child left edge
+            x1 = px0 + col_w
+            y1 = py
+            x2 = nx0
+            y2 = cy
+            parts.append(
+                '<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="#1f2430" '
+                'stroke-width="1.5" marker-end="url(#dbt-arrow)"/>'.format(
+                    x1, y1, x2, y2
+                )
+            )
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def dbt_html(repo_root, out_dir):
+    manifest_path = _dbt_manifest_path(repo_root)
+    manifest = _load_json(manifest_path) if manifest_path.is_file() else None
+    if manifest is None:
+        return placeholder_html("dbt")
+
+    catalog_path = _dbt_catalog_path(repo_root)
+    catalog_note = ""
+    if catalog_path.is_file():
+        catalog = _load_json(catalog_path)
+        if catalog is None:
+            catalog_note = '<p class="note">catalog.json was present but could not be parsed.</p>'
+    else:
+        catalog_note = (
+            '<p class="note">No catalog.json (row counts omitted; manifest-only view).</p>'
+        )
+
+    nodes = _dbt_resource_nodes(manifest)
+    if not nodes:
         return (
             "<h2>dbt</h2>\n"
-            '<div class="placeholder"><p>The dbt manifest is present, but the full '
-            'tab lands in issue #173.</p></div>'
+            + _dbt_docs_banner(out_dir)
+            + '<p class="note">Manifest loaded but contains no models or seeds.</p>'
         )
-    return placeholder_html("dbt")
+
+    by_name = _dbt_unique_by_name(nodes)
+    test_counts, test_names = _dbt_tests_by_model(manifest)
+    upstream, downstream, _by_id = _dbt_lineage_sets(nodes)
+
+    parts = [
+        "<h2>dbt</h2>",
+        _dbt_docs_banner(out_dir),
+        "<p>Models and lineage for the factory cost dataset (from manifest.json).</p>",
+    ]
+    if catalog_note:
+        parts.append(catalog_note)
+    parts.append("<h2>Models</h2>")
+    parts.append(_dbt_model_table(nodes, by_name, test_counts))
+    parts.append("<h2>Lineage</h2>")
+    parts.append(_dbt_lineage_svg(nodes, upstream, by_name))
+    parts.append(_dbt_model_details(nodes, by_name, upstream, downstream, test_names))
+    return "\n".join(parts)
 
 
 def git_version(repo_root):
@@ -593,9 +1512,9 @@ def main() -> None:
 
     content_by_page = {
         "index.html": architecture_html(repo_root, models_data, factory_md),
-        "financials.html": financials_html(args.data),
+        "financials.html": financials_html(args.data, repo_root, now),
         "backlog.html": backlog_html(args.data),
-        "dbt.html": dbt_html(repo_root),
+        "dbt.html": dbt_html(repo_root, out_dir),
     }
 
     written = []

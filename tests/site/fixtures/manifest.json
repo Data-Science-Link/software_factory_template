@@ -1,0 +1,405 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json"
+  },
+  "nodes": {
+    "model.factory.agg_spend_by_issue": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model agg_spend_by_issue.",
+      "fqn": [
+        "factory",
+        "marts",
+        "agg_spend_by_issue"
+      ],
+      "name": "agg_spend_by_issue",
+      "original_file_path": "models/marts/agg_spend_by_issue.sql",
+      "package_name": "factory",
+      "path": "marts/agg_spend_by_issue.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.agg_spend_by_issue"
+    },
+    "model.factory.agg_spend_by_model": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model agg_spend_by_model.",
+      "fqn": [
+        "factory",
+        "marts",
+        "agg_spend_by_model"
+      ],
+      "name": "agg_spend_by_model",
+      "original_file_path": "models/marts/agg_spend_by_model.sql",
+      "package_name": "factory",
+      "path": "marts/agg_spend_by_model.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.agg_spend_by_model"
+    },
+    "model.factory.agg_spend_daily": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model agg_spend_daily.",
+      "fqn": [
+        "factory",
+        "marts",
+        "agg_spend_daily"
+      ],
+      "name": "agg_spend_daily",
+      "original_file_path": "models/marts/agg_spend_daily.sql",
+      "package_name": "factory",
+      "path": "marts/agg_spend_daily.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.agg_spend_daily"
+    },
+    "model.factory.agg_spend_monthly": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model agg_spend_monthly.",
+      "fqn": [
+        "factory",
+        "marts",
+        "agg_spend_monthly"
+      ],
+      "name": "agg_spend_monthly",
+      "original_file_path": "models/marts/agg_spend_monthly.sql",
+      "package_name": "factory",
+      "path": "marts/agg_spend_monthly.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.agg_spend_monthly"
+    },
+    "model.factory.agg_spend_weekly": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model agg_spend_weekly.",
+      "fqn": [
+        "factory",
+        "marts",
+        "agg_spend_weekly"
+      ],
+      "name": "agg_spend_weekly",
+      "original_file_path": "models/marts/agg_spend_weekly.sql",
+      "package_name": "factory",
+      "path": "marts/agg_spend_weekly.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.agg_spend_weekly"
+    },
+    "model.factory.fct_agent_runs": {
+      "columns": {
+        "issue": {
+          "description": "Issue number.",
+          "name": "issue"
+        },
+        "run_id": {
+          "description": "Unique identifier for the run.",
+          "name": "run_id"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.stg_agent_runs"
+        ]
+      },
+      "description": "One row per agent run, joined to its prices, with cost variance vs the forecast.",
+      "fqn": [
+        "factory",
+        "marts",
+        "fct_agent_runs"
+      ],
+      "name": "fct_agent_runs",
+      "original_file_path": "models/marts/fct_agent_runs.sql",
+      "package_name": "factory",
+      "path": "fct_agent_runs.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.fct_agent_runs"
+    },
+    "model.factory.fct_forecast_vs_actual": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model fct_forecast_vs_actual.",
+      "fqn": [
+        "factory",
+        "marts",
+        "fct_forecast_vs_actual"
+      ],
+      "name": "fct_forecast_vs_actual",
+      "original_file_path": "models/marts/fct_forecast_vs_actual.sql",
+      "package_name": "factory",
+      "path": "marts/fct_forecast_vs_actual.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.fct_forecast_vs_actual"
+    },
+    "model.factory.rpt_issue_target_compliance": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model rpt_issue_target_compliance.",
+      "fqn": [
+        "factory",
+        "marts",
+        "rpt_issue_target_compliance"
+      ],
+      "name": "rpt_issue_target_compliance",
+      "original_file_path": "models/marts/rpt_issue_target_compliance.sql",
+      "package_name": "factory",
+      "path": "marts/rpt_issue_target_compliance.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.rpt_issue_target_compliance"
+    },
+    "model.factory.rpt_run_rate": {
+      "columns": {
+        "col_0": {
+          "description": "Column 0.",
+          "name": "col_0"
+        },
+        "col_1": {
+          "description": "Column 1.",
+          "name": "col_1"
+        }
+      },
+      "config": {
+        "materialized": "table"
+      },
+      "depends_on": {
+        "nodes": [
+          "model.factory.fct_agent_runs"
+        ]
+      },
+      "description": "Mart model rpt_run_rate.",
+      "fqn": [
+        "factory",
+        "marts",
+        "rpt_run_rate"
+      ],
+      "name": "rpt_run_rate",
+      "original_file_path": "models/marts/rpt_run_rate.sql",
+      "package_name": "factory",
+      "path": "marts/rpt_run_rate.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.rpt_run_rate"
+    },
+    "model.factory.stg_agent_runs": {
+      "columns": {
+        "actual_cost_usd": {
+          "description": "Actual cost in USD.",
+          "name": "actual_cost_usd"
+        },
+        "model_id": {
+          "description": "Normalized model identifier.",
+          "name": "model_id"
+        },
+        "run_id": {
+          "description": "Unique identifier for the run.",
+          "name": "run_id"
+        }
+      },
+      "config": {
+        "materialized": "view"
+      },
+      "depends_on": {
+        "nodes": [
+          "seed.factory.agent_runs"
+        ]
+      },
+      "description": "Deduplicated agent runs from the agent_runs seed, with normalized model and UTC timestamps.",
+      "fqn": [
+        "factory",
+        "staging",
+        "stg_agent_runs"
+      ],
+      "name": "stg_agent_runs",
+      "original_file_path": "models/staging/stg_agent_runs.sql",
+      "package_name": "factory",
+      "path": "stg_agent_runs.sql",
+      "resource_type": "model",
+      "unique_id": "model.factory.stg_agent_runs"
+    },
+    "seed.factory.agent_runs": {
+      "columns": {
+        "issue": {
+          "description": "GitHub issue number.",
+          "name": "issue"
+        },
+        "run_id": {
+          "description": "Unique run identifier.",
+          "name": "run_id"
+        }
+      },
+      "config": {
+        "materialized": "seed"
+      },
+      "depends_on": {
+        "nodes": []
+      },
+      "description": "Raw agent run records collected from factory runs.",
+      "fqn": [
+        "factory",
+        "agent_runs"
+      ],
+      "name": "agent_runs",
+      "original_file_path": "seeds/agent_runs.csv",
+      "package_name": "factory",
+      "path": "agent_runs.csv",
+      "resource_type": "seed",
+      "unique_id": "seed.factory.agent_runs"
+    },
+    "test.factory.not_null_stg_agent_runs_actual_cost_usd_2": {
+      "depends_on": {
+        "nodes": [
+          "model.factory.stg_agent_runs"
+        ]
+      },
+      "name": "not_null_stg_agent_runs_actual_cost_usd",
+      "package_name": "factory",
+      "resource_type": "test",
+      "test_metadata": {
+        "column_name": "actual_cost_usd",
+        "name": "not_null"
+      },
+      "unique_id": "test.factory.not_null_stg_agent_runs_actual_cost_usd_2"
+    },
+    "test.factory.not_null_stg_agent_runs_run_id_1": {
+      "depends_on": {
+        "nodes": [
+          "model.factory.stg_agent_runs"
+        ]
+      },
+      "name": "not_null_stg_agent_runs_run_id",
+      "package_name": "factory",
+      "resource_type": "test",
+      "test_metadata": {
+        "column_name": "run_id",
+        "name": "not_null"
+      },
+      "unique_id": "test.factory.not_null_stg_agent_runs_run_id_1"
+    },
+    "test.factory.unique_stg_agent_runs_run_id_0": {
+      "depends_on": {
+        "nodes": [
+          "model.factory.stg_agent_runs"
+        ]
+      },
+      "name": "unique_stg_agent_runs_run_id",
+      "package_name": "factory",
+      "resource_type": "test",
+      "test_metadata": {
+        "column_name": "run_id",
+        "name": "unique"
+      },
+      "unique_id": "test.factory.unique_stg_agent_runs_run_id_0"
+    }
+  }
+}

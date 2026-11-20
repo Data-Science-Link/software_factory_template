@@ -282,6 +282,23 @@ wrap "$work/esc.md" "$work/out-esc.txt"
 specrun esc "$work/out-esc.txt"
 if grep -q 'escaped quote' "$work/esc/spec-comment.md"; then ok "build: factory-spec-check.py failure (escaped quote) -> refused"
 else bad "build: spec-check failure"; fi
+sed 's/^title: .*hello.*/title: Site data: collect run records for the factory site/' tests/oc-spec/good-spec.md >"$work/colon.md"
+wrap "$work/colon.md" "$work/out-colon.txt"
+specrun colon "$work/out-colon.txt"
+if [ "$(head -n 1 "$work/colon/spec-comment.md")" = '<!-- factory-spec-draft v1 -->' ] \
+  && ! grep -q 'invalid YAML front matter' "$work/colon/spec-comment.md" \
+  && ! grep -q 'factory-predict-cost.py refused' "$work/colon/spec-comment.md"; then
+  ok "build: unquoted colon in title -> draft still posted (#189)"
+else bad "build: unquoted colon in title"; head -12 "$work/colon/spec-comment.md"
+fi
+pp189="$(cd "$repo" && OC_INSTRUCTION='/oc spec' OC_ISSUE_NUMBER=189 OC_ARTIFACT_DIR="$work/prompt189" bash scripts/opencode-spec-run.sh --print-prompt)"
+if grep -qF 'Quote any value that contains a colon' <<<"$pp189"; then
+  ok "prompt: quote front-matter values with colons (#189)"
+else bad "prompt: colon quoting rule (#189)"; fi
+pp106="$(cd "$repo" && OC_INSTRUCTION='/oc spec' OC_ISSUE_NUMBER=106 OC_ARTIFACT_DIR="$work/prompt106" bash scripts/opencode-spec-run.sh --print-prompt)"
+if grep -qF 'Bad inputs and edge cases' <<<"$pp106"; then
+  ok "prompt: Bad inputs and edge cases required for normal/high (#106)"
+else bad "prompt: bad inputs section (#106)"; fi
 specrun cost "$work/out-good.txt" 1.5000
 if grep -q 'above the \$1.00 cap; not posted as a draft' "$work/cost/spec-comment.md"; then ok "build: spec run that cost more than \$1 -> no draft"
 else bad "build: over-cap run"; head -6 "$work/cost/spec-comment.md"; fi

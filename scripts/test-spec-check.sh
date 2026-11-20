@@ -183,6 +183,42 @@ else
   failed=$((failed + 1))
 fi
 
+# Grandfather: approved specs under factory/specs/ without the section still pass (#106).
+legacy="factory/specs/issue-33.md"
+if [ -f "$legacy" ]; then
+  total=$((total + 1))
+  set +e
+  legacy_out="$(python3 scripts/factory-spec-check.py "$legacy" 2>&1)"
+  legacy_rc=$?
+  set -e
+  if [ "$legacy_rc" -eq 0 ] && printf '%s\n' "$legacy_out" | grep -q "^OK $legacy\$"; then
+    echo "PASS  legacy approved factory/specs (no Bad inputs section grandfathered)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  legacy approved factory/specs (expected OK, got $legacy_rc)"
+    echo "$legacy_out" | head -5
+    failed=$((failed + 1))
+  fi
+fi
+
+# Unquoted colon in title: auto-normalized (#189).
+colon_fixture="$fixtures_dir/pass-title-unquoted-colon.md"
+if [ -f "$colon_fixture" ]; then
+  total=$((total + 1))
+  set +e
+  colon_out="$(python3 scripts/factory-spec-check.py "$colon_fixture" 2>&1)"
+  colon_rc=$?
+  set -e
+  if [ "$colon_rc" -eq 0 ]; then
+    echo "PASS  pass-title-unquoted-colon (YAML title with colon)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  pass-title-unquoted-colon (expected exit 0, got $colon_rc)"
+    echo "$colon_out" | head -5
+    failed=$((failed + 1))
+  fi
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed, $total total"
 if [ "$failed" -gt 0 ]; then
