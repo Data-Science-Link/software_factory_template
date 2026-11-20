@@ -1,0 +1,42 @@
+# Product-repo starter catalog (golden example). Pin a template tag for full routing.
+price_table_version: "2099-01-01"
+
+models:
+  - id: example/Product-Default
+    provider: deepinfra
+    price_in_per_mtok: 0.06
+    price_cached_per_mtok: 0.015
+    price_out_per_mtok: 0.18
+    status: default
+    notes: Replace when this repo diverges from the pinned template.
+
+routing_rules:
+  - rule: 9
+    when:
+      complexity: simple
+    model: example/Product-Default
+
+checks:
+  - rule: 6
+    when:
+      predicted_cost_usd_gt: 1.0
+    action: do_not_run_split_issue
+
+token_priors:
+  simple:
+    tokens_in: 300000
+    tokens_cached_fraction: 0.80
+    tokens_out: 20000
+  standard:
+    tokens_in: 1000000
+    tokens_cached_fraction: 0.80
+    tokens_out: 50000
+  complex:
+    tokens_in: 800000
+    tokens_cached_fraction: 0.70
+    tokens_out: 50000
+
+budget:
+  deepinfra_monthly_limit_usd: 10
+  issue_cap_usd: 1.00
+  issue_target_usd: 0.15
