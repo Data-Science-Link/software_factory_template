@@ -40,13 +40,25 @@ VERIFY_FAIL_RE = re.compile(r"Result:\s*FAIL", re.I)
 VERIFY_NOT_RUN_RE = re.compile(r"Verification run by the harness:\s*not run", re.I)
 
 
-def die(msg: str) -> None:
-    print(f"critic-context: FAIL — {msg}", file=sys.stderr)
-    sys.exit(1)
+def die(msg: str, code: int = 1) -> None:
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(code)
 
 
 def gh(*args: str) -> str:
-    return subprocess.run(["gh", "api", *args], check=True, capture_output=True, text=True).stdout
+    try:
+        proc = subprocess.run(
+            ["gh", "api", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()[:400]
+        die(f"gh api failed: {detail or exc}")
+    except FileNotFoundError:
+        die("`gh` is not installed (required for live --repo/--pr mode)")
+    return proc.stdout
 
 
 def clean(s: str) -> str:
@@ -63,7 +75,7 @@ def clip(s: str, limit: int) -> str:
 
 def redact_text(s: str) -> str:
     """Defang token-like substrings; never echo known env key values."""
-    out = TOKEN_RE.sub(b"[redacted-token]", s.encode("utf-8"))
+    out = TOKEN_RE.sub(b"[redacted-token]", s.encode("utf-8", errors="replace"))
     for key in ("DEEPINFRA_API_KEY", "GH_TOKEN", "GITHUB_TOKEN"):
         val = os.environ.get(key)
         if val and len(val) >= 8:
@@ -84,7 +96,11 @@ def verify_status(evidence: str) -> str:
 def read_file(path: Path | None, label: str) -> str:
     if path is None or not path.is_file():
         return ""
-    return redact_text(path.read_text(encoding="utf-8", errors="replace"))
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        die(f"cannot read {label} file {path}: {exc}")
+    return redact_text(raw.decode("utf-8", errors="replace"))
 
 
 def scan(paths: list[Path]) -> None:
@@ -97,22 +113,41 @@ def scan(paths: list[Path]) -> None:
         die("artifact scan failed on critic outputs (possible secret)")
 
 
+def load_fixture_json(path: str) -> dict:
+    p = Path(path)
+    try:
+        raw = p.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        die(f"cannot read --from-json {p}: {exc}")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        die(f"--from-json is not valid JSON: {exc}")
+    if not isinstance(data, dict):
+        die("--from-json root must be a JSON object")
+    return data
+
+
 def load_inputs(args: argparse.Namespace) -> tuple[dict, str, str, str, str]:
     """Return pr_facts, issue_number, diff, spec, evidence."""
     if args.from_json:
-        data = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
+        data = load_fixture_json(args.from_json)
         pr = data.get("pr") or {}
+        if pr is not None and not isinstance(pr, dict):
+            die("--from-json field 'pr' must be an object when present")
         issue = str(data.get("issue_number") or "")
-        diff = redact_text(data.get("diff") or "")
-        spec = redact_text(data.get("spec") or "")
-        evidence = redact_text(data.get("evidence") or "")
+        diff = redact_text(str(data.get("diff") or ""))
+        spec = redact_text(str(data.get("spec") or ""))
+        evidence = redact_text(str(data.get("evidence") or ""))
         facts = {
             "pr_number": str(pr.get("number") or data.get("pr_number") or ""),
-            "pr_title": clean(pr.get("title") or data.get("pr_title") or ""),
+            "pr_title": clean(str(pr.get("title") or data.get("pr_title") or "")),
             "head_ref": (pr.get("head") or {}).get("ref") or data.get("head_ref") or "",
             "head_sha": (pr.get("head") or {}).get("sha") or data.get("head_sha") or "",
             "base_ref": (pr.get("base") or {}).get("ref") or data.get("base_ref") or "main",
         }
+        if args.patch:
+            diff = read_file(Path(args.patch), "patch")
         return facts, issue, diff, spec, evidence
 
     if not args.repo or not re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", args.repo):
@@ -120,7 +155,13 @@ def load_inputs(args: argparse.Namespace) -> tuple[dict, str, str, str, str]:
     if not (args.pr and str(args.pr).isdigit()):
         die("need --pr <digits> or --from-json")
 
-    pr = json.loads(gh(f"repos/{args.repo}/pulls/{args.pr}"))
+    try:
+        pr = json.loads(gh(f"repos/{args.repo}/pulls/{args.pr}"))
+    except json.JSONDecodeError as exc:
+        die(f"GitHub PR response was not valid JSON: {exc}")
+    if not isinstance(pr, dict):
+        die("GitHub PR response must be a JSON object")
+
     head, base = pr.get("head") or {}, pr.get("base") or {}
     ref = head.get("ref") or ""
     m = re.match(r"^oc/issue-([1-9][0-9]{0,8})-", ref)
@@ -145,7 +186,9 @@ def load_inputs(args: argparse.Namespace) -> tuple[dict, str, str, str, str]:
                 subprocess.run(
                     ["gh", "api", f"repos/{args.repo}/pulls/{args.pr}",
                      "-H", "Accept: application/vnd.github.v3.diff"],
-                    check=True, capture_output=True, text=True,
+                    check=True,
+                    capture_output=True,
+                    text=True,
                 ).stdout
             )
         except subprocess.CalledProcessError:
@@ -210,6 +253,9 @@ def main() -> int:
     ap.add_argument("--max-bytes", type=int, default=80000)
     args = ap.parse_args()
 
+    if args.max_bytes < 500:
+        die("--max-bytes must be at least 500")
+
     if args.from_json:
         facts, issue, diff, spec, evidence = load_inputs(args)
     else:
@@ -223,11 +269,17 @@ def main() -> int:
     prompt_path = args.prompt if args.prompt.is_absolute() else ROOT / args.prompt
     if not prompt_path.is_file():
         die(f"prompt not found: {prompt_path}")
-    prompt_body = prompt_path.read_text(encoding="utf-8")
+    try:
+        prompt_body = prompt_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        die(f"cannot read prompt {prompt_path}: {exc}")
 
     ctx = build_bundle(facts, issue, diff, spec, evidence, args.max_bytes)
     out = Path(args.out_dir)
-    out.mkdir(parents=True, exist_ok=True)
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        die(f"cannot create --out-dir {out}: {exc}")
 
     ctx_path = out / "critic-context.md"
     input_path = out / "critic-input.md"

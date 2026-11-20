@@ -202,5 +202,53 @@ else
   fail "factory-site-smoke.py --build succeeds"
 fi
 
+# ---- work-type CSV export hook and row data attributes ----
+if "$PYTHON" - "$out_mixed/financials.html" <<'PY'
+import re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+need = (
+    'id="financials-export-work-type-csv"',
+    "factory-spend-by-work-type.csv",
+    'data-work-type="coding"',
+    'data-total-cost="0.400000"',
+    "exportWorkTypeCsv",
+)
+for n in need:
+    if n not in html:
+        raise SystemExit("missing %r" % n)
+if 'id="spend-by-work-type-table"' not in html:
+    raise SystemExit("missing work type table")
+PY
+then
+  pass "Financials work-type section exposes CSV export and data attributes"
+else
+  fail "Financials work-type section exposes CSV export and data attributes"
+fi
+
+# ---- backlog interactive controls (full site render) ----
+out_full="$tmpdir/out-full"
+backlog_data="$tmpdir/backlog-data"
+mkdir -p "$backlog_data/marts"
+cp "$SAMPLE"/*.json "$backlog_data/marts/"
+if [ -f tests/site/fixtures/issues.json ]; then
+  cp tests/site/fixtures/issues.json "$backlog_data/backlog.json"
+  "$PYTHON" scripts/factory-site.py \
+    --repo-root "$ROOT" \
+    --data "$backlog_data" \
+    --out "$out_full" \
+    --now "$PINNED_NOW" >/dev/null
+  if grep -q 'id="backlog-filter-reset"' "$out_full/backlog.html" \
+     && grep -q 'aria-live="polite"' "$out_full/backlog.html" \
+     && grep -q 'id="backlog-filter-count"' "$out_full/backlog.html" \
+     && grep -q "issues</p>" "$out_full/backlog.html" \
+     && grep -q "resetBacklogFilters" "$out_full/backlog.html"; then
+    pass "Backlog tab exposes reset filters and live issue count"
+  else
+    fail "Backlog tab exposes reset filters and live issue count"
+  fi
+else
+  fail "Backlog tab exposes reset filters and live issue count"
+fi
+
 echo "Results: ${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]

@@ -4,8 +4,16 @@ Factory workers push to prefixed branches such as `oc/issue-<N>-<run>` and `curs
 
 ## Tooling
 
+Live report (requires `gh` and network):
+
 ```bash
 python3 scripts/factory-branch-cleanup.py --repo OWNER/REPO
+```
+
+Equivalent via the grouped CLI:
+
+```bash
+python3 scripts/factory-cli.py branch-cleanup --repo OWNER/REPO
 ```
 
 Use fixture mode in CI and offline tests:
@@ -22,8 +30,11 @@ python3 scripts/factory-branch-cleanup.py \
 | Flag | Purpose |
 |---|---|
 | `--prefixes` | Comma-separated factory prefixes (default `oc/,cursor/`) |
-| `--older-than-days` | Stale threshold for orphan and closed-unmerged branches (default `7`) |
-| `--json` | Machine-readable report (`summary`, `candidates`, `kept`) |
+| `--older-than-days` | Stale threshold for orphan and closed-unmerged branches (default `7`; must be non-negative) |
+| `--json` | Machine-readable report (`summary`, `candidates`, `kept`); keys sorted for deterministic output |
+| `--now` | Fixed UTC timestamp for offline age tests |
+
+Malformed or non-UTF-8 JSON fixtures exit with a stderr message (no Python traceback). Duplicate branch names in a fixture keep the **last** occurrence and log a stderr warning.
 
 ## What never gets flagged
 
@@ -38,7 +49,7 @@ python3 scripts/factory-branch-cleanup.py \
 |---|---|---|
 | `merged_pr` | PR merged; branch likely redundant | Delete when CI is done |
 | `closed_unmerged_old` | PR closed without merge; last commit older than threshold | Delete after confirming abandon |
-| `orphan_old` | Factory prefix, no PR, stale last commit | Delete after confirming no local work |
+| `orphan_old` | Factory prefix, no PR, stale last commit | Delete after confirming abandon |
 | `keep` | Active, protected, recent, or non-factory | Leave alone |
 
 ## Safe workflow

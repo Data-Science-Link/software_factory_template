@@ -110,7 +110,7 @@ env -u DEEPINFRA_API_KEY "$py" scripts/factory-critic-run.py \
   >"$work/last.log" 2>&1
 rc=$?
 set -e
-if [ "$rc" -ne 0 ] && grep -qi 'DEEPINFRA_API_KEY' "$work/last.log"; then
+if [ "$rc" -ne 0 ] && grep -q '^ERROR:.*DEEPINFRA_API_KEY' "$work/last.log"; then
   ok "missing DEEPINFRA_API_KEY refused"
 else
   bad "missing API key (rc=$rc)"
@@ -152,7 +152,7 @@ rc=$?
 set -e
 kill "$stub_pid" 2>/dev/null || true
 wait "$stub_pid" 2>/dev/null || true
-if [ "$rc" -ne 0 ] && grep -qi 'API HTTP' "$work/last.log" \
+if [ "$rc" -ne 0 ] && grep -q '^ERROR:.*API HTTP' "$work/last.log" \
   && [ ! -f "$work/apierr/critic-review.md" ]; then
   ok "API error exits non-zero without outputs"
 else
@@ -169,6 +169,63 @@ if ! grep -rqF "$sentinel" "$work/leak" 2>/dev/null; then
   ok "DEEPINFRA_API_KEY not echoed in critic outputs"
 else
   bad "API key leak in outputs"
+fi
+
+printf 'not-json' >"$work/bad-fixture.json"
+set +e
+"$py" scripts/factory-critic-run.py \
+  --input "$ctx_out/critic-input.md" --coder-model "${MODELS[0]}" --out-dir "$work/badfix" \
+  --fixture-response "$work/bad-fixture.json" >"$work/last.log" 2>&1
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR:.*valid JSON' "$work/last.log"; then
+  ok "malformed fixture-response rejected"
+else
+  bad "malformed fixture-response (rc=$rc)"
+fi
+
+cat >"$work/bad-models.yaml" <<'YAML'
+price_table_version: test
+models: not-a-list
+YAML
+set +e
+"$py" scripts/factory-critic-run.py --print-model --coder-model "${MODELS[0]}" \
+  --input "$ctx_out/critic-input.md" --out-dir "$work/x" --models "$work/bad-models.yaml" \
+  >"$work/last.log" 2>&1
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -q '^ERROR:' "$work/last.log"; then
+  ok "invalid models.yaml rejected"
+else
+  bad "invalid models.yaml (rc=$rc)"
+fi
+
+"$py" scripts/factory-critic-run.py --dry-run \
+  --input "$ctx_out/critic-input.md" --coder-model "${MODELS[0]}" --out-dir "$work/det1" \
+  --started-at "2026-11-20T12:10:00Z" --ended-at "2026-11-20T12:10:02Z" \
+  >"$work/last.log" 2>&1
+"$py" scripts/factory-critic-run.py --dry-run \
+  --input "$ctx_out/critic-input.md" --coder-model "${MODELS[0]}" --out-dir "$work/det2" \
+  --started-at "2026-11-20T12:10:00Z" --ended-at "2026-11-20T12:10:02Z" \
+  >"$work/last.log" 2>&1
+if cmp -s "$work/det1/critic-run-record.json" "$work/det2/critic-run-record.json"; then
+  ok "critic-run-record.json deterministic (sort_keys)"
+else
+  bad "record JSON determinism"
+fi
+
+set +e
+DEEPINFRA_PREFIX_MODEL="deepinfra/${MODELS[0]}"
+out="$("$py" scripts/factory-critic-run.py --print-model \
+  --coder-model "$DEEPINFRA_PREFIX_MODEL" --input "$ctx_out/critic-input.md" --out-dir "$work/pref" \
+  2>"$work/last.log")"
+rc=$?
+set -e
+rev="$(printf '%s\n' "$out" | sed -n 's/^reviewer=//p')"
+if [ "$rc" -eq 0 ] && [ -n "$rev" ] && [ "$rev" != "${MODELS[0]}" ]; then
+  ok "deepinfra/ coder prefix normalised for reviewer pick"
+else
+  bad "deepinfra/ prefix routing (reviewer=$rev rc=$rc)"
 fi
 
 echo

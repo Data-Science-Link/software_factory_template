@@ -90,6 +90,42 @@ In **GitHub → Settings → General**:
 
 Re-run `python3 scripts/factory-prepublic-check.py --strict` if anything changed in the tree during paste work.
 
+### Pre-public hygiene scan (`factory-prepublic-check.py`)
+
+Before flipping visibility, run the scanner on the commit you plan to publish (read-only; does not modify the tree):
+
+```bash
+python3 scripts/factory-prepublic-check.py              # Markdown summary (exit 0 even with findings)
+python3 scripts/factory-prepublic-check.py --strict    # exit 1 when any finding exists
+python3 scripts/factory-prepublic-check.py --json      # machine-readable summary for CI / owner pack
+```
+
+**What `--strict` checks (tracked files only, minus default path allowlists):**
+
+| Rule kind | Detects |
+| --- | --- |
+| `private_email` | Email addresses that are not GitHub `users.noreply.github.com`, `example.com` / `example.org` / `example.invalid`, or other documented placeholders (`test@test`, `you@example.com`, etc.). `LICENSE` copyright lines are skipped via the `LICENSE` path allowlist. |
+| `token_pattern` | GitHub tokens (`ghp_`, `ghs_`, `github_pat_`), bearer/JWT-like strings, OpenAI-style `sk-…`, and AWS `AKIA…` access-key prefixes. Details are redacted in output. |
+| `private_key` | PEM blocks (`-----BEGIN … PRIVATE KEY-----`). |
+| `home_path` | Absolute local paths under `/Users/<name>/…` or `/home/<user>/…`, excluding CI-safe roots (`/home/runner`, `/home/ubuntu`, `/home/ci`) and generic `/home/user`. |
+| `private_repo_link` | `https://github.com/…` links whose repo name matches configured private names (default includes historical template names; override with `--config` or `--private-repo-name`). The checkout’s `origin` owner/repo is always allowed. |
+| `missing_file` | Absent root `LICENSE` or `SECURITY.md`. |
+
+Default **path allowlists** (not scanned): `LICENSE*`, `CHANGELOG.md`, `.factory/DECISIONS.md`, `factory/runs/**`, `tests/**`, `scripts/test-*.sh`. Add globs with `--allow-path` or JSON config `allow_paths`.
+
+**Interpreting `--json` output:**
+
+| Field | Meaning |
+| --- | --- |
+| `finding_count` | Total findings (use with `--strict`). |
+| `files_scanned` | Tracked, non-allowlisted text files examined. |
+| `allowlisted_count` | Tracked paths skipped by allowlist globs. |
+| `findings_by_kind` | Count per rule kind (same keys as the table above when non-zero). |
+| `findings` | Array of `{kind, path, detail, line?}` records for remediation. |
+| `self_repo` | `owner/repo` parsed from `origin` (or `--self-repo`). |
+
+Offline regression tests: `bash scripts/test-factory-prepublic-check.sh`.
+
 ---
 
 ## 5. Enable GitHub Pages & verify the Factory Site (1 min)

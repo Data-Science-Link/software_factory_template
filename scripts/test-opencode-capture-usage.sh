@@ -74,4 +74,33 @@ fi
 rm -f "$empty_out"
 echo "PASS  empty-output"
 
+garbled="$tmpdir/stats-garbled.txt"
+printf 'not a stats table\n乱码 row\n' >"$garbled"
+garbled_out="$tmpdir/garbled.out"
+OPENCODE_STATS_FIXTURE="$garbled" bash "$capture" "$garbled_out" >/dev/null
+if grep -Fq 'not available' "$garbled_out" && ! grep -q 'Input tokens:' "$garbled_out"; then
+  echo "PASS  garbled-fixture-falls-back-to-not-available"
+else
+  echo "FAIL garbled-fixture" >&2
+  cat "$garbled_out" >&2
+  exit 1
+fi
+rm -f "$garbled_out"
+
+unicode_fix="$tmpdir/stats-unicode.txt"
+sed 's/DeepSeek-V4-Flash-0731/DeepSeek-V4-Flash-0731-🔥/' "$fixtures/stats-normal.txt" >"$unicode_fix"
+run_case "unicode-model-suffix" "$unicode_fix" \
+  "Model: deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731-🔥" \
+  "OpenCode-reported cost: \$0.0028"
+
+missing_out="$tmpdir/missing-fixture.out"
+if OPENCODE_STATS_FIXTURE="$tmpdir/no-such-stats.txt" bash "$capture" "$missing_out" >/dev/null \
+  && grep -Fq 'not available' "$missing_out"; then
+  echo "PASS  missing-fixture-file"
+  rm -f "$missing_out"
+else
+  echo "FAIL missing-fixture-file" >&2
+  exit 1
+fi
+
 echo "All opencode capture usage tests passed."

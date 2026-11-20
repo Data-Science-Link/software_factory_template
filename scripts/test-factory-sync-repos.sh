@@ -72,13 +72,61 @@ jobs:
     with:
       factory_ref: v0.1.0
 '
+FLEET_DEMO='acme-corp/demo-app'
+FLEET_OTHER='acme-corp/other-app'
 export FAKE_RUN_YML_B64="$(printf '%s' "$RUN_YML" | base64 -w0)"
 export FAKE_PR_YML_B64="$(printf '%s' 'name: pr-check' | base64 -w0)"
 export FAKE_CLONE_SRC="$work/repo"
 printf '%s\n' "$RUN_YML" >"$work/repo/.github/workflows/opencode-run.yml"
 
 repos_file="$work/adopters.txt"
-printf '%s\n' 'org/demo' >"$repos_file"
+cat >"$repos_file" <<EOF
+# fleet adopters
+${FLEET_DEMO}
+
+${FLEET_DEMO}
+  # duplicate above
+
+${FLEET_OTHER}
+EOF
+
+# --- invalid slug rejected (exit 2, no traceback) ---
+bad_repos="$work/bad-adopters.txt"
+printf 'not-a-valid-slug\n' >"$bad_repos"
+set +e
+err="$(python3 "$root/scripts/factory-sync-repos.py" --repos-file "$bad_repos" --tag v0.2.0 2>&1)"
+rc=$?
+set -e
+if [ "$rc" -eq 2 ] && grep -q 'invalid repo slug' <<<"$err" && ! grep -qi 'traceback' <<<"$err"; then
+  ok "invalid adopter slug exits 2 without traceback"
+else
+  bad "invalid adopter slug (rc=$rc)"
+  echo "$err"
+fi
+
+# --- parse: dedupe preserves one org/demo ---
+set +e
+out="$(REPOS_FILE="$repos_file" python3 <<PY
+import importlib.util
+import os
+from pathlib import Path
+root = ${root@Q}
+spec = importlib.util.spec_from_file_location("sync", f"{root}/scripts/factory-sync-repos.py")
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+repos = mod.parse_repos_file(Path(os.environ["REPOS_FILE"]))
+assert repos == ["acme-corp/demo-app", "acme-corp/other-app"], repos
+print("parse ok")
+PY
+)"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && grep -q 'parse ok' <<<"$out"; then
+  ok "repos-file comments and duplicates deduped"
+else
+  bad "repos-file parse"
+  echo "$out"
+fi
 
 # --- bump via dry-run ---
 set +e
@@ -93,11 +141,39 @@ else
   echo "$out" >>"$work/out"
 fi
 
+# --- --check --json drift report (no mutations) ---
+set +e
+out="$(python3 "$root/scripts/factory-sync-repos.py" --repos-file "$repos_file" --tag v0.2.0 --check --json 2>&1)"
+rc=$?
+set -e
+if [ "$rc" -eq 0 ] && echo "$out" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['summary']['outdated'] >= 1
+assert d['summary']['total'] == 2
+assert d['repos'] == ['acme-corp/demo-app', 'acme-corp/other-app']
+demo = next(a for a in d['adopters'] if a['repo']=='acme-corp/demo-app')
+assert demo['status'] == 'outdated'
+"; then
+  ok "--check --json reports outdated adopters"
+else
+  bad "--check --json"
+  echo "$out"
+fi
+
+out2="$(python3 "$root/scripts/factory-sync-repos.py" --repos-file "$repos_file" --tag v0.2.0 --check --json 2>&1)"
+if [ "$out" = "$out2" ]; then
+  ok "--check --json is deterministic"
+else
+  bad "--check --json deterministic"
+fi
+
 # --- unit bump in python ---
 out="$(
-python3 <<'PY'
+python3 <<PY
 import importlib.util
-spec = importlib.util.spec_from_file_location("sync", "scripts/factory-sync-repos.py")
+root = ${root@Q}
+spec = importlib.util.spec_from_file_location("sync", f"{root}/scripts/factory-sync-repos.py")
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 text = """uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-pr-check.yml@v0.1.0
@@ -113,6 +189,78 @@ if grep -q 'bump ok' <<<"$out"; then
   ok "bump_content"
 else
   bad "bump_content"
+fi
+
+# --- lifecycle tempdir: init/migrate local repo then --check --json (offline) ---
+lifecycle="$work/lifecycle-demo"
+mkdir -p "$lifecycle"
+TAG_LC="v0.1.0"
+ACME_TEMPLATE="acme-corp/software_factory_template"
+PYTHON="${FACTORY_PYTHON:-python3}"
+if "$PYTHON" "$root/scripts/factory-init-repo.py" \
+  --target "$lifecycle" \
+  --tag "$TAG_LC" \
+  --template-dir "$root" \
+  --template-repo "$ACME_TEMPLATE" \
+  --owner acme-corp \
+  --repo-name demo-app >/dev/null 2>&1 \
+  && printf '\n# lifecycle marker\n' >>"$lifecycle/AGENTS.md" \
+  && "$PYTHON" "$root/scripts/factory-init-repo.py" \
+    --target "$lifecycle" \
+    --tag "$TAG_LC" \
+    --template-dir "$root" \
+    --template-repo "$ACME_TEMPLATE" \
+    --owner acme-corp \
+    --repo-name demo-app >/dev/null 2>&1 \
+  && grep -q 'lifecycle marker' "$lifecycle/AGENTS.md"; then
+  ok "init idempotent in lifecycle tempdir"
+else
+  bad "init idempotent in lifecycle tempdir"
+fi
+mkdir -p "$lifecycle/scripts"
+cp "$root/scripts/pr-check.sh" "$lifecycle/scripts/pr-check.sh"
+cp "$root/scripts/test-all.sh" "$lifecycle/scripts/test-all.sh"
+printf '\n# migrate custom\n' >>"$lifecycle/scripts/test-all.sh"
+if "$PYTHON" "$root/scripts/factory-migrate-adopter.py" \
+  --repo-dir "$lifecycle" \
+  --tag "$TAG_LC" \
+  --template-dir "$root" \
+  --template-repo "$ACME_TEMPLATE" \
+  --owner acme-corp \
+  --apply >/dev/null 2>&1 \
+  && "$PYTHON" "$root/scripts/factory-migrate-adopter.py" \
+    --repo-dir "$lifecycle" \
+    --tag "$TAG_LC" \
+    --template-dir "$root" \
+    --template-repo "$ACME_TEMPLATE" \
+    --owner acme-corp \
+    --apply >/dev/null 2>&1 \
+  && grep -q 'migrate custom' "$lifecycle/scripts/test-all.sh"; then
+  ok "migrate idempotent in lifecycle tempdir"
+else
+  bad "migrate idempotent in lifecycle tempdir"
+fi
+mkdir -p "$lifecycle/.github/workflows"
+printf '%s\n' "$RUN_YML" >"$lifecycle/.github/workflows/opencode-run.yml"
+lc_repos="$work/lifecycle-adopters.txt"
+printf '%s\n' "$FLEET_DEMO" >"$lc_repos"
+lc_json="$(
+  python3 "$root/scripts/factory-sync-repos.py" \
+    --repos-file "$lc_repos" \
+    --tag v0.2.0 \
+    --check \
+    --json 2>&1
+)"
+if echo "$lc_json" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['summary']['total'] == 1
+assert d['adopters'][0]['repo'] == 'acme-corp/demo-app'
+"; then
+  ok "lifecycle chain ends with --check --json"
+else
+  bad "lifecycle chain ends with --check --json"
+  echo "$lc_json"
 fi
 
 echo ""

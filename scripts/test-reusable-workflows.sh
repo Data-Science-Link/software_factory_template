@@ -80,15 +80,57 @@ mapfile -t pairs < <(
   done
 )
 
+caller_pin_ok() {
+  local cf="$1"
+  local name="$2"
+  local pin_out pin_rc
+  pin_out="$(
+    CALLER_FILE="$cf" "$PYTHON" <<'PY'
+import os, re, sys
+path = os.environ["CALLER_FILE"]
+text = open(path, encoding="utf-8").read()
+pin_re = re.compile(
+    r"reusable-[-\w]+\.ya?ml@(v\d+\.\d+\.\d+|[0-9a-f]{40}|\{\{TAG\}\})",
+    re.IGNORECASE,
+)
+uses = re.findall(r"uses:\s*[^\n]+", text)
+if not uses:
+    print("no uses:")
+    sys.exit(1)
+for line in uses:
+    if "@main" in line.lower():
+        print(f"floating pin: {line.strip()}")
+        sys.exit(1)
+    if not pin_re.search(line):
+        print(f"bad pin: {line.strip()}")
+        sys.exit(1)
+print("ok")
+PY
+  )"
+  pin_rc=$?
+  if [ "$pin_rc" -eq 0 ]; then
+    ok "caller $name reusable pin (semver or SHA, not @main)"
+    return 0
+  fi
+  bad "caller $name reusable pin"
+  echo "$pin_out" | sed 's/^/       /'
+  return 1
+}
+
 for pair in "${pairs[@]}"; do
   caller="${pair%%	*}"
   reusable="${pair##*	}"
   cf="$docs/callers/${caller}.yml"
   [ -f "$cf" ] || { bad "missing caller $caller.yml"; continue; }
-  if ! grep -q "software_factory_template/.github/workflows/${reusable}@v" "$cf"; then
+  if grep -qi '@main' "$cf"; then
+    bad "caller $caller uses floating @main"
+    continue
+  fi
+  if ! grep -q "software_factory_template/.github/workflows/${reusable}@" "$cf"; then
     bad "caller $caller does not reference $reusable"
     continue
   fi
+  caller_pin_ok "$cf" "$caller" || true
   if ! grep -q 'secrets: inherit' "$cf"; then
     bad "caller $caller missing secrets: inherit"
     continue
@@ -99,6 +141,56 @@ for pair in "${pairs[@]}"; do
   fi
   ok "caller $caller"
 done
+
+# --- synthetic fixture: @main and semver pins ----
+pin_fix="$(mktemp -d)"
+trap 'rm -rf "$pin_fix"' EXIT
+cat >"$pin_fix/good-caller.yml" <<'YML'
+name: good
+on:
+  workflow_dispatch:
+jobs:
+  call:
+    uses: acme-corp/software_factory_template/.github/workflows/reusable-pr-check.yml@v0.1.0
+    secrets: inherit
+    with:
+      factory_ref: v0.1.0
+YML
+cat >"$pin_fix/bad-main.yml" <<'YML'
+name: bad
+on:
+  workflow_dispatch:
+jobs:
+  call:
+    uses: acme-corp/software_factory_template/.github/workflows/reusable-pr-check.yml@main
+    secrets: inherit
+    with:
+      factory_ref: v0.1.0
+YML
+if CALLER_FILE="$pin_fix/good-caller.yml" "$PYTHON" <<'PY'
+import os, re, sys
+text = open(os.environ["CALLER_FILE"]).read()
+pin_re = re.compile(r"reusable-[-\w]+\.ya?ml@(v\d+\.\d+\.\d+|[0-9a-f]{40})", re.I)
+assert pin_re.search(text)
+assert "@main" not in text.lower()
+PY
+then
+  ok "fixture accepts semver @v0.1.0 pin"
+else
+  bad "fixture accepts semver @v0.1.0 pin"
+fi
+if CALLER_FILE="$pin_fix/bad-main.yml" "$PYTHON" <<'PY'
+import os, sys
+text = open(os.environ["CALLER_FILE"]).read()
+if "@main" in text.lower():
+    sys.exit(0)
+sys.exit(1)
+PY
+then
+  ok "fixture rejects floating @main pin"
+else
+  bad "fixture rejects floating @main pin"
+fi
 
 echo ""
 echo "Results: $passed passed, $failed failed"

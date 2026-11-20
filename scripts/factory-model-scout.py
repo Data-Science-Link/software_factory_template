@@ -55,8 +55,21 @@ class ProposalItem:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+def err(msg: str) -> None:
+    print(f"ERROR: {msg}", file=sys.stderr)
+
+
 def load_models_yaml(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not path.is_file():
+        raise ValueError(f"models file not found: {path}")
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise ValueError(f"cannot read {path}: {exc}") from exc
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: YAML parse error: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"{path}: root must be a mapping")
     rows = data.get("models", [])
@@ -208,8 +221,14 @@ def catalog_from_deepinfra(payload: dict[str, Any]) -> dict[str, CatalogEntry]:
 
 
 def load_catalog_path(path: Path) -> dict[str, CatalogEntry]:
+    if not path.is_file():
+        raise ValueError(f"catalog file not found: {path}")
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise ValueError(f"cannot read catalog {path}: {exc}") from exc
+    try:
+        raw = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ValueError(f"catalog is not valid JSON: {exc}") from exc
     if not isinstance(raw, dict):
@@ -235,11 +254,11 @@ def ignore_promo_entry(entry: CatalogEntry) -> bool:
 
 
 def configured_price_row(row: dict[str, Any]) -> PriceRow:
-    return PriceRow(
-        price_in_per_mtok=float(row["price_in_per_mtok"]),
-        price_cached_per_mtok=float(row["price_cached_per_mtok"]),
-        price_out_per_mtok=float(row["price_out_per_mtok"]),
-    )
+    model_id = str(row.get("id") or "?")
+    try:
+        return price_row_from_mapping(row)
+    except ValueError as exc:
+        raise ValueError(f"configured model {model_id}: {exc}") from exc
 
 
 def build_proposals(
@@ -397,13 +416,17 @@ def main() -> int:
     args = ap.parse_args()
 
     if not args.catalog and not args.fetch:
-        print("model-scout: provide --catalog <file> or --fetch", file=sys.stderr)
+        err("provide --catalog <file> or --fetch")
         return 1
 
     try:
         _data, configured = load_models_yaml(args.models)
-    except (OSError, yaml.YAMLError, ValueError) as exc:
-        print(f"model-scout: cannot read models.yaml: {exc}", file=sys.stderr)
+    except ValueError as exc:
+        err(f"cannot read models.yaml: {exc}")
+        return 1
+
+    if not configured:
+        err("no deepinfra models configured in models.yaml")
         return 1
 
     priors = _data.get("token_priors") if isinstance(_data.get("token_priors"), dict) else {}
@@ -415,8 +438,15 @@ def main() -> int:
             assert args.catalog is not None
             catalog = load_catalog_path(args.catalog)
     except ValueError as exc:
-        print(f"model-scout: {exc}", file=sys.stderr)
+        err(str(exc))
         return 1
+
+    if not catalog:
+        if args.format == "json":
+            sys.stdout.write(emit_json([], "no_change", args.models, args.checked_at))
+        else:
+            print("model-scout: empty catalog — no meaningful changes", file=sys.stderr)
+        return 0
 
     proposals = build_proposals(configured, catalog, priors)
     if not proposals:

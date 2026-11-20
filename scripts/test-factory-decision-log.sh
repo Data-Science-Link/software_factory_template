@@ -90,6 +90,63 @@ else
   "$PYTHON" "$LOG" check --file "$tmpdir/small.md" || true
 fi
 
+# ---- 7: non-UTF-8 file fails without traceback ----
+printf '\xff\xfe' >"$tmpdir/bad-encoding.md"
+set +e
+"$PYTHON" "$LOG" check --file "$tmpdir/bad-encoding.md" 2>"$tmpdir/utf8.err" >/dev/null
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && ! grep -q Traceback "$tmpdir/utf8.err" \
+  && grep -qi 'not valid UTF-8' "$tmpdir/utf8.err"; then
+  ok "non-UTF-8 decision log fails cleanly"
+else
+  bad "non-UTF-8 decision log (rc=$rc)"
+  cat "$tmpdir/utf8.err"
+fi
+
+# ---- 8: check --json uses sort_keys (stable key order) ----
+"$PYTHON" "$LOG" check --file tests/decision-log/small-log.md --json >"$tmpdir/check.json"
+if "$PYTHON" - "$tmpdir/check.json" <<'PY'
+import json, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+obj = json.loads(text)
+# sort_keys=True places "errors" before "total"
+assert text.index('"errors"') < text.index('"total"')
+assert "valid" in obj
+PY
+then
+  ok "check --json sort_keys ordering"
+else
+  bad "check --json sort_keys"
+fi
+
+# ---- 9: list --json sort_keys and missing file ----
+"$PYTHON" "$LOG" list --file "$tmpdir/missing-log.md" --json >"$tmpdir/missing-list.json" 2>/dev/null
+if [ "$(cat "$tmpdir/missing-list.json")" = "[]" ]; then
+  ok "list on missing file returns []"
+else
+  bad "list on missing file"
+fi
+
+# ---- 10: malformed date in fixture fails check ----
+cat >"$tmpdir/bad-date.md" <<'EOF'
+## Log
+
+### 2099-99-99 — Bad date
+- **Decision:** Something.
+- **Why:** Because.
+EOF
+set +e
+"$PYTHON" "$LOG" check --file "$tmpdir/bad-date.md" 2>"$tmpdir/bdate.err" >/dev/null
+rc=$?
+set -e
+if [ "$rc" -ne 0 ] && grep -qi 'malformed date' "$tmpdir/bdate.err"; then
+  ok "malformed decision date fails check"
+else
+  bad "malformed decision date (rc=$rc)"
+  cat "$tmpdir/bdate.err"
+fi
+
 echo
 echo "Results: $passed passed, $failed failed"
 [ "$failed" -eq 0 ]

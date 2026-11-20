@@ -27,3 +27,9 @@ Append-only. Newest at the bottom.
 - **Decided by:** owner (initial config)
 - **Why:** Run-start and cost predictors need a local catalog even when routing docs live on the template tag.
 - **Revisit when:** This repo diverges from the template defaults or adds escalation models locally.
+
+### 2026-11-20 — Committed `factory/budget.yml` for site marts
+- **Decision:** Add owner-only `factory/budget.yml` with the template starter monthly/weekly caps (`$10` / `$2.50`) so dbt and the factory site read budgets from one file.
+- **Decided by:** owner (adoption bootstrap)
+- **Why:** Matches `v0.1.0` site data expectations; caps stay visible without vendoring full factory scripts.
+- **Revisit when:** Spend or pacing policy changes; update here and in `.factory/models.yaml` together.
