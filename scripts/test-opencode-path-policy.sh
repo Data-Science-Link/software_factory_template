@@ -222,6 +222,25 @@ PY2
 then ok "opencode.json: new scripts editable (scan judges them); .github, opencode.json, models.yaml, requirements-factory, protect-main.sh denied"
 else bad "opencode.json edit rules vs path policy"; fi
 
+# #107: workers run tests only via the sandboxed wrapper, not raw bash scripts/test-*.sh.
+if python3 - "$root/opencode.json" <<'PY2B'
+import json, sys
+bash = json.load(open(sys.argv[1]))["permission"]["bash"]
+if bash.get("*") != "deny":
+    sys.exit(1)
+if bash.get("bash scripts/opencode-worker-test.sh*") != "allow":
+    sys.exit(1)
+bad_allow = [
+    k for k, v in bash.items()
+    if v == "allow" and (k.startswith("bash scripts/test-") or k == "bash scripts/test-*.sh")
+]
+if bad_allow:
+    sys.exit(1)
+sys.exit(0)
+PY2B
+then ok "opencode.json: bash allows worker-test wrapper, not raw scripts/test-*.sh"
+else bad "opencode.json bash worker-test gate"; fi
+
 # --- fix runs (#102): --base-scripts lists the default branch scripts; PR-added ones are editable ---
 # new_pr_repo: base commit = "main"; a second commit (the PR head) adds scripts/pr-added-check.sh.
 new_pr_repo() {
