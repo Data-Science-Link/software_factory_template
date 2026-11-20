@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -53,18 +54,25 @@ TOKEN_RES = [
     )
 ]
 
+PRIVATE_KEY_RE = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+
 GH_REPO_RE = re.compile(
     r"https?://github\.com/([^/\s\"')]+)/([^/\s\"')]+)",
     re.I,
 )
 HOME_PATH_RE = re.compile(
-    r"(?:/Users/[A-Za-z][^\s\"']+|/home/(?!runner(?:/|\b)|ubuntu(?:/|\b)|ci(?:/|\b))[A-Za-z][^\s\"']+)"
+    r"(?:"
+    r"/Users/(?!Shared(?:/|\b)|username(?:/|\b))[A-Za-z][^\s\"']+"
+    r"|"
+    r"/home/(?!runner(?:/|\b)|ubuntu(?:/|\b)|ci(?:/|\b)|user(?:/|\b))[A-Za-z][^\s\"']+"
+    r")"
 )
 ACTION_VERSION_AT = re.compile(r"\.ya?ml@v\d", re.I)
 
 ALLOW_EMAIL_SUFFIXES = (
     "@users.noreply.github.com",
     "@example.com",
+    "@example.org",
     "@example.invalid",
     "@b.example",
     "@test",
@@ -76,6 +84,15 @@ ALLOW_EMAIL_LOCALS = (
     "policy-test@example.invalid",
     "test@test",
     "you@example.com",
+)
+
+FINDING_KINDS = (
+    "private_email",
+    "token_pattern",
+    "private_key",
+    "private_repo_link",
+    "home_path",
+    "missing_file",
 )
 
 
@@ -99,6 +116,10 @@ class Report:
     scanned_files: int = 0
     skipped_allowlisted: int = 0
     findings: list[Finding] = field(default_factory=list)
+
+    def findings_by_kind(self) -> dict[str, int]:
+        counts = Counter(f.kind for f in self.findings)
+        return {k: counts.get(k, 0) for k in FINDING_KINDS if counts.get(k, 0)}
 
 
 def git_tracked(root: Path) -> list[str]:
@@ -161,8 +182,6 @@ def github_repo_allowed(
         return True
     if repo.lower() in private_names:
         return False
-    if owner.lower() == "data-science-link" and repo.lower() == "software_factory_template":
-        return True
     return True
 
 
@@ -195,6 +214,10 @@ def scan_text(
                 findings.append(
                     Finding("private_email", rel, f"email address ({addr})", lineno)
                 )
+        if PRIVATE_KEY_RE.search(line):
+            findings.append(
+                Finding("private_key", rel, "PEM private key block", lineno)
+            )
         for pat in TOKEN_RES:
             tm = pat.search(line)
             if tm:
@@ -293,6 +316,7 @@ def scan_repo(
 
 
 def format_markdown(report: Report) -> str:
+    by_kind = report.findings_by_kind()
     lines = [
         "# Pre-public hygiene scan",
         "",
@@ -302,6 +326,11 @@ def format_markdown(report: Report) -> str:
         f"- Findings: {len(report.findings)}",
         "",
     ]
+    if by_kind:
+        lines.append("Findings by rule:")
+        for kind, n in sorted(by_kind.items()):
+            lines.append(f"- `{kind}`: {n}")
+        lines.append("")
     if not report.findings:
         lines.append("No findings.")
         return "\n".join(lines) + "\n"
@@ -311,6 +340,21 @@ def format_markdown(report: Report) -> str:
         ln = str(f.line) if f.line is not None else ""
         lines.append(f"| {f.kind} | `{f.path}` | {ln} | {f.detail} |")
     return "\n".join(lines) + "\n"
+
+
+def json_payload(report: Report, self_slug: str | None) -> dict[str, Any]:
+    by_kind = report.findings_by_kind()
+    return {
+        "root": report.root,
+        "files_scanned": report.scanned_files,
+        "scanned_files": report.scanned_files,
+        "allowlisted_count": report.skipped_allowlisted,
+        "skipped_allowlisted": report.skipped_allowlisted,
+        "self_repo": self_slug,
+        "finding_count": len(report.findings),
+        "findings_by_kind": by_kind,
+        "findings": [f.to_dict() for f in report.findings],
+    }
 
 
 def main() -> int:
@@ -379,15 +423,8 @@ def main() -> int:
     report = scan_repo(root, allow_paths, private_names, self_slug)
 
     if args.json:
-        payload = {
-            "root": report.root,
-            "scanned_files": report.scanned_files,
-            "skipped_allowlisted": report.skipped_allowlisted,
-            "self_repo": self_slug,
-            "finding_count": len(report.findings),
-            "findings": [f.to_dict() for f in report.findings],
-        }
-        print(json.dumps(payload, indent=2))
+        payload = json_payload(report, self_slug)
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(format_markdown(report), end="")
 
