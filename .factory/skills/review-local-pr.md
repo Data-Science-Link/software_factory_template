@@ -1,6 +1,6 @@
 # Skill: review-local-pr
 
-**For the reviewing bot:** the repo's Factory Manager (or the Builder on the template repo). Use it on every PR from a local agent, after the PR check has run and before the human merge gate. The review lives on the PR, so the owner never copies notes by hand.
+**For the reviewing bot:** the repo's Factory Manager (or the Builder on the template repo). Use it on every PR from a local agent, after the PR check has run and before the human merge gate. The review lives on the PR, so the owner never copies notes by hand. When telling the owner the PR is ready (normal/high), use **Recommendation + Why** from [`factory-manager.md`](factory-manager.md), not a bare "please review."
 
 ## Steps
 
@@ -30,7 +30,7 @@ Fixes for the agent (address the review on PR #P):
 2. ...
 
 Checked: scope, done checks, PR body, FACTORY.md rules, CI (PR check, secret scan).
-For the owner: <judgment calls, or "nothing">
+For the owner: <judgment calls with Recommendation + Why when a pick is needed, or "nothing">
 ```
 
 ## Sample

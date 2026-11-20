@@ -1,0 +1,17 @@
+# Thin product-repo workflow: paste into .github/workflows/pr-check.yml (owner paste).
+name: pr-check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  factory-pr-check:
+    uses: Data-Science-Link/software_factory_template/.github/workflows/reusable-pr-check.yml@v0.1.0
+    secrets: inherit
+    with:
+      factory_ref: v0.1.0

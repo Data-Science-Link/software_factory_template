@@ -1,0 +1,3 @@
+# Product repositories that pin reusable factory workflows (owner/repo, one per line).
+# Example:
+# org-name/product-repo
