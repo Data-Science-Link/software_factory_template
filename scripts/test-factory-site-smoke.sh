@@ -93,6 +93,51 @@ require_check "$FIXTURES/double-escape" "double_escaped_entity" || true
 require_check "$FIXTURES/bad-svg" "svg_xml" || true
 require_check "$FIXTURES/broken-href" "local_reference" || true
 
+# ---- 8. sample site includes architecture UX checks from smoke validator ----
+sample_site="$("$PYTHON" "$SMOKE" --build --json 2>/dev/null)" || {
+  fail "smoke --build --json for architecture checks"
+  printf '%s\n' "$sample_site"
+}
+if "$PYTHON" - "$sample_site" <<'PY'
+import json, sys
+data = json.loads(sys.argv[1])
+need = {"aria_tabs", "print_stylesheet", "active_factory_config", "factory_loop_interactive"}
+missing = need - set(data.get("checks_run") or [])
+if missing:
+    raise SystemExit("checks_run missing: %s" % sorted(missing))
+if data.get("error_count", 1) != 0:
+    raise SystemExit("expected zero errors")
+PY
+then
+  pass "smoke validator covers ARIA, print CSS, and architecture loop checks"
+else
+  fail "smoke validator missing architecture UX checks"
+fi
+
+# ---- 9. loop stage JSON payload is well-formed on sample index ----
+if bash scripts/factory-site-build.sh --sample >/dev/null 2>&1 \
+   && "$PYTHON" - site/index.html <<'PY'
+import json, re, sys
+html = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r'id="loop-stages-data"[^>]*>(.*?)</script>', html, re.S)
+if not m:
+    raise SystemExit("loop-stages-data script missing")
+stages = json.loads(m.group(1).strip())
+if len(stages) != 9:
+    raise SystemExit("expected 9 stages, got %d" % len(stages))
+ids = {s.get("id") for s in stages}
+if ids != {
+    "idea", "triage", "spec", "human-review", "build",
+    "verify", "merge", "monitor", "feedback",
+}:
+    raise SystemExit("unexpected stage ids: %r" % sorted(ids))
+PY
+then
+  pass "loop stages JSON lists nine canonical stage ids"
+else
+  fail "loop stages JSON missing or malformed on index.html"
+fi
+
 echo ""
 echo "Results: $passed passed, $failed failed"
 if [ "$failed" -gt 0 ]; then
